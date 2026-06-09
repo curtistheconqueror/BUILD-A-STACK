@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Build-a-Stack · learn how systems connect</title>
+<style>
+  :root{--bg0:#070b14;--bg1:#0c1322;--ink:#e8eefb;--muted:#8595b3;--acc:#35d0e0;--acc2:#b78cff;
+    --ok:#51e08a;--bad:#ff5d6c;--warn:#ffb454;--panel:rgba(20,28,46,.92);--border:rgba(120,140,180,.22);}
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%;background:
+    radial-gradient(1100px 650px at 15% -10%,rgba(53,208,224,.10),transparent 60%),
+    radial-gradient(1000px 750px at 100% 110%,rgba(183,140,255,.12),transparent 55%),
+    linear-gradient(180deg,var(--bg0),var(--bg1));color:var(--ink);font-family:"Segoe UI",system-ui,sans-serif;}
+  header{padding:24px 32px 8px}
+  h1{margin:0;font-size:30px;letter-spacing:3px;font-weight:800;background:linear-gradient(90deg,#35d0e0,#b78cff,#ff6fb5);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .sub{color:var(--muted);font-size:13.5px;margin-top:4px}
+  .tabs{display:flex;gap:8px;margin:14px 32px 0}
+  .tabs button{cursor:pointer;background:rgba(255,255,255,.05);color:var(--ink);border:1px solid var(--border);border-radius:11px;padding:9px 16px;font-size:14px;font-weight:600}
+  .tabs button.on{background:linear-gradient(180deg,rgba(53,208,224,.22),rgba(53,208,224,.10));border-color:var(--acc)}
+  .wrap{max-width:1000px;margin:0 auto;padding:18px 32px 60px}
+  /* glossary */
+  .card{background:var(--panel);border:1px solid var(--border);border-left:4px solid var(--acc);border-radius:13px;margin-bottom:11px;overflow:hidden}
+  .card .ch{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;cursor:pointer}
+  .card .ch h3{margin:0;font-size:15.5px}
+  .card .ch .hook{color:var(--muted);font-size:12.5px;margin-top:2px}
+  .card .ch .tw{color:var(--muted);font-family:ui-monospace,monospace;font-size:13px}
+  .card .body{display:none;padding:0 16px 15px;border-top:1px solid var(--border)}
+  .card.open .body{display:block}
+  .card .lab{font-size:9.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);margin:13px 0 4px;font-weight:700}
+  .card .lab.s{color:var(--acc)} .card .lab.p{color:var(--warn)}
+  .card p{margin:0;font-size:13.4px;line-height:1.55;color:#d3deef}
+  /* build */
+  .goal{background:var(--panel);border:1px solid var(--border);border-radius:13px;padding:14px 16px;margin-bottom:16px}
+  .goal h2{margin:0 0 4px;font-size:16px}
+  .goal p{margin:0;color:var(--muted);font-size:13px}
+  .line{display:flex;align-items:stretch;gap:6px;flex-wrap:wrap;margin:18px 0}
+  .slot{width:150px;min-height:74px;border:2px dashed rgba(120,140,180,.45);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:6px;background:rgba(255,255,255,.02);transition:.15s}
+  .slot .ph{color:var(--muted);font-size:11px;line-height:1.3}
+  .slot.over{border-color:var(--acc);background:rgba(53,208,224,.08)}
+  .slot.bad{border-color:var(--bad)!important;background:rgba(255,93,108,.12);animation:shake .3s}
+  .slot.filled{border-style:solid;border-color:var(--ok);background:rgba(81,224,138,.07)}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+  .arrow{align-self:center;color:var(--muted);font-size:18px}
+  .arrow.live{color:var(--ok);text-shadow:0 0 8px var(--ok)}
+  .palette{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;padding:14px;border:1px solid var(--border);border-radius:13px;background:rgba(10,15,26,.5)}
+  .chip{cursor:grab;user-select:none;background:linear-gradient(180deg,rgba(26,36,58,.95),rgba(16,22,38,.95));border:1px solid var(--border);border-left:3px solid var(--c,var(--acc));border-radius:11px;padding:9px 12px;min-width:140px;text-align:center}
+  .chip:active{cursor:grabbing}
+  .chip.gone{opacity:.25;pointer-events:none;filter:grayscale(1)}
+  .chip .t{font-size:13px;font-weight:650}
+  .chip .s{font-size:10.5px;color:var(--muted);font-family:ui-monospace,monospace}
+  .filledchip{font-size:12.5px;font-weight:650}.filledchip .s{display:block;font-size:10px;color:var(--muted);font-family:ui-monospace,monospace;font-weight:400}
+  .msg{margin-top:14px;font-size:13.5px;min-height:20px}
+  .msg.ok{color:var(--ok)} .msg.bad{color:var(--bad)}
+  .btn{cursor:pointer;background:rgba(255,255,255,.06);color:var(--ink);border:1px solid var(--border);border-radius:10px;padding:7px 13px;font-size:12.5px;margin-top:12px}
+  .hide{display:none}
+  footer{color:#4a5a78;font-size:11px;text-align:center;padding:0 0 26px}
+</style>
+</head>
+<body>
+<header>
+  <h1>BUILD-A-STACK</h1>
+  <div class="sub">Learn how real systems connect — bridges, ports, sockets, gateways — then wire one yourself. Built off the Tradenificent Stack Map.</div>
+</header>
+<div class="tabs"><button id="tab-learn" class="on">📖 Learn</button><button id="tab-build">🔧 Build</button></div>
+
+<div class="wrap">
+  <div id="view-learn"></div>
+  <div id="view-build" class="hide">
+    <div class="goal"><h2>Challenge 1 — the market-data feed</h2>
+      <p>Get TradingView's live data all the way to your trading runtimes. Drag each piece into the slot where it belongs — in order. A piece that doesn't fit there will bounce back with a buzz.</p></div>
+    <div class="line" id="line"></div>
+    <div class="palette" id="palette"></div>
+    <div class="msg" id="msg"></div>
+    <button class="btn" id="reset">↺ reset</button>
+  </div>
+</div>
+<footer>Self-contained · open in any browser · Phase A·1 + Phase B·1 (MVP)</footer>
+
+<script>
+/* ---------- LEARN: glossary (first cut — the fundamentals, foundational first) ---------- */
+const GLOSSARY = [
+  {t:'Port', tw:':3004', h:'a numbered door a service listens on',
+   d:'A port is a numbered channel on a machine (like :3004) where one running program listens for connections. Only one program can hold a given port at a time.',
+   s:'Every box on your Stack Map has one — market-state :3004, the dashboard :5174, the bridges :3000–:3005. "EADDRINUSE" means two things fought over the same port (that is exactly what killed your CORTEX bridge).',
+   p:'Same idea in production, but users hit ONE public port (443/https) and a reverse proxy (nginx) routes to the internal ports behind it.'},
+  {t:'Process / Service', tw:'running', h:'a program that stays running',
+   d:'A service is just a program left running, waiting to do work (answer requests, push data). It has an ID, can crash, and can be restarted.',
+   s:'Each node on the map is a service: tv-bridge, market-state, the dashboard. When one "goes red," its process died or its port stopped answering.',
+   p:'Production runs services in containers (Docker) so they are isolated, reproducible, and restart on a policy — instead of loose programs on one PC.'},
+  {t:'Node.js', tw:'runtime', h:'runs JavaScript outside the browser',
+   d:'Node.js is a runtime that lets JavaScript run as a normal program (a server), not just inside a web page. It is great at handling lots of network connections at once.',
+   s:'Almost every box on your map is a Node.js service — the bridges, the engine, the sink, the dashboards. They are all "node <file>.js".',
+   p:'Same in production; the difference is how they are supervised and deployed, not the runtime.'},
+  {t:'API', tw:'contract', h:'a defined way to ask a program for something',
+   d:'An API (Application Programming Interface) is the agreed set of requests a program accepts — "ask me this way, I will answer that way." It hides the internals behind a clean contract.',
+   s:'TopStep X exposes an API your bots call to place orders. Your bridges expose little APIs too (e.g. tv-bridge /chart/quote).',
+   p:'Production APIs add auth, versioning, rate limits, and docs. Yours are bare localhost endpoints — fine for one machine, not for the public.'},
+  {t:'HTTP request (GET / POST)', tw:'GET/POST', h:'the most common API call',
+   d:'HTTP is the request/response pattern of the web. GET = "give me data," POST = "here is data, do something." You ask once, you get one answer, the connection closes.',
+   s:'The Stack Map polls /health endpoints over HTTP; the dashboard posts trade commands over HTTP to the trade-bridge.',
+   p:'Same — but production puts it behind HTTPS + a proxy, and prefers a stream (below) for anything live.'},
+  {t:'Socket / WebSocket', tw:'live pipe', h:'a persistent two-way live stream',
+   d:'A WebSocket is an always-open pipe between two programs. Instead of asking again and again, the connection stays open and either side can send the moment something changes.',
+   s:'market-state (:3004) publishes over a WebSocket; market-sink subscribes to it and gets every update instantly. The Stack Map itself now uses a live stream (SSE) for ~1.5s updates.',
+   p:'Same tool in production — often hardened with reconnect logic, auth tokens, and a message bus behind it.'},
+  {t:'Bridge', tw:'adapter', h:'translates between two things that can’t talk directly',
+   d:'A bridge is a small service whose only job is to sit between two systems that speak different "languages" and translate, so they can work together.',
+   s:'tv-bridge lets your engine read a TradingView chart; trade-bridge lets a bot place orders on Tradovate WITHOUT the paid API by capturing the live token. Bridges are the glue of your stack.',
+   p:'Bridges are legit — but a token-capture bridge is a workaround around a closed/expensive API. Production would use the official API and skip the bridge.'},
+  {t:'Gateway', tw:'entry point', h:'one front door that routes to many services',
+   d:'A gateway is a single entry point that receives traffic and routes it to the right internal service, often adding auth, logging, or message handling along the way.',
+   s:'Your Hermes gateway is the one place Telegram/Discord messages flow through to reach the right handler.',
+   p:'Production puts an API gateway / reverse proxy in front of everything as the single hardened door.'},
+  {t:'Webhook', tw:'call-me-back', h:'a server pushes to YOUR url on an event',
+   d:'A webhook flips the direction: instead of you asking, another system calls a URL you gave it the moment an event happens ("a trade alert fired").',
+   s:'TradingView alerts hit your webhook-receiver (:3000), which routes them to the right bot. It is push, triggered by events.',
+   p:'Same pattern; production adds a shared secret/signature so you know the call is really from the sender.'},
+  {t:'Watchdog', tw:'∞ loop', h:'restarts a service when it dies',
+   d:'A watchdog is a small loop (or supervisor) that notices when a service stops and starts it again — so the system heals itself instead of staying down.',
+   s:'Your run-*.bat wrappers are watchdogs: they relaunch a node service 5s after any exit, and Task Scheduler runs them at logon. (When those got deleted, your whole stack failed to come back.)',
+   p:'Production uses a real supervisor — Docker restart policies, systemd, or Kubernetes — with health checks, instead of .bat loops.'},
+  {t:'Push vs Poll', tw:'efficiency', h:'be told vs keep asking',
+   d:'Poll = ask over and over "anything new?" (simple, wasteful). Push = the source tells you the instant something changes (efficient, a bit more setup). Most live systems want push.',
+   s:'Your old bots polled the chart every cycle (expensive). The market-state engine flipped it to push: read once, push to everyone. The map does the same with SSE.',
+   p:'Identical principle at any scale — push + a message bus is the production shape.'},
+  {t:'MCP (Model Context Protocol)', tw:'AI tools', h:'a standard way to give an AI tools & data',
+   d:'MCP is a shared standard for connecting an AI model to tools and data sources, so the model can DO things (read a chart, place an order) instead of just talking.',
+   s:'Your TradingView MCP and TopStep MCP are how an AI agent reads the chart and the account through one common interface.',
+   p:'Same — MCP is itself the modern, fairly senior way to wire AI into a stack.'},
+];
+const vLearn=document.getElementById('view-learn');
+GLOSSARY.forEach((g,i)=>{const c=document.createElement('div');c.className='card';
+  c.innerHTML=`<div class="ch"><div><h3>${g.t}</h3><div class="hook">${g.h}</div></div><div class="tw">${g.tw} &nbsp;<span style="color:var(--acc)">${'▾'}</span></div></div>
+  <div class="body"><div class="lab">What it is</div><p>${g.d}</p>
+  <div class="lab s">In your stack</div><p>${g.s}</p>
+  <div class="lab p">Pragmatic vs production</div><p>${g.p}</p></div>`;
+  c.querySelector('.ch').addEventListener('click',()=>c.classList.toggle('open'));
+  vLearn.appendChild(c);});
+
+/* ---------- BUILD: data-feed drag-connect challenge ---------- */
+const CHAIN=[
+  {id:'tv',t:'TradingView + CDP',s:':9222',c:'#f5b14c'},
+  {id:'tvbridge',t:'tv-bridge',s:':3002',c:'#35d0e0'},
+  {id:'marketstate',t:'market-state',s:':3004',c:'#51e08a'},
+  {id:'marketsink',t:'market-sink',s:'→ files',c:'#51e08a'},
+  {id:'runtime',t:'Tradenificent / Paperclip',s:'runtimes',c:'#b78cff'},
+];
+const DISTRACTORS=[
+  {id:'tradebridge',t:'trade-bridge',s:':3005',c:'#35d0e0'},
+  {id:'webhook',t:'webhook-receiver',s:':3000',c:'#35d0e0'},
+];
+const line=document.getElementById('line'), palette=document.getElementById('palette'), msg=document.getElementById('msg');
+let audio=null;
+function tone(freq,dur,type){try{audio=audio||new (window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')audio.resume();const o=audio.createOscillator(),g=audio.createGain();o.type=type||'sine';o.frequency.value=freq;o.connect(g);g.connect(audio.destination);const t=audio.currentTime;g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.22,t+0.02);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);o.start(t);o.stop(t+dur+0.03);}catch(e){}}
+const buzz=()=>{tone(160,0.18,'square');};
+const ding=()=>{tone(720,0.12);setTimeout(()=>tone(990,0.16),110);};
+let filled=0;
+function build(){
+  line.innerHTML='';palette.innerHTML='';msg.textContent='';msg.className='msg';filled=0;
+  CHAIN.forEach((n,i)=>{
+    const slot=document.createElement('div');slot.className='slot';slot.dataset.expect=n.id;slot.dataset.idx=i;
+    slot.innerHTML=`<div class="ph">slot ${i+1}<br>drop here</div>`;
+    slot.addEventListener('dragover',e=>{e.preventDefault();slot.classList.add('over');});
+    slot.addEventListener('dragleave',()=>slot.classList.remove('over'));
+    slot.addEventListener('drop',e=>{e.preventDefault();slot.classList.remove('over');onDrop(slot,e.dataTransfer.getData('text/plain'));});
+    line.appendChild(slot);
+    if(i<CHAIN.length-1){const a=document.createElement('div');a.className='arrow';a.textContent='→';line.appendChild(a);}
+  });
+  shuffle(CHAIN.concat(DISTRACTORS)).forEach(n=>{
+    const chip=document.createElement('div');chip.className='chip';chip.draggable=true;chip.dataset.id=n.id;chip.style.setProperty('--c',n.c);
+    chip.innerHTML=`<div class="t">${n.t}</div><div class="s">${n.s}</div>`;
+    chip.addEventListener('dragstart',e=>e.dataTransfer.setData('text/plain',n.id));
+    palette.appendChild(chip);
+  });
+}
+function shuffle(a){const r=a.slice();for(let i=r.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));const t=r[i];r[i]=r[j];r[j]=t;}return r;}
+function onDrop(slot,id){
+  if(slot.classList.contains('filled'))return;
+  if(id===slot.dataset.expect){
+    const n=CHAIN.find(c=>c.id===id);
+    slot.classList.add('filled');slot.innerHTML=`<div class="filledchip">${n.t}<span class="s">${n.s}</span></div>`;
+    const chip=palette.querySelector('.chip[data-id="'+id+'"]');if(chip)chip.classList.add('gone');
+    ding();filled++;
+    if(filled===CHAIN.length){
+      document.querySelectorAll('.arrow').forEach(a=>a.classList.add('live'));
+      msg.className='msg ok';msg.innerHTML='✅ Branch complete! TradingView → tv-bridge → market-state → (WebSocket) → market-sink → (files) → your runtimes. That is the live market-data feed.';
+    }
+  } else {
+    slot.classList.add('bad');setTimeout(()=>slot.classList.remove('bad'),350);
+    const exp=CHAIN.find(c=>c.id===slot.dataset.expect);
+    buzz();msg.className='msg bad';msg.textContent='⛔ That piece does not belong in slot '+(+slot.dataset.idx+1)+'. This slot needs whatever the data flows into next ('+(exp?exp.t:'?')+').';
+  }
+}
+document.getElementById('reset').addEventListener('click',build);
+build();
+
+/* ---------- tabs ---------- */
+const tl=document.getElementById('tab-learn'),tb=document.getElementById('tab-build'),vl=document.getElementById('view-learn'),vb=document.getElementById('view-build');
+tl.addEventListener('click',()=>{tl.classList.add('on');tb.classList.remove('on');vl.classList.remove('hide');vb.classList.add('hide');});
+tb.addEventListener('click',()=>{tb.classList.add('on');tl.classList.remove('on');vb.classList.remove('hide');vl.classList.add('hide');});
+</script>
+</body>
+</html>
