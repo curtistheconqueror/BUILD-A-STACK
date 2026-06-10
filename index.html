@@ -30,6 +30,8 @@
   .card .lab{font-size:9.5px;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);margin:13px 0 4px;font-weight:700}
   .card .lab.s{color:var(--acc)} .card .lab.p{color:var(--warn)}
   .card p{margin:0;font-size:13.4px;line-height:1.55;color:#d3deef}
+  .seclabel{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--acc2);font-weight:800;margin:24px 4px 9px;padding-top:8px;border-top:1px solid var(--border)}
+  .seclabel.first{border-top:none;margin-top:4px}
   /* build */
   .goal{background:var(--panel);border:1px solid var(--border);border-radius:13px;padding:14px 16px;margin-bottom:16px}
   .goal h2{margin:0 0 4px;font-size:16px}
@@ -53,6 +55,10 @@
   .msg{margin-top:14px;font-size:13.5px;min-height:20px}
   .msg.ok{color:var(--ok)} .msg.bad{color:var(--bad)}
   .btn{cursor:pointer;background:rgba(255,255,255,.06);color:var(--ink);border:1px solid var(--border);border-radius:10px;padding:7px 13px;font-size:12.5px;margin-top:12px}
+  .chalpick{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .chalpick button{cursor:pointer;background:rgba(255,255,255,.05);color:var(--ink);border:1px solid var(--border);border-radius:10px;padding:7px 13px;font-size:12.5px;font-weight:600}
+  .chalpick button.on{background:linear-gradient(180deg,rgba(183,140,255,.22),rgba(183,140,255,.08));border-color:var(--acc2)}
+  .chalpick button.done::after{content:' ✓';color:var(--ok);font-weight:800}
   .hide{display:none}
   footer{color:#4a5a78;font-size:11px;text-align:center;padding:0 0 26px}
 </style>
@@ -67,20 +73,20 @@
 <div class="wrap">
   <div id="view-learn"></div>
   <div id="view-build" class="hide">
-    <div class="goal"><h2>Challenge 1 — the market-data feed</h2>
-      <p>Get TradingView's live data all the way to your trading runtimes. Drag each piece into the slot where it belongs — in order. A piece that doesn't fit there will bounce back with a buzz.</p></div>
+    <div class="chalpick" id="chalpick"></div>
+    <div class="goal"><h2 id="goalh"></h2><p id="goalp"></p></div>
     <div class="line" id="line"></div>
     <div class="palette" id="palette"></div>
     <div class="msg" id="msg"></div>
     <button class="btn" id="reset">↺ reset</button>
   </div>
 </div>
-<footer>Self-contained · open in any browser · Phase A·1 + Phase B·1 (MVP)</footer>
+<footer>Self-contained · open in any browser · Phase A·1–A·2 (19 concepts) · Phase B·1–B·2 (4 challenges)</footer>
 
 <script>
 /* ---------- LEARN: glossary (first cut — the fundamentals, foundational first) ---------- */
 const GLOSSARY = [
-  {t:'Port', tw:':3004', h:'a numbered door a service listens on',
+  {sec:'Fundamentals — the building blocks', t:'Port', tw:':3004', h:'a numbered door a service listens on',
    d:'A port is a numbered channel on a machine (like :3004) where one running program listens for connections. Only one program can hold a given port at a time.',
    s:'Every box on your Stack Map has one — market-state :3004, the dashboard :5174, the bridges :3000–:3005. "EADDRINUSE" means two things fought over the same port (that is exactly what killed your CORTEX bridge).',
    p:'Same idea in production, but users hit ONE public port (443/https) and a reverse proxy (nginx) routes to the internal ports behind it.'},
@@ -128,9 +134,40 @@ const GLOSSARY = [
    d:'MCP is a shared standard for connecting an AI model to tools and data sources, so the model can DO things (read a chart, place an order) instead of just talking.',
    s:'Your TradingView MCP and TopStep MCP are how an AI agent reads the chart and the account through one common interface.',
    p:'Same — MCP is itself the modern, fairly senior way to wire AI into a stack.'},
+
+  {sec:'Intermediate — how the pieces really talk', t:'IPC (file feed)', tw:'JSON files', h:'two programs talk by sharing a file',
+   d:'Inter-process communication is how separate programs hand data to each other. The simplest form: one writes a file, the other reads it — no network, no protocol, just the filesystem as a shared mailbox.',
+   s:'This is your last hop. market-sink writes market-state.json / market-events.json, and the Tradenificent and Paperclip runtimes READ those files. The WebSocket only carries engine→sink — the bots actually get their data as files.',
+   p:'Files are dead-simple and survive restarts, but there is no ordering, no backpressure, and no “you missed an update” signal. Production replaces this hop with a message bus (next card).'},
+  {t:'Message bus / queue', tw:'broker', h:'a middleman that fans data out reliably',
+   d:'A message bus (or queue) sits between producers and consumers: producers drop messages in, consumers pull them out, and the bus guarantees delivery, ordering, and replay. It decouples who-sends from who-receives.',
+   s:'You do not run one — the engine→sink→file chain is your stand-in. It works on a single machine, but it is the biggest “production ideal” gap in your data path.',
+   p:'Production uses Kafka / Redis Streams / RabbitMQ so a slow or crashed consumer never loses messages, and you can add new consumers without touching the producer.'},
+  {t:'CDP (Chrome DevTools Protocol)', tw:':9222', h:'remote-control a Chromium app over a port',
+   d:'CDP is the protocol Chromium exposes on a debug port (like :9222) that lets another program drive the browser — read the page, run scripts, pull data — exactly as the DevTools panel would.',
+   s:'tv-bridge speaks CDP to TradingView Desktop on :9222 to read the live chart. Key gotcha: :9222 must be the ACTUAL app, not a stale Chrome — launch the TradingView MSIX exe directly with --remote-debugging-port=9222.',
+   p:'Driving a desktop app over CDP is a scrape — a workaround around having no official data API. It is brittle (breaks on app updates) and is the honest reason this hop exists. Production consumes a real market-data feed instead.'},
+  {t:'Environment variables', tw:'.env', h:'config injected at runtime, not baked into code',
+   d:'Environment variables are key=value settings the OS hands a process when it starts. They keep configuration — and secrets — OUT of the source, so the same code runs in dev and prod with different values.',
+   s:'Your services read tradenificent\\.env: TSX_API_KEY, ANTHROPIC_API_KEY, DISCORD_TOKEN, and TSX_USERNAME=Manqoba (the handle, not the email — the email fails with errorCode 3).',
+   p:'Using .env is correct. The gap: some keys are also hardcoded in tracked .bat files in plaintext (a TopStep key is flagged for rotation). Production loads secrets from a manager, never from a committed file.'},
+  {t:'Secrets', tw:'🔑 never commit', h:'keys that grant access — guard them',
+   d:'A secret is any credential — API key, token, password — that grants access to something. The cardinal rule: never commit one to git and never print it where it can be logged or copied.',
+   s:'Yours: the TopStep API key, the Anthropic key, the Discord token, and the trade-bridge’s captured broker token. Live TODO: rotate the TOPSTEPX_API_KEY committed in plaintext, and the PAT that leaked into a transcript.',
+   p:'Production stores secrets in a vault (HashiCorp Vault, AWS/GCP secret manager), rotates them automatically, and scopes each to least privilege. Plaintext-in-a-file is the debt to pay down.'},
+  {t:'Reverse proxy', tw:'one front door', h:'one public port routes to many internal ones',
+   d:'A reverse proxy accepts all incoming traffic on one address, then forwards each request to the right internal service — handling HTTPS, logging, and rate limits in that one place.',
+   s:'You do not have one — every service answers on its own bare localhost port (:3000–:5174), exactly as the Stack Map draws them. Fine for one trusted machine, and it is why nothing here is internet-exposed.',
+   p:'Production puts nginx / Caddy / Traefik in front, so users hit ONE hardened 443 door and never see the internal ports. It is the production version of your “Gateway” and “Port” cards combined.'},
+  {t:'Health check', tw:'/health', h:'a heartbeat endpoint a monitor can poll',
+   d:'A health check is a tiny endpoint (often /health) a service exposes so a supervisor can ask “are you alive and OK?” and get a fast yes/no — without doing real work.',
+   s:'Your bridges and engine expose /health; the Stack Map’s :3009 helper polls them for rich vitals (and TCP-connects the UI-only nodes). That is what flips a node green or red within ~1.5s of a change.',
+   p:'Same concept; production wires health checks INTO the orchestrator (Kubernetes liveness/readiness probes) so a failing service is auto-restarted or pulled from rotation — not just shown red on a map.'},
 ];
 const vLearn=document.getElementById('view-learn');
-GLOSSARY.forEach((g,i)=>{const c=document.createElement('div');c.className='card';
+GLOSSARY.forEach((g,i)=>{
+  if(g.sec){const s=document.createElement('div');s.className='seclabel'+(i===0?' first':'');s.textContent=g.sec;vLearn.appendChild(s);}
+  const c=document.createElement('div');c.className='card';
   c.innerHTML=`<div class="ch"><div><h3>${g.t}</h3><div class="hook">${g.h}</div></div><div class="tw">${g.tw} &nbsp;<span style="color:var(--acc)">${'▾'}</span></div></div>
   <div class="body"><div class="lab">What it is</div><p>${g.d}</p>
   <div class="lab s">In your stack</div><p>${g.s}</p>
@@ -138,25 +175,77 @@ GLOSSARY.forEach((g,i)=>{const c=document.createElement('div');c.className='card
   c.querySelector('.ch').addEventListener('click',()=>c.classList.toggle('open'));
   vLearn.appendChild(c);});
 
-/* ---------- BUILD: data-feed drag-connect challenge ---------- */
-const CHAIN=[
-  {id:'tv',t:'TradingView + CDP',s:':9222',c:'#f5b14c'},
-  {id:'tvbridge',t:'tv-bridge',s:':3002',c:'#35d0e0'},
-  {id:'marketstate',t:'market-state',s:':3004',c:'#51e08a'},
-  {id:'marketsink',t:'market-sink',s:'→ files',c:'#51e08a'},
-  {id:'runtime',t:'Tradenificent / Paperclip',s:'runtimes',c:'#b78cff'},
+/* ---------- BUILD: drag-connect challenges (one slot engine, many chains) ---------- */
+const CHALLENGES=[
+  {id:'feed', tab:'Data feed', title:'Challenge 1 — the market-data feed',
+   desc:'Get TradingView’s live data all the way to your trading runtimes. Drag each piece into the slot where it belongs — in order. A piece that doesn’t fit there bounces back with a buzz.',
+   chain:[
+     {id:'tv',t:'TradingView + CDP',s:':9222',c:'#f5b14c'},
+     {id:'tvbridge',t:'tv-bridge',s:':3002',c:'#35d0e0'},
+     {id:'marketstate',t:'market-state',s:':3004',c:'#51e08a'},
+     {id:'marketsink',t:'market-sink',s:'→ files',c:'#51e08a'},
+     {id:'runtime',t:'Tradenificent / Paperclip',s:'runtimes',c:'#b78cff'},
+   ],
+   distractors:[
+     {id:'tradebridge',t:'trade-bridge',s:':3005',c:'#35d0e0'},
+     {id:'webhook',t:'webhook-receiver',s:':3000',c:'#35d0e0'},
+   ],
+   done:'✅ Branch complete! TradingView → tv-bridge → market-state → (WebSocket) → market-sink → (files) → your runtimes. That is the live market-data feed.'},
+
+  {id:'exec', tab:'Execution · APEX', title:'Challenge 2 — placing a trade (APEX)',
+   desc:'Your apex-trader needs to send an order to the Tradovate/APEX account. There is no paid Tradovate API, so it cannot call the broker directly — wire it through the piece that captures the live token. (nq/es-trader skip this; they hit the TopStep API directly.)',
+   chain:[
+     {id:'runtime2',t:'Tradenificent runtime',s:'apex-trader',c:'#b78cff'},
+     {id:'tradebridge',t:'trade-bridge',s:':3005',c:'#35d0e0'},
+     {id:'tradovate',t:'Tradovate / APEX',s:'broker',c:'#f5b14c'},
+   ],
+   distractors:[
+     {id:'topstep',t:'TopStep API',s:'api.topstepx.com',c:'#51e08a'},
+     {id:'marketstate',t:'market-state',s:':3004',c:'#51e08a'},
+   ],
+   done:'✅ apex-trader → trade-bridge (:3005) → Tradovate. The bridge captures TradingView’s live broker token so the bot can place orders WITHOUT the $5k Tradovate API. (nq/es-trader skip the bridge — they call the TopStep API directly.)'},
+
+  {id:'alerts', tab:'Alerts', title:'Challenge 3 — an alert becomes a trade',
+   desc:'A TradingView alert just fired. It calls a URL you own; route it to the bot that should act on it. This path is push — triggered by the event, not polled.',
+   chain:[
+     {id:'tvalert',t:'TradingView alert',s:'fires webhook',c:'#f5b14c'},
+     {id:'webhook',t:'webhook-receiver',s:':3000',c:'#35d0e0'},
+     {id:'trader',t:'trader bot',s:'runtime',c:'#b78cff'},
+   ],
+   distractors:[
+     {id:'tvbridge',t:'tv-bridge',s:':3002',c:'#35d0e0'},
+     {id:'marketstate',t:'market-state',s:':3004',c:'#51e08a'},
+   ],
+   done:'✅ TradingView alert → webhook-receiver (:3000) → trader bot. Push, not poll: TradingView calls YOUR url the instant the alert fires, and the receiver hands it to the right bot.'},
+
+  {id:'observe', tab:'Observe · CORTEX', title:'Challenge 4 — the watch-only dashboard',
+   desc:'CORTEX watches everything but doesn’t place trades. Wire a read-only data source up to the dashboard you look at. (It can emergency-flatten, but it never opens positions.)',
+   chain:[
+     {id:'source',t:'TopStep / Schwab',s:'read-only',c:'#51e08a'},
+     {id:'cortexbridge',t:'CORTEX bridge',s:':4000',c:'#35d0e0'},
+     {id:'cortexweb',t:'CORTEX web',s:':3500',c:'#b78cff'},
+   ],
+   distractors:[
+     {id:'tradebridge',t:'trade-bridge',s:':3005',c:'#35d0e0'},
+     {id:'webhook',t:'webhook-receiver',s:':3000',c:'#35d0e0'},
+   ],
+   done:'✅ TopStep / Schwab (read-only) → CORTEX bridge (:4000) → CORTEX web (:3500). CORTEX is the observability dashboard — read-only + emergency-flatten. Its Knowledge Graph reads your Obsidian vault through this same :4000 bridge.'},
 ];
-const DISTRACTORS=[
-  {id:'tradebridge',t:'trade-bridge',s:':3005',c:'#35d0e0'},
-  {id:'webhook',t:'webhook-receiver',s:':3000',c:'#35d0e0'},
-];
-const line=document.getElementById('line'), palette=document.getElementById('palette'), msg=document.getElementById('msg');
+let cur=0; const doneSet=new Set();
+let CHAIN=[], DISTRACTORS=[];
+const line=document.getElementById('line'), palette=document.getElementById('palette'), msg=document.getElementById('msg'),
+      goalh=document.getElementById('goalh'), goalp=document.getElementById('goalp'), chalpick=document.getElementById('chalpick');
+function renderPicker(){chalpick.innerHTML='';CHALLENGES.forEach((c,i)=>{const b=document.createElement('button');
+  b.textContent=c.tab;if(i===cur)b.classList.add('on');if(doneSet.has(c.id))b.classList.add('done');
+  b.addEventListener('click',()=>{cur=i;build();});chalpick.appendChild(b);});}
 let audio=null;
 function tone(freq,dur,type){try{audio=audio||new (window.AudioContext||window.webkitAudioContext)();if(audio.state==='suspended')audio.resume();const o=audio.createOscillator(),g=audio.createGain();o.type=type||'sine';o.frequency.value=freq;o.connect(g);g.connect(audio.destination);const t=audio.currentTime;g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.22,t+0.02);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);o.start(t);o.stop(t+dur+0.03);}catch(e){}}
 const buzz=()=>{tone(160,0.18,'square');};
 const ding=()=>{tone(720,0.12);setTimeout(()=>tone(990,0.16),110);};
 let filled=0;
 function build(){
+  const C=CHALLENGES[cur];CHAIN=C.chain;DISTRACTORS=C.distractors;
+  goalh.textContent=C.title;goalp.textContent=C.desc;renderPicker();
   line.innerHTML='';palette.innerHTML='';msg.textContent='';msg.className='msg';filled=0;
   CHAIN.forEach((n,i)=>{
     const slot=document.createElement('div');slot.className='slot';slot.dataset.expect=n.id;slot.dataset.idx=i;
@@ -184,7 +273,8 @@ function onDrop(slot,id){
     ding();filled++;
     if(filled===CHAIN.length){
       document.querySelectorAll('.arrow').forEach(a=>a.classList.add('live'));
-      msg.className='msg ok';msg.innerHTML='✅ Branch complete! TradingView → tv-bridge → market-state → (WebSocket) → market-sink → (files) → your runtimes. That is the live market-data feed.';
+      msg.className='msg ok';msg.innerHTML=CHALLENGES[cur].done;
+      doneSet.add(CHALLENGES[cur].id);renderPicker();
     }
   } else {
     slot.classList.add('bad');setTimeout(()=>slot.classList.remove('bad'),350);
