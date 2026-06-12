@@ -87,6 +87,10 @@
   .pick{margin-top:12px;font-size:12.5px;color:#cdd9ef}
   .pick ul{margin:7px 0 0;padding-left:18px;line-height:1.7}
   .pick li{margin-bottom:4px}
+  .caveat{margin-top:12px;border:1px solid rgba(255,180,84,.4);background:rgba(255,180,84,.07);border-radius:10px;padding:10px 12px;font-size:12.3px;line-height:1.6;color:#f0dcc0}
+  .caveat b{color:var(--warn)}
+  .tip{margin-top:10px;border-left:3px solid var(--acc);background:rgba(8,12,22,.4);border-radius:0 10px 10px 0;padding:9px 12px;font-size:12.3px;line-height:1.6;color:#cdd9ef}
+  .tip b{color:var(--acc)}
   .goal{background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin-bottom:16px}
   .goal h2{margin:0 0 5px;font-size:17px}
   .goal p{margin:0;color:var(--muted);font-size:13px}
@@ -235,7 +239,7 @@ const GLOSSARY = [
    p:'Production puts nginx / Caddy / Traefik in front, so users hit ONE hardened 443 door and never see the internal ports. It is the production version of your “Gateway” and “Port” cards combined.'},
   {t:'Tunnel / ingress (ngrok vs Cloudflare)', tw:'localhost → internet', h:'expose a local port to the public web',
    d:'A tunnel runs a small agent on your machine that opens an OUTBOUND connection to a provider’s edge; the provider then forwards public internet traffic back down to your localhost port. No router config, no open firewall ports, no public IP — a service on :3000 becomes a public https URL.',
-   s:'This is how a TradingView alert (born on the public internet) reaches your webhook-receiver :3000 on a home PC behind a router. You have cloudflared.exe in tradenificent\\bin (Cloudflare Tunnel) and an ngrok hook in startup.bat — for an always-on receiver, Cloudflare Tunnel is the better fit.',
+   s:'This is how a TradingView alert (born on the public internet) reaches your webhook-receiver :3000 on a home PC behind a router. You switched ngrok → Cloudflare here on 2026-05-31 for ONE reason — Norton (see the caveat below) — not price or URLs. One named cloudflared tunnel can expose both the Paperclip receiver (:3000) and the dashboard webhook (:3001) from a single Windows service.',
    p:'A tunnel is itself a legit production pattern (Cloudflare Tunnel runs in real deployments). The most "production" version adds a stable domain + auth + a real reverse proxy in front — but for a home box, a named Cloudflare Tunnel basically IS that answer.',
    extra:'<div class="xh">ngrok vs Cloudflare Tunnel — at a glance</div>'+
      '<div class="prov" style="border-left-color:#ff6fb5"><div class="pname">ngrok<span class="pfree">free: 1 GB/mo · 20k req/mo · 3 endpoints · 1 static *.ngrok-free.dev · browser interstitial page</span></div><div class="pwhy"><b>Edge:</b> fastest to start (<code>ngrok http 3000</code>) and a built-in request inspector / replay at :4040. <b>Best for:</b> quick tests, demos, debugging webhooks.</div></div>'+
@@ -246,7 +250,9 @@ const GLOSSARY = [
      '<li><b>Always-on receiver — your TradingView → webhook-receiver :3000:</b> <span style="color:var(--acc)">Cloudflare Tunnel, named</span> — free, stable URL, no caps. (It is why <code>cloudflared.exe</code> already sits in your bin.)</li>'+
      '<li><b>Inspect / replay incoming webhooks while building:</b> ngrok’s inspector at :4040.</li>'+
      '<li><b>Mostly private, rare public:</b> Tailscale Funnel.</li>'+
-     '</ul></div>'},
+     '</ul></div>'+
+     '<div class="caveat"><b>⚠️ Real-world caveat — why THIS stack switched (2026-05-31):</b> on a machine running a TLS-inspecting security suite (here, Norton Web Shield), ngrok’s tunnel rides plain TCP/443 and gets <b>MITM-intercepted</b> — it silently breaks and webhooks stop arriving, with no ngrok-side fix. It happened even on a PAID plan, because it is not a tier problem. <b>Cloudflare Tunnel reaches the edge over QUIC/UDP</b>, which the HTTPS scanner does not touch, so it sidesteps the whole thing with zero antivirus changes. Lesson: anything on plain TCP/443 is at your AV’s mercy; a QUIC/UDP tunnel routes around TLS inspection.</div>'+
+     '<div class="tip"><b>Bonus — one tunnel, many services:</b> a single Cloudflare <i>named</i> tunnel exposes multiple local ports via ingress rules — e.g. <code>paperclip.you.com → :3000</code> and <code>dash.you.com → :3001</code> from one process, two stable hostnames, free. ngrok needs a separate paid endpoint per service.</div>'},
   {t:'Health check', tw:'/health', h:'a heartbeat endpoint a monitor can poll',
    d:'A health check is a tiny endpoint (often /health) a service exposes so a supervisor can ask “are you alive and OK?” and get a fast yes/no — without doing real work.',
    s:'Your bridges and engine expose /health; the Stack Map’s :3009 helper polls them for rich vitals (and TCP-connects the UI-only nodes). That is what flips a node green or red within ~1.5s of a change.',
