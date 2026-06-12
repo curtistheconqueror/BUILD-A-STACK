@@ -76,6 +76,17 @@
   .segp button.on{color:#06101d;background:var(--seg,var(--acc));box-shadow:0 0 16px -2px var(--seg,var(--acc))}
   .pane{font-size:13.8px;line-height:1.65;color:#dbe6fb;min-height:78px;transition:opacity .24s ease}
   .pane.fade{opacity:0}
+  .extra{margin-top:14px;border-top:1px solid var(--border);padding-top:13px}
+  .xh{font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:var(--acc2);font-weight:800;margin-bottom:10px}
+  .prov{border-left:3px solid var(--acc);background:rgba(8,12,22,.4);border-radius:0 10px 10px 0;padding:9px 12px;margin-bottom:9px}
+  .pname{font-size:13px;font-weight:700}
+  .pfree{display:block;font-size:11px;font-weight:400;color:var(--muted);font-family:ui-monospace,monospace;margin-top:3px;line-height:1.5}
+  .pwhy{font-size:12.5px;line-height:1.55;color:#cdd9ef;margin-top:6px}
+  .pwhy b,.pick b{color:var(--ink)}
+  .extra code{font-family:ui-monospace,monospace;font-size:11.5px;background:rgba(53,208,224,.1);color:var(--acc);padding:1px 5px;border-radius:5px}
+  .pick{margin-top:12px;font-size:12.5px;color:#cdd9ef}
+  .pick ul{margin:7px 0 0;padding-left:18px;line-height:1.7}
+  .pick li{margin-bottom:4px}
   .goal{background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin-bottom:16px}
   .goal h2{margin:0 0 5px;font-size:17px}
   .goal p{margin:0;color:var(--muted);font-size:13px}
@@ -131,7 +142,7 @@
     <button class="btn" id="reset">↺ reset</button>
   </div>
 </div>
-<footer>Self-contained · open in any browser · Phase A·1–A·2 (19 concepts) · Phase B·1–B·2 (4 challenges)</footer>
+<footer>Self-contained · open in any browser · Phase A·1–A·2 (20 concepts) · Phase B·1–B·2 (4 challenges)</footer>
 <script>
 /* ===== living background wires ===== */
 (function(){
@@ -222,6 +233,20 @@ const GLOSSARY = [
    d:'A reverse proxy accepts all incoming traffic on one address, then forwards each request to the right internal service — handling HTTPS, logging, and rate limits in that one place.',
    s:'You do not have one — every service answers on its own bare localhost port (:3000–:5174), exactly as the Stack Map draws them. Fine for one trusted machine, and it is why nothing here is internet-exposed.',
    p:'Production puts nginx / Caddy / Traefik in front, so users hit ONE hardened 443 door and never see the internal ports. It is the production version of your “Gateway” and “Port” cards combined.'},
+  {t:'Tunnel / ingress (ngrok vs Cloudflare)', tw:'localhost → internet', h:'expose a local port to the public web',
+   d:'A tunnel runs a small agent on your machine that opens an OUTBOUND connection to a provider’s edge; the provider then forwards public internet traffic back down to your localhost port. No router config, no open firewall ports, no public IP — a service on :3000 becomes a public https URL.',
+   s:'This is how a TradingView alert (born on the public internet) reaches your webhook-receiver :3000 on a home PC behind a router. You have cloudflared.exe in tradenificent\\bin (Cloudflare Tunnel) and an ngrok hook in startup.bat — for an always-on receiver, Cloudflare Tunnel is the better fit.',
+   p:'A tunnel is itself a legit production pattern (Cloudflare Tunnel runs in real deployments). The most "production" version adds a stable domain + auth + a real reverse proxy in front — but for a home box, a named Cloudflare Tunnel basically IS that answer.',
+   extra:'<div class="xh">ngrok vs Cloudflare Tunnel — at a glance</div>'+
+     '<div class="prov" style="border-left-color:#ff6fb5"><div class="pname">ngrok<span class="pfree">free: 1 GB/mo · 20k req/mo · 3 endpoints · 1 static *.ngrok-free.dev · browser interstitial page</span></div><div class="pwhy"><b>Edge:</b> fastest to start (<code>ngrok http 3000</code>) and a built-in request inspector / replay at :4040. <b>Best for:</b> quick tests, demos, debugging webhooks.</div></div>'+
+     '<div class="prov" style="border-left-color:#35d0e0"><div class="pname">Cloudflare Tunnel<span class="pfree">free: NO bandwidth cap · never expires · unlimited tunnels · stable custom domain (named) OR random *.trycloudflare.com (quick)</span></div><div class="pwhy"><b>Edge:</b> free with no caps, a stable custom domain, DDoS protection and Access (auth) in front; runs as a service. <b>Best for:</b> always-on webhook ingestion, production-ish, a free custom domain. Named tunnels need a domain on Cloudflare DNS (free plan works).</div></div>'+
+     '<div class="prov" style="border-left-color:#b78cff"><div class="pname">Tailscale Funnel<span class="pfree">free (personal): stable *.ts.net URL</span></div><div class="pwhy"><b>Edge:</b> dead-simple and ties into your private tailnet. <b>Best for:</b> mostly-private services you occasionally expose to the public.</div></div>'+
+     '<div class="pick"><b>Which should you use?</b><ul>'+
+     '<li><b>10-second test:</b> ngrok <code>ngrok http 3000</code>, or Cloudflare quick <code>cloudflared tunnel --url localhost:3000</code> (no account, random URL).</li>'+
+     '<li><b>Always-on receiver — your TradingView → webhook-receiver :3000:</b> <span style="color:var(--acc)">Cloudflare Tunnel, named</span> — free, stable URL, no caps. (It is why <code>cloudflared.exe</code> already sits in your bin.)</li>'+
+     '<li><b>Inspect / replay incoming webhooks while building:</b> ngrok’s inspector at :4040.</li>'+
+     '<li><b>Mostly private, rare public:</b> Tailscale Funnel.</li>'+
+     '</ul></div>'},
   {t:'Health check', tw:'/health', h:'a heartbeat endpoint a monitor can poll',
    d:'A health check is a tiny endpoint (often /health) a service exposes so a supervisor can ask “are you alive and OK?” and get a fast yes/no — without doing real work.',
    s:'Your bridges and engine expose /health; the Stack Map’s :3009 helper polls them for rich vitals (and TCP-connects the UI-only nodes). That is what flips a node green or red within ~1.5s of a change.',
@@ -240,7 +265,7 @@ GLOSSARY.forEach((g,i)=>{
   row.innerHTML=`<div class="spine"><span class="pulse"></span><span class="dot"></span></div>
     <div class="card"><div class="head"><div class="meta"><div class="title">${g.t}</div><div class="hook">${g.h}</div></div>
     <div class="tw">${g.tw}</div><div class="chev">▾</div></div>
-    <div class="body"><div class="bclip"><div class="bin"><div class="segp">${seg}</div><div class="pane">${g.d}</div></div></div></div></div>`;
+    <div class="body"><div class="bclip"><div class="bin"><div class="segp">${seg}</div><div class="pane">${g.d}</div>${g.extra?'<div class="extra">'+g.extra+'</div>':''}</div></div></div></div>`;
   learnList.appendChild(row);
   const card=row.querySelector('.card'),head=row.querySelector('.head'),pane=row.querySelector('.pane'),segp=row.querySelector('.segp');
   head.addEventListener('click',()=>{const o=card.classList.toggle('open');row.classList.toggle('open',o);if(o){opened.add(i);prog();}});
