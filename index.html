@@ -146,7 +146,7 @@
     <button class="btn" id="reset">↺ reset</button>
   </div>
 </div>
-<footer>Self-contained · open in any browser · Phase A·1–A·2 (20 concepts) · Phase B·1–B·2 (4 challenges)</footer>
+<footer>Self-contained · open in any browser · Phase A·1–A·2 (22 concepts) · Phase B·1–B·2 (4 challenges)</footer>
 <script>
 /* ===== living background wires ===== */
 (function(){
@@ -253,6 +253,14 @@ const GLOSSARY = [
      '</ul></div>'+
      '<div class="caveat"><b>⚠️ Edge case most setups never hit — but worth knowing:</b> if a machine runs a <b>TLS-inspecting</b> security suite or corporate proxy (some antivirus, Zscaler, and similar middleboxes), it MITM-intercepts outbound HTTPS. Because ngrok’s agent rides plain <b>TCP/443</b>, that interception can <b>silently break the tunnel</b> — with no agent-side fix, and a paid plan does not help (it is not a tier issue). <b>Cloudflare Tunnel reaches its edge over QUIC/UDP</b>, which HTTPS scanners usually do not touch, so it routes around the problem. <i>Real example:</i> this very stack switched ngrok → Cloudflare on 2026-05-31 for exactly this (Norton Web Shield), nothing else. Takeaway: on a normal home/dev box <b>both work great</b> — but if a TLS-inspecting middlebox sits in the path, prefer a QUIC/UDP tunnel.</div>'+
      '<div class="tip"><b>Bonus — one tunnel, many services:</b> a single Cloudflare <i>named</i> tunnel exposes multiple local ports via ingress rules — e.g. <code>paperclip.you.com → :3000</code> and <code>dash.you.com → :3001</code> from one process, two stable hostnames, free. ngrok needs a separate paid endpoint per service.</div>'},
+  {t:'DNS / domains', tw:'name → address', h:'turns a name into a server address',
+   d:'DNS (Domain Name System) is the internet’s phone book: it translates a human name (yourname.com) into the machine address that actually answers. A "domain" is the name you own and point wherever you want via DNS records — A = name→IP, CNAME = name→another name, TXT = verification / metadata.',
+   s:'Your named Cloudflare Tunnel needs a domain whose DNS lives at Cloudflare — cloudflared writes a CNAME like webhook.yourdomain.com → your-tunnel.cfargotunnel.com, so TradingView can post to a STABLE name instead of a random URL that changes on restart. You have a GoDaddy domain earmarked (tradenificent.com); pointing its nameservers at Cloudflare (free, does not move where the site is hosted) is what unlocks the named tunnel.',
+   p:'DNS is DNS everywhere. The "production" upgrades are operational: short TTLs for fast failover, health-checked / geo DNS load-balancing, and DNSSEC so records cannot be spoofed. For one tunnel, a single CNAME is the whole job.'},
+  {t:'TLS / HTTPS certificates', tw:'🔒 the s in https', h:'proves identity + encrypts the connection',
+   d:'TLS is the lock on https — it encrypts traffic so nobody in the middle can read it, and a certificate (issued by a trusted authority) proves the server really is who the name claims. The browser trusts it because the cert chains up to a root CA already in its trust store.',
+   s:'You mostly do not manage certs — Cloudflare terminates TLS at its edge and presents a valid cert for your domain automatically, so your localhost services can stay plain http behind the tunnel. The flip side you have already felt: a TLS-inspecting middlebox (Norton) re-signs certs with its OWN root mid-connection — that is the same MITM that broke ngrok in the Tunnel card above.',
+   p:'Production automates the whole lifecycle — free certs from Let’s Encrypt via ACME, auto-renewed every ~90 days by the reverse proxy (Caddy / Traefik do it transparently). The anti-pattern is a hand-issued cert nobody remembers to renew — it expires and every client throws scary security warnings.'},
   {t:'Health check', tw:'/health', h:'a heartbeat endpoint a monitor can poll',
    d:'A health check is a tiny endpoint (often /health) a service exposes so a supervisor can ask “are you alive and OK?” and get a fast yes/no — without doing real work.',
    s:'Your bridges and engine expose /health; the Stack Map’s :3009 helper polls them for rich vitals (and TCP-connects the UI-only nodes). That is what flips a node green or red within ~1.5s of a change.',
