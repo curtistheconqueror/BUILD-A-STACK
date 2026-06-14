@@ -120,6 +120,8 @@
   .goal{background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin-bottom:16px}
   .goal h2{margin:0 0 5px;font-size:17px}
   .goal p{margin:0;color:var(--muted);font-size:13px}
+  .picklabel{margin:18px 0 11px;font-size:10.5px;letter-spacing:2.4px;text-transform:uppercase;color:var(--acc2);font-weight:800;display:flex;align-items:center;gap:10px}
+  .picklabel::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--acc2),transparent);opacity:.45}
   .chalpick{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:16px}
   .chalpick button{cursor:pointer;background:var(--glass);backdrop-filter:blur(10px);color:var(--ink);border:1px solid var(--border);border-radius:11px;padding:8px 14px;font-size:12.5px;font-weight:600;transition:.25s}
   .chalpick button.on{border-color:var(--acc2);box-shadow:0 0 20px -4px var(--acc2);background:linear-gradient(180deg,rgba(183,140,255,.2),rgba(183,140,255,.05))}
@@ -226,6 +228,7 @@
     <div id="learn-list"></div>
   </div>
   <div id="view-build" class="view hide">
+    <div class="picklabel">Choose a challenge</div>
     <div class="chalpick" id="chalpick"></div>
     <div class="goal"><h2 id="goalh"></h2><p id="goalp"></p></div>
     <div class="line" id="line"></div>
