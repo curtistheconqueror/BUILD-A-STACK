@@ -627,7 +627,27 @@ const GLOSSARY = [
      '<li><b>Mostly private, rare public:</b> Tailscale Funnel.</li>'+
      '</ul></div>'+
      '<div class="caveat"><b>⚠️ Edge case most setups never hit — but worth knowing:</b> if a machine runs a <b>TLS-inspecting</b> security suite or corporate proxy (some antivirus, Zscaler, and similar middleboxes), it MITM-intercepts outbound HTTPS. Because ngrok’s agent rides plain <b>TCP/443</b>, that interception can <b>silently break the tunnel</b> — with no agent-side fix, and a paid plan does not help (it is not a tier issue). <b>Cloudflare Tunnel reaches its edge over QUIC/UDP</b>, which HTTPS scanners usually do not touch, so it routes around the problem. <i>Real example:</i> this very stack switched ngrok → Cloudflare on 2026-05-31 for exactly this (Norton Web Shield), nothing else. Takeaway: on a normal home/dev box <b>both work great</b> — but if a TLS-inspecting middlebox sits in the path, prefer a QUIC/UDP tunnel.</div>'+
-     '<div class="tip"><b>Bonus — one tunnel, many services:</b> a single Cloudflare <i>named</i> tunnel exposes multiple local ports via ingress rules — e.g. <code>paperclip.you.com → :3000</code> and <code>dash.you.com → :3001</code> from one process, two stable hostnames, free. ngrok needs a separate paid endpoint per service.</div>'},
+     '<div class="tip"><b>Bonus — one tunnel, many services:</b> a single Cloudflare <i>named</i> tunnel exposes multiple local ports via ingress rules — e.g. <code>paperclip.you.com → :3000</code> and <code>dash.you.com → :3001</code> from one process, two stable hostnames, free. ngrok needs a separate paid endpoint per service.</div>',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🌐 Public tunnel — anyone with the link</div>'+
+     '<p>A tiny agent on your machine dials <b>outward</b> to a provider (Cloudflare, ngrok); the provider forwards <b>public</b> internet traffic back down to your <code>localhost</code> port. Whoever has the URL can reach it.</p><ul>'+
+     '<li><b>Use it when a stranger&#39;s server must reach you</b> — e.g. TradingView POSTing an alert to your webhook-receiver <code>:3000</code>. They are not on your network, so the door has to be public.</li>'+
+     '<li>Cloudflare <b>named</b> tunnel = a stable public hostname; <b>quick</b> tunnel = a random throwaway URL.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">🔒 Private mesh — only your own devices</div>'+
+     '<p><b>Tailscale</b> builds an encrypted private network (a <i>tailnet</i>) linking only the devices signed into <b>your</b> account. Each gets a stable <code>100.x</code> address that works from anywhere — cellular, hotel wifi — with <b>nothing</b> exposed to the public internet.</p><ul>'+
+     '<li><code>tailscale serve</code> publishes a local port to your tailnet over HTTPS — <code>localhost:8750</code> becomes <code>https://thecube.&lt;tailnet&gt;.ts.net</code>, reachable by your iPad, invisible to everyone else.</li>'+
+     '<li>No firewall holes, no public URL, and <b>no sanitizing needed</b> — because no stranger can ever load it.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff6fb5"><div class="ech">🪞 You are using this RIGHT NOW</div>'+
+     '<p>This very page reaches your iPad through the <b>private</b> path:</p><ul>'+
+     '<li><b>thecube</b> serves it on <code>localhost:8750</code> → <b>Tailscale</b> wraps it as <code>https://thecube.&lt;tailnet&gt;.ts.net</code> → your iPad (on the same tailnet) loads it from anywhere.</li>'+
+     '<li>The public path would have been a Cloudflare tunnel — but this page maps your <b>real</b> infrastructure, so private mesh is the right call: your devices only, zero exposure.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ffb454"><div class="ech">⚖️ Which do you reach for?</div><ul>'+
+     '<li>A <b>stranger&#39;s</b> server must reach you (webhooks, a public demo)? → <b>public tunnel</b> (Cloudflare).</li>'+
+     '<li>Only <b>your</b> devices need your own machine from anywhere? → <b>private mesh</b> (Tailscale).</li>'+
+     '<li>Want both at once? Run both — they do not conflict.</li>'+
+     '</ul></div>'},
   {t:'DNS / domains', tw:'name → address', h:'turns a name into a server address',
    d:'DNS (Domain Name System) is the internet’s phone book: it translates a human name (yourname.com) into the machine address that actually answers. A "domain" is the name you own and point wherever you want via DNS records — A = name→IP, CNAME = name→another name, TXT = verification / metadata.',
    s:'Your named Cloudflare Tunnel needs a domain whose DNS lives at Cloudflare — cloudflared writes a CNAME like webhook.yourdomain.com → your-tunnel.cfargotunnel.com, so TradingView can post to a STABLE name instead of a random URL that changes on restart. You have a GoDaddy domain earmarked (tradenificent.com); pointing its nameservers at Cloudflare (free, does not move where the site is hosted) is what unlocks the named tunnel.',
