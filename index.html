@@ -482,27 +482,101 @@ const GLOSSARY = [
   {sec:'Intermediate — how the pieces really talk', t:'IPC (file feed)', tw:'JSON files', h:'two programs talk by sharing a file',
    d:'Inter-process communication is how separate programs hand data to each other. The simplest form: one writes a file, the other reads it — no network, no protocol, just the filesystem as a shared mailbox.',
    s:'This is your last hop. market-sink writes market-state.json / market-events.json, and the Tradenificent and Paperclip runtimes READ those files. The WebSocket only carries engine→sink — the bots actually get their data as files.',
-   p:'Files are dead-simple and survive restarts, but there is no ordering, no backpressure, and no “you missed an update” signal. Production replaces this hop with a message bus (next card).'},
+   p:'Files are dead-simple and survive restarts, but there is no ordering, no backpressure, and no “you missed an update” signal. Production replaces this hop with a message bus (next card).',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🧩 How file-IPC works</div><ul>'+
+     '<li>One program writes a file; another reads it. The filesystem is the <b>shared mailbox</b> — no network, no protocol.</li>'+
+     '<li>Your market-sink writes <code>market-state.json</code>; the runtimes read it. Dead simple, and it survives a restart.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ffb454"><div class="ech">⚠️ The catches</div><ul>'+
+     '<li><b>Races:</b> a reader can catch the file <b>mid-write</b> and get half of it. (Fix: write a temp file, then rename.)</li>'+
+     '<li><b>No "new data" ping:</b> the reader has to keep checking the file (poll) — nothing tells it an update landed.</li>'+
+     '<li><b>No ordering or history:</b> the file is just the latest snapshot; miss an update and it is gone.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff6fb5"><div class="ech">⚖️ Other ways processes talk</div><ul>'+
+     '<li><b>Sockets/ports</b> (over a network), <b>pipes</b> (parent↔child), <b>shared memory</b> (fastest), or a <b>message bus</b> (next card).</li>'+
+     '<li>File-IPC is the simplest and least robust — great on one machine, replaced by a bus at scale.</li>'+
+     '</ul></div>'},
   {t:'Message bus / queue', tw:'broker', h:'a middleman that fans data out reliably',
    d:'A message bus (or queue) sits between producers and consumers: producers drop messages in, consumers pull them out, and the bus guarantees delivery, ordering, and replay. It decouples who-sends from who-receives.',
    s:'You do not run one — the engine→sink→file chain is your stand-in. It works on a single machine, but it is the biggest “production ideal” gap in your data path.',
-   p:'Production uses Kafka / Redis Streams / RabbitMQ so a slow or crashed consumer never loses messages, and you can add new consumers without touching the producer.'},
+   p:'Production uses Kafka / Redis Streams / RabbitMQ so a slow or crashed consumer never loses messages, and you can add new consumers without touching the producer.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🧩 What it does</div><ul>'+
+     '<li>A <b>post office</b> between senders and receivers: drop a message in, and it gets delivered even if the receiver is busy, slow, or briefly down.</li>'+
+     '<li>It <b>decouples</b> them — the sender does not need to know who is listening, or wait for them.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">📦 Queue vs pub/sub</div><ul>'+
+     '<li><b>Queue (work):</b> each message goes to <b>one</b> worker — spread jobs across many workers.</li>'+
+     '<li><b>Pub/sub (fan-out):</b> <b>every</b> subscriber gets a copy — broadcast an event to many listeners.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff6fb5"><div class="ech">⚖️ The real ones</div><ul>'+
+     '<li><b>RabbitMQ</b> — classic, flexible queues. <b>Kafka</b> — huge-volume streams with replayable history.</li>'+
+     '<li><b>Redis Streams</b> — lightweight if you already run Redis. <b>Cloud:</b> SQS / Pub/Sub.</li>'+
+     '<li>Your engine→sink→file chain is a hand-rolled stand-in for one of these.</li>'+
+     '</ul></div>'},
   {t:'CDP (Chrome DevTools Protocol)', tw:':9222', h:'remote-control a Chromium app over a port',
    d:'CDP is the protocol Chromium exposes on a debug port (like :9222) that lets another program drive the browser — read the page, run scripts, pull data — exactly as the DevTools panel would.',
    s:'tv-bridge speaks CDP to TradingView Desktop on :9222 to read the live chart. Key gotcha: :9222 must be the ACTUAL app, not a stale Chrome — launch the TradingView MSIX exe directly with --remote-debugging-port=9222.',
-   p:'Driving a desktop app over CDP is a scrape — a workaround around having no official data API. It is brittle (breaks on app updates) and is the honest reason this hop exists. Production consumes a real market-data feed instead.'},
+   p:'Driving a desktop app over CDP is a scrape — a workaround around having no official data API. It is brittle (breaks on app updates) and is the honest reason this hop exists. Production consumes a real market-data feed instead.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🧩 What CDP is</div><ul>'+
+     '<li>The exact protocol your browser’s <b>DevTools</b> (F12) speaks to the page — exposed on a port so ANOTHER program can drive the browser.</li>'+
+     '<li>It can read the page, run JavaScript, click, and screenshot — everything you can do by hand.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🛠️ How you use it</div><ul>'+
+     '<li>Launch Chromium with <code>--remote-debugging-port=9222</code>, then connect a library (<b>Puppeteer</b> or <b>Playwright</b>) to that port.</li>'+
+     '<li>tv-bridge does exactly this to read your live TradingView chart.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ffb454"><div class="ech">⚠️ Why it is fragile</div><ul>'+
+     '<li>You are automating a UI built for <b>humans</b> — an app update that moves a button breaks your script.</li>'+
+     '<li>:9222 must be the <b>actual app</b>, not a stale browser (your hard-won gotcha). It is a scrape, not a real API.</li>'+
+     '</ul></div>'},
   {t:'Environment variables', tw:'.env', h:'config injected at runtime, not baked into code',
    d:'Environment variables are key=value settings the OS hands a process when it starts. They keep configuration — and secrets — OUT of the source, so the same code runs in dev and prod with different values.',
    s:'Your services read tradenificent\\.env: TSX_API_KEY, ANTHROPIC_API_KEY, DISCORD_TOKEN, and TSX_USERNAME=Manqoba (the handle, not the email — the email fails with errorCode 3).',
-   p:'Using .env is correct. The gap: some keys are also hardcoded in tracked .bat files in plaintext (a TopStep key is flagged for rotation). Production loads secrets from a manager, never from a committed file.'},
+   p:'Using .env is correct. The gap: some keys are also hardcoded in tracked .bat files in plaintext (a TopStep key is flagged for rotation). Production loads secrets from a manager, never from a committed file.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🧩 What they are &amp; why</div><ul>'+
+     '<li>Key=value settings the OS hands a program when it starts — config that lives <b>outside</b> the code.</li>'+
+     '<li>So the same code runs in dev and prod with different values, and secrets never get hardcoded.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🛠️ How to use one</div><ul>'+
+     '<li>Put them in a <code>.env</code> file (<code>PORT=3004</code>), load it (the <code>dotenv</code> package), then read <code>process.env.PORT</code> in Node (or <code>os.environ</code> in Python).</li>'+
+     '<li>Or set them at the OS/terminal level for the whole machine.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff6fb5"><div class="ech">⚠️ The rules</div><ul>'+
+     '<li><b>Never commit <code>.env</code></b> — add it to <code>.gitignore</code>. Ship a <code>.env.example</code> with blank values so others know what is needed.</li>'+
+     '<li>Restart the program after changing a value — they are read once, at startup.</li>'+
+     '</ul></div>'},
   {t:'Secrets', tw:'🔑 never commit', h:'keys that grant access — guard them',
    d:'A secret is any credential — API key, token, password — that grants access to something. The cardinal rule: never commit one to git and never print it where it can be logged or copied.',
    s:'Yours: the TopStep API key, the Anthropic key, the Discord token, and the trade-bridge’s captured broker token. Live TODO: rotate the TOPSTEPX_API_KEY committed in plaintext, and the PAT that leaked into a transcript.',
-   p:'Production stores secrets in a vault (HashiCorp Vault, AWS/GCP secret manager), rotates them automatically, and scopes each to least privilege. Plaintext-in-a-file is the debt to pay down.'},
+   p:'Production stores secrets in a vault (HashiCorp Vault, AWS/GCP secret manager), rotates them automatically, and scopes each to least privilege. Plaintext-in-a-file is the debt to pay down.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🔑 What counts &amp; the cardinal rules</div><ul>'+
+     '<li>Any <b>API key, token, or password</b> that grants access. Rule: <b>never commit, never log, never print</b> one.</li>'+
+     '<li>Treat anything that touches git history as already public — even a deleted commit still holds it.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff5d6c"><div class="ech">🚨 If one leaks</div><ul>'+
+     '<li><b>Rotate it immediately</b> — revoke the old one and issue a new one. Editing the file is not enough; the old value is already out there.</li>'+
+     '<li>Your live TODO: rotate the TopStep key that sat in plaintext and the PAT that hit a transcript.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">⚖️ Where they should live</div><ul>'+
+     '<li><b>OK for solo:</b> a gitignored <code>.env</code>. <b>The real answer:</b> a secrets manager (Vault, AWS/GCP) that injects them at runtime.</li>'+
+     '<li>Production habits on top: <b>least privilege</b> (each key can do only what it must) + <b>auto-rotation</b>.</li>'+
+     '</ul></div>'},
   {t:'Reverse proxy', tw:'one front door', h:'one public port routes to many internal ones',
    d:'A reverse proxy accepts all incoming traffic on one address, then forwards each request to the right internal service — handling HTTPS, logging, and rate limits in that one place.',
    s:'You do not have one — every service answers on its own bare localhost port (:3000–:5174), exactly as the Stack Map draws them. Fine for one trusted machine, and it is why nothing here is internet-exposed.',
-   p:'Production puts nginx / Caddy / Traefik in front, so users hit ONE hardened 443 door and never see the internal ports. It is the production version of your “Gateway” and “Port” cards combined.'},
+   p:'Production puts nginx / Caddy / Traefik in front, so users hit ONE hardened 443 door and never see the internal ports. It is the production version of your “Gateway” and “Port” cards combined.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🧩 What it does</div><ul>'+
+     '<li>One public entrance that <b>forwards</b> each request to the right internal service — and handles HTTPS, compression, and caching in that one spot.</li>'+
+     '<li>Users only ever see the proxy; the real services hide on private ports behind it.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">🆚 Reverse vs forward proxy</div><ul>'+
+     '<li><b>Reverse</b> proxy sits in front of your <b>servers</b> (protects + routes them) — the common one.</li>'+
+     '<li><b>Forward</b> proxy sits in front of <b>clients</b> (a VPN or company filter routing your outbound traffic). Easy to mix up.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff6fb5"><div class="ech">⚖️ The tools</div><ul>'+
+     '<li><b>nginx</b> — the classic workhorse. <b>Caddy</b> — simplest, automatic HTTPS. <b>Traefik</b> — container-native, auto-discovers services.</li>'+
+     '<li>A whole Caddy config can be one line: <code>example.com { reverse_proxy localhost:3004 }</code>.</li>'+
+     '</ul></div>'},
   {t:'Tunnel / ingress (ngrok vs Cloudflare)', tw:'localhost → internet', h:'expose a local port to the public web',
    d:'A tunnel runs a small agent on your machine that opens an OUTBOUND connection to a provider’s edge; the provider then forwards public internet traffic back down to your localhost port. No router config, no open firewall ports, no public IP — a service on :3000 becomes a public https URL.',
    s:'This is how a TradingView alert (born on the public internet) reaches your webhook-receiver :3000 on a home PC behind a router. You switched ngrok → Cloudflare here on 2026-05-31 for ONE reason — Norton (see the caveat below) — not price or URLs. One named cloudflared tunnel can expose both the Paperclip receiver (:3000) and the dashboard webhook (:3001) from a single Windows service.',
@@ -522,15 +596,51 @@ const GLOSSARY = [
   {t:'DNS / domains', tw:'name → address', h:'turns a name into a server address',
    d:'DNS (Domain Name System) is the internet’s phone book: it translates a human name (yourname.com) into the machine address that actually answers. A "domain" is the name you own and point wherever you want via DNS records — A = name→IP, CNAME = name→another name, TXT = verification / metadata.',
    s:'Your named Cloudflare Tunnel needs a domain whose DNS lives at Cloudflare — cloudflared writes a CNAME like webhook.yourdomain.com → your-tunnel.cfargotunnel.com, so TradingView can post to a STABLE name instead of a random URL that changes on restart. You have a GoDaddy domain earmarked (tradenificent.com); pointing its nameservers at Cloudflare (free, does not move where the site is hosted) is what unlocks the named tunnel.',
-   p:'DNS is DNS everywhere. The "production" upgrades are operational: short TTLs for fast failover, health-checked / geo DNS load-balancing, and DNSSEC so records cannot be spoofed. For one tunnel, a single CNAME is the whole job.'},
+   p:'DNS is DNS everywhere. The "production" upgrades are operational: short TTLs for fast failover, health-checked / geo DNS load-balancing, and DNSSEC so records cannot be spoofed. For one tunnel, a single CNAME is the whole job.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🧩 The record types</div><ul>'+
+     '<li><b>A</b> — name → IPv4 address. <b>AAAA</b> — name → IPv6. <b>CNAME</b> — name → another name.</li>'+
+     '<li><b>TXT</b> — free text, used for verification/metadata. <b>MX</b> — where email for the domain goes.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🔎 Look it up yourself</div><ul>'+
+     '<li><code>nslookup github.com</code> (Windows) or <code>dig github.com</code> — shows the IP a name resolves to.</li>'+
+     '<li><b>TTL</b> = how long a record is cached. A change is not instant — old answers linger until the TTL expires ("propagation").</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff6fb5"><div class="ech">🛠️ Buying &amp; pointing a domain</div><ul>'+
+     '<li>Buy at a <b>registrar</b> (GoDaddy, Namecheap, Cloudflare). Then either set <b>records</b> there, or move the <b>nameservers</b> to Cloudflare and manage them there.</li>'+
+     '<li>That nameserver move is exactly what unlocks your named Cloudflare Tunnel.</li>'+
+     '</ul></div>'},
   {t:'TLS / HTTPS certificates', tw:'🔒 the s in https', h:'proves identity + encrypts the connection',
    d:'TLS is the lock on https — it encrypts traffic so nobody in the middle can read it, and a certificate (issued by a trusted authority) proves the server really is who the name claims. The browser trusts it because the cert chains up to a root CA already in its trust store.',
    s:'You mostly do not manage certs — Cloudflare terminates TLS at its edge and presents a valid cert for your domain automatically, so your localhost services can stay plain http behind the tunnel. The flip side you have already felt: a TLS-inspecting middlebox (Norton) re-signs certs with its OWN root mid-connection — that is the same MITM that broke ngrok in the Tunnel card above.',
-   p:'Production automates the whole lifecycle — free certs from Let’s Encrypt via ACME, auto-renewed every ~90 days by the reverse proxy (Caddy / Traefik do it transparently). The anti-pattern is a hand-issued cert nobody remembers to renew — it expires and every client throws scary security warnings.'},
+   p:'Production automates the whole lifecycle — free certs from Let’s Encrypt via ACME, auto-renewed every ~90 days by the reverse proxy (Caddy / Traefik do it transparently). The anti-pattern is a hand-issued cert nobody remembers to renew — it expires and every client throws scary security warnings.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🔒 What the padlock proves</div><ul>'+
+     '<li><b>Encryption</b> — nobody between you and the server can read the traffic.</li>'+
+     '<li><b>Identity</b> — a certificate, signed by a trusted authority, proves the server really owns that name. Your browser trusts it because it chains up to a root it already knows.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🛠️ How to get one (free)</div><ul>'+
+     '<li><b>Let’s Encrypt</b> issues certs for free; tools like <b>certbot</b> or <b>Caddy</b> fetch and <b>auto-renew</b> them every ~90 days, hands-off.</li>'+
+     '<li>Behind Cloudflare you do nothing — it terminates TLS for you at its edge.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ffb454"><div class="ech">⚠️ Common errors, decoded</div><ul>'+
+     '<li><code>ERR_CERT_DATE_INVALID</code> = expired (nobody renewed it). <b>Name mismatch</b> = the cert is for a different domain. <b>Self-signed</b> = no trusted authority vouches for it.</li>'+
+     '<li>And the one you lived: a <b>TLS-inspecting</b> antivirus (Norton) swaps in its own cert mid-connection — the same trick that broke ngrok.</li>'+
+     '</ul></div>'},
   {t:'Health check', tw:'/health', h:'a heartbeat endpoint a monitor can poll',
    d:'A health check is a tiny endpoint (often /health) a service exposes so a supervisor can ask “are you alive and OK?” and get a fast yes/no — without doing real work.',
    s:'Your bridges and engine expose /health; the Stack Map’s :3009 helper polls them for rich vitals (and TCP-connects the UI-only nodes). That is what flips a node green or red within ~1.5s of a change.',
-   p:'Same concept; production wires health checks INTO the orchestrator (Kubernetes liveness/readiness probes) so a failing service is auto-restarted or pulled from rotation — not just shown red on a map.'},
+   p:'Same concept; production wires health checks INTO the orchestrator (Kubernetes liveness/readiness probes) so a failing service is auto-restarted or pulled from rotation — not just shown red on a map.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🩺 What a good /health returns</div><ul>'+
+     '<li>A <b>fast yes/no</b> — ideally with a little vitals (uptime, "is the database reachable?").</li>'+
+     '<li>Keep it <b>cheap</b>: it gets hit constantly, so it should not do real work or call slow dependencies needlessly.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">🆚 Liveness vs readiness</div><ul>'+
+     '<li><b>Liveness</b> — "am I alive?" If no, <b>restart</b> me.</li>'+
+     '<li><b>Readiness</b> — "can I take traffic yet?" If no (still warming up), <b>hold</b> traffic but do not restart.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff6fb5"><div class="ech">🛠️ Who polls it</div><ul>'+
+     '<li>A supervisor, a load balancer, an orchestrator (Kubernetes), or your <b>Stack Map :3009</b> helper.</li>'+
+     '<li>On a red result it acts: restart the service, or stop sending it traffic.</li>'+
+     '</ul></div>'},
 ];
 /* ---- clickable jargon terms: highlight known words, popout a plain-English definition ---- */
 const TERMS = {
