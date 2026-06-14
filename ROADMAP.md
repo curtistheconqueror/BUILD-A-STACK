@@ -31,8 +31,8 @@ The concept tiers. 28 cards, 3 tiers, all with deep-dives.
 ## ⏭️ NEXT UP (do these first)
 
 ### Phase D — NEW TOP-LEVEL TABS (beside Learn / Build)
-- **D·1 "PC vs Mac" tab** — environment cheat-sheet: paths (`C:\` vs `/`), terminals (PowerShell vs Terminal), installs, Ctrl↔Cmd, file managers. Side-by-side compare.
-- **D·2 "Keyboard" tab** — interactive: hover a key → colored popup; click to select/compare multiple keys; a full **shortcut library**; a **PC⇄Mac toggle** lives on this tab; render a **Logi layout** (needs Curtis's keyboard PHOTO). PC first, then Mac.
+- **D·1 "PC vs Mac" tab** ✅ SHIPPED (`57f1db3`) — side-by-side cheat-sheet, 6 categories / 29 rows: big picture, files & paths, keys & shortcuts (Ctrl↔Cmd), terminal (cmd equivalents), installing software, why devs care. Data-driven `PCMAC` array + renderer; N-tab `TABS` table; responsive.
+- **D·2 "Keyboard" tab** ⏳ BLOCKED on Curtis's **Logi keyboard PHOTO** — interactive: hover a key → colored popup; click to select/compare multiple keys; a full **shortcut library**; a **PC⇄Mac toggle** lives on this tab; render a **Logi layout**. PC first, then Mac. *(Can build the engine + a standard layout first, then swap in the exact Logi layout when the photo arrives.)*
 
 *(B·3 free-build canvas can slot in here too — small relative to D.)*
 
