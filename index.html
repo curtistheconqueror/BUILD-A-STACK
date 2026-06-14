@@ -657,7 +657,27 @@ const TERMS = {
   npm:{title:'npm',text:'Node’s package manager. It downloads reusable code packages into your project so you do not have to rewrite common things.'},
   async:{title:'Async (asynchronous)',text:'Code that does not wait. It kicks off slow work (like a network call) and keeps going, handling the result later — which keeps the program responsive.'},
   backend:{title:'Backend',text:'The server-side half of an app — the logic, the database, the APIs. The part users do not see directly.'},
-  frontend:{title:'Frontend',text:'The part you see and click — the user interface in your browser. The backend feeds it data.'}
+  frontend:{title:'Frontend',text:'The part you see and click — the user interface in your browser. The backend feeds it data.'},
+  container:{title:'Container',text:'A lightweight, self-contained box that packages an app with everything it needs to run, so it behaves the same on any machine. Docker is the popular tool for these.'},
+  docker:{title:'Docker',text:'The most common tool for building and running containers. “It works on my machine” stops being a problem, because the container carries its whole environment with it.'},
+  kubernetes:{title:'Kubernetes (k8s)',text:'An orchestrator that runs lots of containers across many machines, restarting and scaling them automatically. The heavy-duty production version of a watchdog.'},
+  cache:{title:'Cache',text:'A stash of recently-used data kept somewhere fast, so you do not redo slow work. It trades a little freshness for a lot of speed.'},
+  ip:{title:'IP address',text:'The numeric address of a machine on a network (like 142.250.72.14). DNS exists to turn friendly names into these numbers.'},
+  tcp:{title:'TCP',text:'The reliable delivery protocol of the internet: it guarantees data arrives in order and complete, at the cost of a little overhead. HTTP rides on top of it.'},
+  udp:{title:'UDP',text:'TCP’s faster, no-guarantees cousin: it fires packets off without confirming delivery. Great for live video, games, and QUIC-based tunnels where speed beats perfection.'},
+  quic:{title:'QUIC',text:'A newer transport built on UDP that is fast and encrypted. It is why HTTP/3 and Cloudflare Tunnel can slip past tools that only inspect ordinary TCP traffic.'},
+  encryption:{title:'Encryption',text:'Scrambling data so only the intended party can read it. TLS (the lock in https) encrypts your web traffic while it is in transit.'},
+  token:{title:'Token',text:'A short string that proves who you are or grants access, handed out after you log in so you do not resend your password every time. Treat it like a secret.'},
+  dom:{title:'DOM',text:'The live, in-memory tree of a web page that the browser builds from the HTML. JavaScript reads and changes the DOM to make pages interactive.'},
+  library:{title:'Library',text:'A bundle of reusable code someone else wrote that you pull into your project, so you do not reinvent common things (e.g. a library for making HTTP requests).'},
+  latency:{title:'Latency',text:'The delay before something responds, measured in milliseconds. Low latency feels snappy; high latency feels laggy.'},
+  database:{title:'Database',text:'An organized store for data that you can save to and query quickly (e.g. SQLite, Postgres). The long-term memory of most apps.'},
+  git:{title:'Git',text:'The version-control system that tracks every change to your code and lets you undo, branch, and collaborate. GitHub is a place to host git repositories online.'},
+  terminal:{title:'Terminal',text:'The text window where you type commands to your computer (PowerShell on Windows, Terminal on Mac). Faster and more precise than clicking for many tasks.'},
+  vpn:{title:'VPN',text:'A private, encrypted tunnel for your network traffic, often used to reach a private network or mask your location. A forward proxy is a close cousin.'},
+  firewall:{title:'Firewall',text:'A gatekeeper that decides which network connections are allowed in or out. It is why tunnels connect outbound — to dodge inbound firewall rules.'},
+  orchestrator:{title:'Orchestrator',text:'A system that runs, restarts, scales, and health-checks many services for you (Kubernetes is the famous one). A watchdog on steroids.'},
+  ephemeral:{title:'Ephemeral',text:'Short-lived or temporary. An ephemeral port or URL is assigned on the fly and is not meant to stick around.'}
 };
 const TERM_RE = new RegExp('\\b(' + Object.keys(TERMS).join('|') + ')\\b','gi');
 function linkTerms(t){ var seen={}; return String(t).replace(TERM_RE,function(m){ var k=m.toLowerCase(); if(seen[k]||!TERMS[k]) return m; seen[k]=1; return '<span class="term" data-term="'+k+'">'+m+'</span>'; }); }
