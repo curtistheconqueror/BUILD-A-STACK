@@ -189,6 +189,32 @@
   .pcmac-intro{background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin-bottom:18px}
   .pcmac-intro h2{margin:0 0 6px;font-size:17px}
   .pcmac-intro p{margin:0;color:var(--muted);font-size:13px;line-height:1.6}
+  .os-hero{background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:18px;padding:20px 22px;margin-bottom:16px;position:relative;overflow:hidden}
+  .os-hero::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,var(--acc),var(--acc2),var(--acc3))}
+  .os-hero h2{margin:0 0 11px;font-size:21px;line-height:1.3}
+  .os-hero p{margin:0 0 11px;font-size:13.6px;line-height:1.72;color:#dbe6fb}
+  .os-hero p:last-child{margin-bottom:0}
+  .os-hero .lead{font-size:14.4px;color:var(--ink)}
+  .os-hero b{color:#fff}
+  .osgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+  .osmeet{background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--border);border-left:3px solid var(--mc);border-radius:16px;padding:16px 18px;transition:box-shadow .3s,transform .3s}
+  .osmeet:hover{box-shadow:0 14px 36px rgba(0,0,0,.45),0 0 26px -10px var(--mc);transform:translateY(-2px)}
+  .osmeet h3{margin:0 0 2px;font-size:18px;display:flex;align-items:center;gap:9px;color:var(--mc)}
+  .osmeet .tagline{font-size:12.5px;color:var(--muted);font-style:italic;margin-bottom:11px}
+  .osmeet p{margin:0 0 10px;font-size:13px;line-height:1.66;color:#dbe6fb}
+  .osmeet p:last-child{margin-bottom:0}
+  .osmeet b{color:var(--ink)}
+  .osmeet .analogy{border-left:3px solid var(--mc);background:rgba(8,12,22,.42);border-radius:0 11px 11px 0;padding:11px 13px;font-size:12.7px;line-height:1.62;color:#cdd9ef}
+  .osmeet .analogy b{color:var(--mc)}
+  .oschoose{background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin-bottom:6px}
+  .oschoose h3{margin:0 0 9px;font-size:16.5px}
+  .oschoose>p{margin:0 0 12px;font-size:13.2px;line-height:1.65;color:#dbe6fb}
+  .oschoose .pick3{display:grid;gap:9px}
+  .oschoose .opt{font-size:12.9px;line-height:1.56;color:#dbe6fb;border-left:3px solid var(--oc,var(--acc));background:rgba(8,12,22,.4);border-radius:0 10px 10px 0;padding:9px 13px}
+  .oschoose .opt b{color:var(--ink)}
+  .oschoose .verdict{margin-top:13px;font-size:13.2px;line-height:1.66;color:#cdd9ef}
+  .oschoose .verdict b{color:var(--acc2)}
+  .oskey{display:flex;gap:9px;margin:0 0 14px}
   .winkey,.mackey{font-weight:700;font-size:11.5px;padding:1px 7px;border-radius:6px;white-space:nowrap}
   .winkey{color:var(--acc);background:rgba(53,208,224,.12);border:1px solid rgba(53,208,224,.4)}
   .mackey{color:var(--acc3);background:rgba(255,111,181,.12);border:1px solid rgba(255,111,181,.4)}
@@ -211,6 +237,9 @@
     .cmprow .topic{font-size:13.2px;margin-bottom:1px}
     .oslab{display:inline-block;font-size:9.5px;letter-spacing:1px;text-transform:uppercase;font-weight:800;margin-right:6px;vertical-align:1px}
     .cmprow .win .oslab{color:var(--acc)} .cmprow .mac .oslab{color:var(--acc3)}
+    .osgrid{grid-template-columns:1fr}
+    .os-hero{padding:17px 17px}
+    .os-hero h2{font-size:19px}
   }
 </style>
 </head>
@@ -238,7 +267,45 @@
     <button class="btn" id="reset">↺ reset</button>
   </div>
   <div id="view-pcmac" class="view hide">
-    <div class="pcmac-intro"><h2>💻 Windows vs Mac — the same ideas, different doors</h2><p>Two operating systems that do the same jobs in different ways. If you can read both columns, you can sit at <i>any</i> computer and not feel lost. <span class="winkey">cyan = Windows</span> · <span class="mackey">pink = Mac</span>.</p></div>
+    <div class="os-hero">
+      <h2>Two computers, two personalities — let’s introduce you 👋</h2>
+      <p class="lead">Before we compare buttons and shortcuts, let’s zoom way out — because if you’ve never thought about this, the whole “PC vs Mac” thing can feel like a mystery. It isn’t. Here’s the plain-English version.</p>
+      <p>Every computer runs an <b>operating system</b> — the master program that wakes up when you press the power button and runs everything else: your apps, your files, the internet, all of it. It’s the difference between a pile of metal and chips and a machine you can actually <i>use</i>. Think of it as the <b>language the computer speaks</b> and the <b>desk you sit down at</b> to get things done.</p>
+      <p>Almost every computer you’ll ever touch speaks one of <b>two</b> of these languages. <b>Microsoft</b> makes <b>Windows</b>. <b>Apple</b> makes <b>macOS</b>. That’s the whole famous rivalry. They both do the same everyday things — open a browser, write a document, watch a video, save a photo — but each has its own look, feel, and personality. Learn to recognize both, and you can sit down at <i>any</i> computer, anywhere, and never feel lost. That’s the real goal of this page.</p>
+    </div>
+
+    <div class="osgrid">
+      <div class="osmeet" style="--mc:var(--acc)">
+        <h3>⊞ Meet Windows</h3>
+        <div class="tagline">The everyman — runs on almost everything.</div>
+        <p>Windows is made by <b>Microsoft</b>, and it’s the most common operating system on Earth — it’s probably what you grew up seeing at school or work. Microsoft writes the software, but it <b>doesn’t make most of the computers</b>. Hundreds of companies do — Dell, HP, Lenovo, ASUS, Acer — plus the custom-built towers gamers love. So Windows runs on a $300 starter laptop and a $5,000 gaming beast alike.</p>
+        <p>That variety <i>is</i> its personality: <b>choice and flexibility</b>. Loads of settings to tweak, the freedom to open the case and upgrade parts, and an app for absolutely everything. The trade-off — with so many makers and options, no two Windows PCs feel exactly identical, and there’s usually more than one way to do anything.</p>
+        <div class="analogy"><b>🏪 Picture a giant hardware store attached to a house you’re allowed to renovate.</b> Endless aisles, every brand, and if you want to knock down a wall — go for it. Freedom, with a little more responsibility.</div>
+        <p style="margin-top:11px"><b>Best for:</b> gamers (nearly all PC games are Windows-first), business &amp; Office, budget shoppers, and tinkerers who love to customize.</p>
+      </div>
+      <div class="osmeet" style="--mc:var(--acc3)">
+        <h3>🍎 Meet macOS</h3>
+        <div class="tagline">The polished one — it just works.</div>
+        <p>macOS is made by <b>Apple</b>, and here’s the key twist: it runs <b>only on Apple’s own computers</b> — the MacBook laptops, and the iMac, Mac mini, and Mac Studio desktops. Because Apple builds <b>both</b> the computer and the software, the two are designed to fit together tightly, like a key cut for one lock.</p>
+        <p>Its personality is the opposite of endless choice: <b>fewer options, but beautifully consistent</b>. Every Mac looks and behaves the same, the design is clean, and it pairs seamlessly with an iPhone or iPad. Under the hood it’s built on <b>Unix</b> — the same rock-solid foundation that runs most of the internet’s servers — which is a big reason programmers and creative pros gravitate to it.</p>
+        <div class="analogy"><b>🏛️ Picture a beautifully designed apartment where the same company built the building <i>and</i> the furniture.</b> Everything matches, everything fits. You can’t knock down walls — but you rarely want to.</div>
+        <p style="margin-top:11px"><b>Best for:</b> designers, video &amp; photo editors, musicians, coders, and anyone who wants a premium, low-hassle experience (especially if they already own an iPhone).</p>
+      </div>
+    </div>
+
+    <div class="oschoose">
+      <h3>🤔 So… which one is “better”?</h3>
+      <p>Neither — and anyone who swears one is universally better is usually selling something. It’s like asking whether a pickup truck or a sports car is “better”: it depends entirely on what you’re doing. Here’s an honest gut-check:</p>
+      <div class="pick3">
+        <div class="opt" style="--oc:var(--acc)"><b>Lean Windows if</b> you game, you’re watching your budget, or you love to customize and tinker.</div>
+        <div class="opt" style="--oc:var(--acc3)"><b>Lean Mac if</b> you do creative work, you already live in Apple’s world (iPhone/iPad), or you just want it to work with zero fuss.</div>
+        <div class="opt" style="--oc:var(--acc2)"><b>Either is fine if</b> you’re learning to code — Mac’s Unix base matches real servers out of the box, and Windows closes that gap with a built-in tool called <b>WSL</b> (you’ll meet it just below).</div>
+      </div>
+      <div class="verdict"><b>The real superpower isn’t picking a side — it’s being fluent in both.</b> Then no computer is ever foreign to you. So here is exactly how the same everyday tasks look on each, side by side. 👇</div>
+    </div>
+
+    <div class="seclabel" style="--ca:var(--acc)">Side by side — the same task, both ways</div>
+    <div class="oskey"><span class="winkey">⊞ Windows</span><span class="mackey">🍎 Mac</span></div>
     <div id="pcmac-list"></div>
   </div>
 </div>
