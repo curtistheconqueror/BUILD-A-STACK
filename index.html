@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Build-a-Stack · learn how systems connect</title>
 <style>
   :root{--bg0:#05080f;--bg1:#0a1020;--ink:#eaf1ff;--muted:#8ea0c4;--acc:#35d0e0;--acc2:#b78cff;--acc3:#ff6fb5;
     --ok:#51e08a;--bad:#ff5d6c;--warn:#ffb454;--glass:rgba(22,30,50,.55);--border:rgba(130,155,200,.22);}
   *{box-sizing:border-box}
-  html,body{margin:0;min-height:100%;color:var(--ink);font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg0);overflow-x:hidden}
+  html,body{margin:0;min-height:100%;color:var(--ink);font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg0);overflow-x:hidden;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
   .bg{position:fixed;inset:0;z-index:-3;background:
     radial-gradient(900px 640px at 14% 8%,rgba(53,208,224,.16),transparent 60%),
     radial-gradient(840px 600px at 88% 92%,rgba(183,140,255,.18),transparent 58%),
@@ -148,6 +148,40 @@
   .btn:hover{border-color:var(--acc)}
   .burst{position:absolute;width:8px;height:8px;border-radius:50%;pointer-events:none}
   footer{color:#46587e;font-size:11px;text-align:center;padding:8px 0 30px}
+  /* tap-to-place (touch + mouse): a selected chip glows until you tap a slot */
+  .chip.sel{border-color:var(--acc2)!important;transform:translateY(-2px);box-shadow:0 0 0 1px var(--acc2),0 0 24px -4px var(--acc2)}
+  .slot.armed{border-color:var(--acc2);background:rgba(183,140,255,.08);box-shadow:0 0 22px -8px var(--acc2)}
+  .phint{color:var(--muted);font-size:12px;margin-top:12px;display:flex;align-items:center;gap:7px}
+  .phint b{color:var(--acc)}
+  /* ===== touch / small-screen ===== */
+  @media (hover:none){
+    .card:hover{--ty:0px} /* no sticky lift after a tap */
+    .chip{cursor:pointer}
+  }
+  @media (max-width:640px){
+    header{padding:22px 18px 4px}
+    h1{font-size:25px;letter-spacing:2.5px}
+    .sub{font-size:12.5px}
+    .tabs{padding:0 18px;gap:8px}
+    .tabs button{padding:9px 14px;font-size:13px}
+    .wrap{padding:12px 18px 72px}
+    .row{grid-template-columns:16px minmax(0,1fr);gap:10px}
+    .head{padding:13px;gap:10px}
+    .title{font-size:15px}
+    .tw{font-size:10.5px;padding:3px 8px}
+    .pane{font-size:13.3px;min-height:0}
+    .segp{flex-wrap:wrap}
+    .bin{padding:0 13px 15px}
+    .excat{padding:10px 12px}
+    .excat p,.excat li{font-size:12.3px}
+    .line{flex-direction:column;align-items:stretch;gap:6px}
+    .slot{width:100%;min-height:62px}
+    .arrow{transform:rotate(90deg);width:100%;text-align:center;font-size:18px;margin:1px 0}
+    .palette{padding:13px;gap:9px}
+    .chip{min-width:0;flex:1 1 44%}
+    dialog.termpop{max-width:none;width:92vw}
+    .tp-card{padding:16px 17px}
+  }
 </style>
 </head>
 <body>
@@ -168,12 +202,13 @@
     <div class="goal"><h2 id="goalh"></h2><p id="goalp"></p></div>
     <div class="line" id="line"></div>
     <div class="palette" id="palette"></div>
+    <div class="phint"><b>Tap</b> a piece, then <b>tap</b> a slot — or drag it. On a phone/tablet, tap.</div>
     <div class="msg" id="msg"></div>
     <button class="btn" id="reset">↺ reset</button>
   </div>
 </div>
 <dialog id="termPopout" class="termpop"><div class="tp-card"><button class="tp-x" id="tpClose" aria-label="Close">✕</button><div class="tp-title" id="tpTitle"></div><div class="tp-text" id="tpText"></div><div class="tp-foot">quick definition · Esc or click outside to close</div></div></dialog>
-<footer>Self-contained · open in any browser · Phase A·1–A·2 (22 concepts) · Phase B·1–B·2 (4 challenges)</footer>
+<footer>Self-contained · works on phone · tablet · desktop · Phase A·1–A·2 (22 concepts) · Phase B·1–B·2 (4 challenges, tap or drag)</footer>
 <script>
 /* ===== living background wires ===== */
 (function(){
@@ -682,6 +717,7 @@ const TERMS = {
 const TERM_RE = new RegExp('\\b(' + Object.keys(TERMS).join('|') + ')\\b','gi');
 function linkTerms(t){ var seen={}; return String(t).replace(TERM_RE,function(m){ var k=m.toLowerCase(); if(seen[k]||!TERMS[k]) return m; seen[k]=1; return '<span class="term" data-term="'+k+'">'+m+'</span>'; }); }
 
+const HOVER = window.matchMedia('(hover:hover) and (pointer:fine)').matches; /* true on mouse, false on touch */
 const learnList=document.getElementById('learn-list');
 document.getElementById('tot').textContent=GLOSSARY.length;
 const SEG=[['d','What it is','var(--ink)'],['s','In your stack','var(--acc)'],['p','Pragmatic vs production','var(--warn)']];
@@ -704,9 +740,11 @@ GLOSSARY.forEach((g,i)=>{
     pane.classList.add('fade');setTimeout(()=>{pane.innerHTML=linkTerms(g[k]);pane.classList.remove('fade');},150);});
   const xbtn=row.querySelector('.xbtn');
   if(xbtn){xbtn.addEventListener('click',ev=>{ev.stopPropagation();card.classList.toggle('explore-open');});}
-  card.addEventListener('pointermove',e=>{const r=card.getBoundingClientRect();const px=(e.clientX-r.left)/r.width-.5,py=(e.clientY-r.top)/r.height-.5;
-    card.style.setProperty('--ry',(px*7).toFixed(2)+'deg');card.style.setProperty('--rx',(-py*7).toFixed(2)+'deg');});
-  card.addEventListener('pointerleave',()=>{card.style.setProperty('--ry','0deg');card.style.setProperty('--rx','0deg');});
+  if(HOVER){
+    card.addEventListener('pointermove',e=>{const r=card.getBoundingClientRect();const px=(e.clientX-r.left)/r.width-.5,py=(e.clientY-r.top)/r.height-.5;
+      card.style.setProperty('--ry',(px*7).toFixed(2)+'deg');card.style.setProperty('--rx',(-py*7).toFixed(2)+'deg');});
+    card.addEventListener('pointerleave',()=>{card.style.setProperty('--ry','0deg');card.style.setProperty('--rx','0deg');});
+  }
 });
 function prog(){const n=opened.size;document.getElementById('pc').textContent=n;document.getElementById('fill').style.width=Math.round(n/GLOSSARY.length*100)+'%';}
 const io=new IntersectionObserver((es)=>{es.forEach(en=>{if(en.isIntersecting){const idx=[...learnList.querySelectorAll('.row')].indexOf(en.target);en.target.style.transitionDelay=(Math.min(idx,6)*55)+'ms';en.target.classList.add('in');io.unobserve(en.target);}})},{threshold:.05});
@@ -783,7 +821,8 @@ const CHALLENGES=[
    ],
    done:'✅ TopStep / Schwab (read-only) → CORTEX bridge (:4000) → CORTEX web (:3500). CORTEX is the observability dashboard — read-only + emergency-flatten. Its Knowledge Graph reads your Obsidian vault through this same :4000 bridge.'},
 ];
-let cur=0;const doneSet=new Set();let CHAIN=[],DISTRACTORS=[];
+let cur=0;const doneSet=new Set();let CHAIN=[],DISTRACTORS=[];let selChip=null;
+function clearSel(){selChip=null;palette.querySelectorAll('.chip.sel').forEach(c=>c.classList.remove('sel'));line.querySelectorAll('.slot.armed').forEach(s=>s.classList.remove('armed'));}
 const line=document.getElementById('line'),palette=document.getElementById('palette'),msg=document.getElementById('msg'),
   goalh=document.getElementById('goalh'),goalp=document.getElementById('goalp'),chalpick=document.getElementById('chalpick');
 function renderPicker(){chalpick.innerHTML='';CHALLENGES.forEach((c,i)=>{const b=document.createElement('button');b.textContent=c.tab;if(i===cur)b.classList.add('on');if(doneSet.has(c.id))b.classList.add('done');b.addEventListener('click',()=>{cur=i;build();});chalpick.appendChild(b);});}
@@ -795,19 +834,22 @@ const surge=()=>{tone(330,.1);setTimeout(()=>tone(523,.1),90);setTimeout(()=>ton
 let filled=0;
 function build(){
   const C=CHALLENGES[cur];CHAIN=C.chain;DISTRACTORS=C.distractors;goalh.textContent=C.title;goalp.textContent=C.desc;renderPicker();
-  line.innerHTML='';palette.innerHTML='';msg.textContent='';msg.className='msg';filled=0;
+  line.innerHTML='';palette.innerHTML='';msg.textContent='';msg.className='msg';filled=0;selChip=null;
   CHAIN.forEach((n,i)=>{
     const slot=document.createElement('div');slot.className='slot';slot.dataset.expect=n.id;slot.dataset.idx=i;slot.innerHTML=`<div class="ph">slot ${i+1}<br>drop here</div>`;
     slot.addEventListener('dragover',e=>{e.preventDefault();slot.classList.add('over');});
     slot.addEventListener('dragleave',()=>slot.classList.remove('over'));
     slot.addEventListener('drop',e=>{e.preventDefault();slot.classList.remove('over');onDrop(slot,e.dataTransfer.getData('text/plain'));});
+    slot.addEventListener('click',()=>{if(!selChip)return;const id=selChip;clearSel();onDrop(slot,id);});
     line.appendChild(slot);
     if(i<CHAIN.length-1){const a=document.createElement('div');a.className='arrow';a.textContent='→';line.appendChild(a);}
   });
   shuffle(CHAIN.concat(DISTRACTORS)).forEach(n=>{
     const chip=document.createElement('div');chip.className='chip';chip.draggable=true;chip.dataset.id=n.id;chip.style.setProperty('--c',n.c);
     chip.innerHTML=`<div class="t">${n.t}</div><div class="s">${n.s}</div>`;
-    chip.addEventListener('dragstart',e=>e.dataTransfer.setData('text/plain',n.id));
+    chip.addEventListener('dragstart',e=>{clearSel();e.dataTransfer.setData('text/plain',n.id);});
+    chip.addEventListener('click',()=>{if(chip.classList.contains('gone'))return;const wasSel=chip.classList.contains('sel');clearSel();
+      if(!wasSel){chip.classList.add('sel');selChip=n.id;line.querySelectorAll('.slot').forEach(s=>{if(!s.classList.contains('filled'))s.classList.add('armed');});}});
     palette.appendChild(chip);
   });
 }
