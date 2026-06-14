@@ -181,7 +181,7 @@
 /* ===== LEARN: glossary (A·1 fundamentals + A·2 intermediate) ===== */
 const GLOSSARY = [
   {sec:'Fundamentals — the building blocks', t:'Port', tw:':3004', h:'a numbered door a service listens on',
-   d:'A port is a numbered channel on a machine (like :3004) where one running program listens for connections. Only one program can hold a given port at a time.',
+   d:'A port is a numbered channel on a machine (like :3004) where one running program listens for connections. Only one program can hold a given port at a time. The everyday version: when you open localhost:3004 in a browser, “localhost” means “this computer” and the “:3004” is the port — it picks which program answers, the same way a website address picks which server out on the internet answers. So a port is basically a web-style address, just pointing at something private on your own machine.',
    s:'Every box on your Stack Map has one — market-state :3004, the dashboard :5174, the bridges :3000–:3005. "EADDRINUSE" means two things fought over the same port (that is exactly what killed your CORTEX bridge).',
    p:'Same idea in production, but users hit ONE public port (443/https) and a reverse proxy (nginx) routes to the internal ports behind it.',
    x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">📚 More examples — ports in the wild</div>'+
@@ -267,19 +267,96 @@ const GLOSSARY = [
   {t:'API', tw:'contract', h:'a defined way to ask a program for something',
    d:'An API (Application Programming Interface) is the agreed set of requests a program accepts — "ask me this way, I will answer that way." It hides the internals behind a clean contract.',
    s:'TopStep X exposes an API your bots call to place orders. Your bridges expose little APIs too (e.g. tv-bridge /chart/quote).',
-   p:'Production APIs add auth, versioning, rate limits, and docs. Yours are bare localhost endpoints — fine for one machine, not for the public.'},
+   p:'Production APIs add auth, versioning, rate limits, and docs. Yours are bare localhost endpoints — fine for one machine, not for the public.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🧩 Anatomy of an API call</div>'+
+     '<p>Every call has the same shape — you send a request, you get a response:</p><ul>'+
+     '<li>an <b>endpoint</b> (the URL, e.g. <code>/chart/quote</code>) + a <b>method</b> (GET/POST) + an optional <b>body</b> (data you send).</li>'+
+     '<li>back comes a <b>status code</b> (did it work?) and a <b>payload</b> — almost always <b>JSON</b>.</li>'+
+     '<li>An API is really just a <b>menu</b>: a fixed list of requests the program agrees to answer.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🔤 The four verbs you will use</div><ul>'+
+     '<li><b>GET</b> — read something (no changes). <b>POST</b> — create something new.</li>'+
+     '<li><b>PUT</b> / <b>PATCH</b> — update something that already exists. <b>DELETE</b> — remove it.</li>'+
+     '<li>That is 90% of every API: read, create, update, delete (devs call it <b>CRUD</b>).</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">▶️ Try one right now</div><ul>'+
+     '<li>Paste in a browser: <code>https://api.github.com/users/torvalds</code> — that is a live GET request; the JSON you see is the response.</li>'+
+     '<li>From a terminal: <code>curl https://api.github.com/users/torvalds</code>.</li>'+
+     '<li>From code: <code>const r = await fetch(url); const data = await r.json();</code>.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff6fb5"><div class="ech">⚖️ Styles &amp; alternatives</div><ul>'+
+     '<li><b>REST</b> — the common one: URLs + the verbs above (what your bridges use).</li>'+
+     '<li><b>GraphQL</b> — one endpoint where the client asks for exactly the fields it wants.</li>'+
+     '<li><b>gRPC</b> — fast, binary, for service-to-service calls inside a backend.</li>'+
+     '<li>For live/streaming data you skip request-response and use a <b>WebSocket</b> (a couple cards down).</li>'+
+     '</ul></div>'},
   {t:'HTTP request (GET / POST)', tw:'GET/POST', h:'the most common API call',
    d:'HTTP is the request/response pattern of the web. GET = "give me data," POST = "here is data, do something." You ask once, you get one answer, the connection closes.',
    s:'The Stack Map polls /health endpoints over HTTP; the dashboard posts trade commands over HTTP to the trade-bridge.',
-   p:'Same — but production puts it behind HTTPS + a proxy, and prefers a stream (below) for anything live.'},
+   p:'Same — but production puts it behind HTTPS + a proxy, and prefers a stream (below) for anything live.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">📨 What is actually in a request</div><ul>'+
+     '<li><b>Request</b> = a method (GET/POST) + a URL + <b>headers</b> (metadata like auth and content-type) + an optional <b>body</b>.</li>'+
+     '<li><b>Response</b> = a <b>status code</b> + headers + a body (the HTML or JSON you wanted).</li>'+
+     '<li>It is <b>one round trip</b>: you ask, you get one answer, the connection closes.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ffb454"><div class="ech">🔢 Status codes, decoded</div><ul>'+
+     '<li><b>2xx = success</b> — <code>200</code> OK, <code>201</code> created.</li>'+
+     '<li><b>3xx = look elsewhere</b> — <code>301</code> moved / redirect.</li>'+
+     '<li><b>4xx = YOU messed up</b> — <code>404</code> not found, <code>401</code> not logged in, <code>403</code> not allowed.</li>'+
+     '<li><b>5xx = the SERVER messed up</b> — <code>500</code> crash, <code>502/503</code> bad gateway / unavailable.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">▶️ Watch it happen</div><ul>'+
+     '<li>Open any site, press <b>F12 → Network</b>, refresh — every row is one HTTP request with its method, status, and timing.</li>'+
+     '<li>Terminal: <code>curl -v https://example.com</code> shows the raw request + response headers.</li>'+
+     '<li>Click a request → the <b>Headers / Response</b> tabs show exactly what went each way.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff6fb5"><div class="ech">⚖️ Versions &amp; when to stop using it</div><ul>'+
+     '<li><b>HTTP/1.1</b> (classic) → <b>HTTP/2</b> (many requests over one connection) → <b>HTTP/3</b> (over QUIC/UDP — the same transport that let your Cloudflare tunnel dodge Norton).</li>'+
+     '<li>HTTP is ask-answer-close. For <b>live</b> data (prices, chat) that is wasteful — switch to a <b>WebSocket</b> (next).</li>'+
+     '</ul></div>'},
   {t:'Socket / WebSocket', tw:'live pipe', h:'a persistent two-way live stream',
    d:'A WebSocket is an always-open pipe between two programs. Instead of asking again and again, the connection stays open and either side can send the moment something changes.',
    s:'market-state (:3004) publishes over a WebSocket; market-sink subscribes to it and gets every update instantly. The Stack Map itself now uses a live stream (SSE) for ~1.5s updates.',
-   p:'Same tool in production — often hardened with reconnect logic, auth tokens, and a message bus behind it.'},
+   p:'Same tool in production — often hardened with reconnect logic, auth tokens, and a message bus behind it.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🔌 How it differs from HTTP</div><ul>'+
+     '<li>HTTP: knock, get one answer, door closes. <b>A WebSocket keeps the door open</b> and either side can speak any time.</li>'+
+     '<li>It is <b>two-way</b> and <b>real-time</b> — the <b>server can push</b> to you without being asked.</li>'+
+     '<li>It starts as a normal HTTP request, then <b>upgrades</b> the connection to stay open.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🎯 When to reach for it</div><ul>'+
+     '<li><b>Yes:</b> live prices, chat, multiplayer, notifications, dashboards that update themselves — anything where the server has news for you.</li>'+
+     '<li><b>No:</b> a simple "fetch this once" — plain HTTP is for that; a WebSocket would be overkill.</li>'+
+     '<li>Your market-state engine pushes over a WebSocket so every bot hears updates the instant they happen.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">⚙️ The mental model</div><ul>'+
+     '<li>Client: <code>const ws = new WebSocket(url)</code>, then react with <code>ws.onmessage = e =&gt; { … }</code>.</li>'+
+     '<li>Either side calls <code>send(...)</code> whenever it has something — no re-asking.</li>'+
+     '<li>The catch: connections drop, so real apps add <b>auto-reconnect</b> + heartbeats.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff6fb5"><div class="ech">⚖️ Alternatives</div><ul>'+
+     '<li><b>SSE (Server-Sent Events)</b> — a one-way server→client stream; simpler than a WebSocket when you only need to receive (your Stack Map uses this).</li>'+
+     '<li><b>Long-polling</b> — the old hack: keep asking and hold the request open; works everywhere, less efficient.</li>'+
+     '<li><b>WebTransport</b> — the newer QUIC-based option for low-latency streams.</li>'+
+     '</ul></div>'},
   {t:'Bridge', tw:'adapter', h:'translates between two things that can’t talk directly',
    d:'A bridge is a small service whose only job is to sit between two systems that speak different "languages" and translate, so they can work together.',
    s:'tv-bridge lets your engine read a TradingView chart; trade-bridge lets a bot place orders on Tradovate WITHOUT the paid API by capturing the live token. Bridges are the glue of your stack.',
-   p:'Bridges are legit — but a token-capture bridge is a workaround around a closed/expensive API. Production would use the official API and skip the bridge.'},
+   p:'Bridges are legit — but a token-capture bridge is a workaround around a closed/expensive API. Production would use the official API and skip the bridge.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🧩 What a bridge really is</div>'+
+     '<p>A tiny program whose ONLY job is to sit between two systems that cannot talk directly and translate.</p><ul>'+
+     '<li>Everyday version: a <b>power adapter</b> between a US plug and a European socket, or a human <b>translator</b> between two languages.</li>'+
+     '<li>It does not add features — it just makes A and B compatible.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🛠️ When you build one</div><ul>'+
+     '<li>The thing you need has <b>no usable API</b>, or a closed/expensive one, so you adapt around it.</li>'+
+     '<li>Two systems speak <b>different protocols</b> and need a translator in the middle.</li>'+
+     '<li>You need to <b>capture or forward</b> something — e.g. tv-bridge reads the chart; trade-bridge grabs a live token to place orders without the paid API.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ffb454"><div class="ech">⚖️ The tradeoff (be honest)</div><ul>'+
+     '<li>Every bridge is an <b>extra hop</b> — one more thing that can break, lag, or need restarting.</li>'+
+     '<li>A token-capture bridge is a <b>workaround around a closed API</b> — fine for personal use, but the "production" answer is the official API with the bridge deleted.</li>'+
+     '<li>Rule: keep a bridge <b>thin</b> — translate and forward, nothing more.</li>'+
+     '</ul></div>'},
   {t:'Gateway', tw:'entry point', h:'one front door that routes to many services',
    d:'A gateway is a single entry point that receives traffic and routes it to the right internal service, often adding auth, logging, or message handling along the way.',
    s:'Your Hermes gateway is the one place Telegram/Discord messages flow through to reach the right handler.',
