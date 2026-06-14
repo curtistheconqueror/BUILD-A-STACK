@@ -181,6 +181,34 @@
     .chip{min-width:0;flex:1 1 44%}
     dialog.termpop{max-width:none;width:92vw}
     .tp-card{padding:16px 17px}
+    .tabs{flex-wrap:wrap}
+  }
+  /* ===== PC vs Mac tab ===== */
+  .pcmac-intro{background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin-bottom:18px}
+  .pcmac-intro h2{margin:0 0 6px;font-size:17px}
+  .pcmac-intro p{margin:0;color:var(--muted);font-size:13px;line-height:1.6}
+  .winkey,.mackey{font-weight:700;font-size:11.5px;padding:1px 7px;border-radius:6px;white-space:nowrap}
+  .winkey{color:var(--acc);background:rgba(53,208,224,.12);border:1px solid rgba(53,208,224,.4)}
+  .mackey{color:var(--acc3);background:rgba(255,111,181,.12);border:1px solid rgba(255,111,181,.4)}
+  .cmpcard{background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:16px;padding:15px 17px;margin-bottom:16px;opacity:0;transform:translateY(14px)}
+  .cmpcard.in{opacity:1;transform:none;transition:opacity .55s,transform .55s cubic-bezier(.2,.8,.2,1)}
+  .cmpcard h3{margin:0 0 3px;font-size:16px;display:flex;align-items:center;gap:9px}
+  .cmpcard .csub{color:var(--muted);font-size:12.3px;margin:0 0 11px;line-height:1.5}
+  .cmphdr{display:grid;grid-template-columns:0.78fr 1fr 1fr;gap:10px;font-size:10px;letter-spacing:1.4px;text-transform:uppercase;font-weight:800;color:var(--muted);padding:0 2px 4px}
+  .cmphdr .win{color:var(--acc)} .cmphdr .mac{color:var(--acc3)}
+  .cmprow{display:grid;grid-template-columns:0.78fr 1fr 1fr;gap:10px;padding:8px 0;border-top:1px solid var(--border)}
+  .cmprow .topic{font-size:12.7px;font-weight:700;color:#dbe6fb;align-self:center}
+  .cmprow .win,.cmprow .mac{font-size:12.5px;line-height:1.55;color:#cdd9ef;border-left:3px solid;border-radius:0 9px 9px 0;padding:6px 11px;background:rgba(8,12,22,.4)}
+  .cmprow .win{border-left-color:var(--acc)} .cmprow .mac{border-left-color:var(--acc3)}
+  .cmprow code{font-family:ui-monospace,monospace;font-size:11.3px;background:rgba(255,255,255,.07);padding:1px 5px;border-radius:5px;color:var(--ink)}
+  .cmprow b{color:var(--ink)} .cmprow kbd{font-family:ui-monospace,monospace;font-size:11px;background:rgba(255,255,255,.09);border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:1px 5px;color:var(--ink)}
+  .oslab{display:none}
+  @media (max-width:640px){
+    .cmphdr{display:none}
+    .cmprow{grid-template-columns:1fr;gap:6px;padding:10px 0}
+    .cmprow .topic{font-size:13.2px;margin-bottom:1px}
+    .oslab{display:inline-block;font-size:9.5px;letter-spacing:1px;text-transform:uppercase;font-weight:800;margin-right:6px;vertical-align:1px}
+    .cmprow .win .oslab{color:var(--acc)} .cmprow .mac .oslab{color:var(--acc3)}
   }
 </style>
 </head>
@@ -191,7 +219,7 @@
   <h1>BUILD-A-STACK</h1>
   <div class="sub">Learn how real systems connect — bridges, ports, sockets, gateways — then wire one yourself. Built off the Tradenificent Stack Map.</div>
 </header>
-<div class="tabs"><button id="tab-learn" class="on">📖 Learn</button><button id="tab-build">🔧 Build</button></div>
+<div class="tabs"><button id="tab-learn" class="on">📖 Learn</button><button id="tab-build">🔧 Build</button><button id="tab-pcmac">💻 PC vs Mac</button></div>
 <div class="wrap">
   <div id="view-learn" class="view">
     <div class="prog"><span>explored <span class="pct" id="pc">0</span>/<span id="tot">0</span></span><span class="pbar"><i id="fill"></i></span></div>
@@ -206,9 +234,13 @@
     <div class="msg" id="msg"></div>
     <button class="btn" id="reset">↺ reset</button>
   </div>
+  <div id="view-pcmac" class="view hide">
+    <div class="pcmac-intro"><h2>💻 Windows vs Mac — the same ideas, different doors</h2><p>Two operating systems that do the same jobs in different ways. If you can read both columns, you can sit at <i>any</i> computer and not feel lost. <span class="winkey">cyan = Windows</span> · <span class="mackey">pink = Mac</span>.</p></div>
+    <div id="pcmac-list"></div>
+  </div>
 </div>
 <dialog id="termPopout" class="termpop"><div class="tp-card"><button class="tp-x" id="tpClose" aria-label="Close">✕</button><div class="tp-title" id="tpTitle"></div><div class="tp-text" id="tpText"></div><div class="tp-foot">quick definition · Esc or click outside to close</div></div></dialog>
-<footer>Self-contained · works on phone · tablet · desktop · Phase A·1–A·3 (28 concepts) · Phase B·1–B·2 (4 challenges, tap or drag)</footer>
+<footer>Self-contained · works on phone · tablet · desktop · Phase A·1–A·3 (28 concepts) · Phase B·1–B·2 (4 challenges) · Phase D·1 (PC vs Mac)</footer>
 <script>
 /* ===== living background wires ===== */
 (function(){
@@ -1028,11 +1060,77 @@ function burst(){
 document.getElementById('reset').addEventListener('click',build);
 build();
 
-/* ===== tabs (crossfade) ===== */
-const tl=document.getElementById('tab-learn'),tb=document.getElementById('tab-build'),vl=document.getElementById('view-learn'),vb=document.getElementById('view-build');
-function show(which){const toL=which==='learn';tl.classList.toggle('on',toL);tb.classList.toggle('on',!toL);
-  const showEl=toL?vl:vb,hideEl=toL?vb:vl;hideEl.classList.add('hide');showEl.classList.remove('hide');showEl.style.animation='none';void showEl.offsetWidth;showEl.style.animation='';}
-tl.addEventListener('click',()=>show('learn'));tb.addEventListener('click',()=>show('build'));
+/* ===== PC vs Mac: side-by-side cheat-sheet ===== */
+const PCMAC=[
+  {icon:'🧭', t:'The big picture', sub:'Same goals, different design philosophies.',
+   rows:[
+     ['Foundation','Microsoft <b>Windows</b> — runs on countless brands of hardware; deeply configurable.','Apple <b>macOS</b> — Apple hardware only; Unix-based, polished, more locked-down.'],
+     ['Philosophy','Flexibility &amp; choice — you can change almost anything.','Consistency &amp; integration — it “just works,” your way a little less.'],
+     ['Best known for','Gaming, business/Office, hardware variety, every price point.','Design, video, dev work, trackpad + battery life.'],
+   ]},
+  {icon:'📁', t:'Files &amp; folders', sub:'Where your stuff lives, and how paths are written.',
+   rows:[
+     ['Path style','<code>C:\\Users\\you\\Documents</code> — backslashes, drive letters.','<code>/Users/you/Documents</code> — forward slashes, no drive letters.'],
+     ['Drives','Lettered: <code>C:</code> system, <code>D:</code> data, a USB stick might be <code>E:</code>.','Everything hangs off one root <code>/</code>; disks show under <code>/Volumes</code>.'],
+     ['File manager','<b>File Explorer</b>.','<b>Finder</b>.'],
+     ['Show hidden files','<b>View ▸ Show ▸ Hidden items</b>.','Press <kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>.</kbd> (period).'],
+   ]},
+  {icon:'⌨️', t:'Keys &amp; shortcuts', sub:'The #1 thing that feels “wrong” when you switch — the action key changes.',
+   rows:[
+     ['The big swap','<b>Ctrl</b> is the action key.','<b>⌘ Command</b> takes Ctrl’s place for almost everything.'],
+     ['Modifiers','<kbd>Ctrl</kbd> · <kbd>Alt</kbd> · <kbd>⊞ Win</kbd>.','<kbd>⌘ Cmd</kbd> · <kbd>⌥ Option</kbd> (=Alt) · <kbd>⌃ Control</kbd>.'],
+     ['Copy / paste','<kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>Ctrl</kbd>+<kbd>V</kbd>.','<kbd>⌘</kbd>+<kbd>C</kbd> / <kbd>⌘</kbd>+<kbd>V</kbd>.'],
+     ['Close vs quit','<kbd>Alt</kbd>+<kbd>F4</kbd> closes the app.','<kbd>⌘</kbd>+<kbd>W</kbd> closes the window; <kbd>⌘</kbd>+<kbd>Q</kbd> actually quits the app.'],
+     ['Switch apps','<kbd>Alt</kbd>+<kbd>Tab</kbd>.','<kbd>⌘</kbd>+<kbd>Tab</kbd>.'],
+     ['Screenshot a region','<kbd>⊞ Win</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>.','<kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>4</kbd>.'],
+     ['Force-quit a frozen app','<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Esc</kbd> → Task Manager.','<kbd>⌘</kbd>+<kbd>⌥</kbd>+<kbd>Esc</kbd> → Force Quit.'],
+   ]},
+  {icon:'🖥️', t:'The terminal', sub:'The text window where you type commands — same idea, mostly different words.',
+   rows:[
+     ['The app','<b>PowerShell</b> / Command Prompt (inside Windows Terminal).','<b>Terminal</b> (runs the <code>zsh</code> shell).'],
+     ['Heritage','Its own command set — add <b>WSL</b> to run real Linux.','It <i>is</i> Unix — the same commands Linux servers use.'],
+     ['List files','<code>dir</code> (or <code>ls</code> in PowerShell).','<code>ls</code>.'],
+     ['Copy / move / delete','<code>copy</code> · <code>move</code> · <code>del</code>.','<code>cp</code> · <code>mv</code> · <code>rm</code>.'],
+     ['Show a file’s contents','<code>type file.txt</code>.','<code>cat file.txt</code>.'],
+     ['Clear the screen','<code>cls</code>.','<code>clear</code>.'],
+     ['Find a program','<code>where node</code>.','<code>which node</code>.'],
+   ]},
+  {icon:'📦', t:'Installing software', sub:'How new programs get onto the machine.',
+   rows:[
+     ['The usual way','Download an <code>.exe</code> / <code>.msi</code> and run the installer.','Open a <code>.dmg</code> and drag the app into <b>Applications</b>.'],
+     ['App store','<b>Microsoft Store</b>.','<b>App Store</b>.'],
+     ['The developer way','<code>winget install &lt;app&gt;</code> (or choco / scoop).','<code>brew install &lt;app&gt;</code> — <b>Homebrew</b>, near-universal.'],
+     ['Uninstall','<b>Settings ▸ Apps</b>, or the app’s own uninstaller.','Drag the app to the <b>Trash</b>.'],
+   ]},
+  {icon:'🧑‍💻', t:'Why developers care', sub:'The practical reason so many programmers reach for a Mac (or Linux).',
+   rows:[
+     ['Matching the server','Servers run Linux; Windows differs — devs add <b>WSL</b> to bridge the gap.','macOS is Unix, so it already behaves like the Linux servers your code ships to.'],
+     ['Package manager','<code>winget</code> / <code>choco</code> / <code>scoop</code>.','<b>Homebrew</b> (<code>brew</code>) — the de-facto standard.'],
+     ['Out of the box','Superb for .NET, gaming, Office; add WSL for web/devops.','<code>bash</code>/<code>zsh</code>, <code>ssh</code>, <code>git</code> feel native — popular for web, AI, mobile.'],
+     ['Bottom line','More hardware + price choice, endlessly configurable.','Smoother Unix dev experience, at a premium price.'],
+   ]},
+];
+(function(){
+  var host=document.getElementById('pcmac-list'); if(!host) return;
+  PCMAC.forEach(function(c){
+    var rows=c.rows.map(function(r){
+      return '<div class="cmprow"><div class="topic">'+r[0]+'</div>'+
+        '<div class="win"><span class="oslab">Win</span>'+r[1]+'</div>'+
+        '<div class="mac"><span class="oslab">Mac</span>'+r[2]+'</div></div>';
+    }).join('');
+    var card=document.createElement('div');card.className='cmpcard';
+    card.innerHTML='<h3>'+c.icon+' '+c.t+'</h3><div class="csub">'+c.sub+'</div>'+
+      '<div class="cmphdr"><div></div><div class="win">⊞ WINDOWS</div><div class="mac">🍎 MAC</div></div>'+rows;
+    host.appendChild(card);
+  });
+  var io=new IntersectionObserver(function(es){es.forEach(function(en){if(en.isIntersecting){en.target.classList.add('in');io.unobserve(en.target);}})},{threshold:.06});
+  host.querySelectorAll('.cmpcard').forEach(function(c){io.observe(c);});
+})();
+
+/* ===== tabs (crossfade, N tabs) ===== */
+const TABS=[['learn','tab-learn','view-learn'],['build','tab-build','view-build'],['pcmac','tab-pcmac','view-pcmac']];
+function show(which){TABS.forEach(function(t){var on=t[0]===which;document.getElementById(t[1]).classList.toggle('on',on);var v=document.getElementById(t[2]);v.classList.toggle('hide',!on);if(on){v.style.animation='none';void v.offsetWidth;v.style.animation='';}});}
+TABS.forEach(function(t){document.getElementById(t[1]).addEventListener('click',function(){show(t[0]);});});
 </script>
 </body>
 </html>
