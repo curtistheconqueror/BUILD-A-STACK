@@ -91,6 +91,22 @@
   .caveat b{color:var(--warn)}
   .tip{margin-top:10px;border-left:3px solid var(--acc);background:rgba(8,12,22,.4);border-radius:0 10px 10px 0;padding:9px 12px;font-size:12.3px;line-height:1.6;color:#cdd9ef}
   .tip b{color:var(--acc)}
+  .xrow{display:flex;justify-content:flex-end;margin-top:16px}
+  .xbtn{cursor:pointer;border:1px solid var(--border);background:rgba(8,12,22,.55);color:var(--muted);font-size:11.5px;font-weight:700;letter-spacing:.4px;padding:6px 14px;border-radius:9px;transition:.25s}
+  .xbtn:hover{color:var(--ink);border-color:var(--acc3)}
+  .card.explore-open .xbtn{color:#1a0512;background:var(--acc3);border-color:var(--acc3);box-shadow:0 0 18px -2px var(--acc3)}
+  .exwrap{display:grid;grid-template-rows:0fr;transition:grid-template-rows .44s cubic-bezier(.34,1.4,.5,1)}
+  .card.explore-open .exwrap{grid-template-rows:1fr}
+  .exclip{overflow:hidden}
+  .exin{padding-top:14px}
+  .excat{border:1px solid var(--cc);border-left:3px solid var(--cc);background:rgba(8,12,22,.42);border-radius:0 12px 12px 0;padding:11px 13px;margin-bottom:11px;box-shadow:0 0 16px -10px var(--cc);transition:box-shadow .3s,transform .3s}
+  .excat:hover{box-shadow:0 0 22px -6px var(--cc);transform:translateX(2px)}
+  .excat .ech{font-size:11px;letter-spacing:1.3px;text-transform:uppercase;font-weight:800;color:var(--cc);margin-bottom:7px}
+  .excat p{margin:0;font-size:12.6px;line-height:1.6;color:#cdd9ef}
+  .excat ul{margin:6px 0 0;padding-left:18px}
+  .excat li{font-size:12.6px;line-height:1.6;color:#cdd9ef;margin-bottom:5px}
+  .excat code{font-family:ui-monospace,monospace;font-size:11.5px;background:rgba(255,255,255,.06);color:var(--cc);padding:1px 5px;border-radius:5px}
+  .excat b{color:var(--ink)}
   .goal{background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin-bottom:16px}
   .goal h2{margin:0 0 5px;font-size:17px}
   .goal p{margin:0;color:var(--muted);font-size:13px}
@@ -167,7 +183,26 @@ const GLOSSARY = [
   {sec:'Fundamentals — the building blocks', t:'Port', tw:':3004', h:'a numbered door a service listens on',
    d:'A port is a numbered channel on a machine (like :3004) where one running program listens for connections. Only one program can hold a given port at a time.',
    s:'Every box on your Stack Map has one — market-state :3004, the dashboard :5174, the bridges :3000–:3005. "EADDRINUSE" means two things fought over the same port (that is exactly what killed your CORTEX bridge).',
-   p:'Same idea in production, but users hit ONE public port (443/https) and a reverse proxy (nginx) routes to the internal ports behind it.'},
+   p:'Same idea in production, but users hit ONE public port (443/https) and a reverse proxy (nginx) routes to the internal ports behind it.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">📚 More examples — ports in the wild</div>'+
+     '<p>Numbers you will meet everywhere:</p><ul>'+
+     '<li><code>80</code> HTTP · <code>443</code> HTTPS · <code>22</code> SSH · <code>3306</code> MySQL · <code>5432</code> Postgres · <code>6379</code> Redis · <code>27017</code> MongoDB · <code>8080</code> dev/alt HTTP</li>'+
+     '<li><b>Ranges:</b> <code>0–1023</code> well-known (need admin) · <code>1024–49151</code> registered · <code>49152–65535</code> ephemeral (the OS hands these out for outbound connections).</li>'+
+     '<li>Your stack deliberately sits in the registered range (<code>3000–5174</code>) — high enough to skip admin, low enough to remember.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">✏️ Editing / changing a port</div><ul>'+
+     '<li><b>See what owns a port</b> (Windows): <code>Get-NetTCPConnection -LocalPort 3004</code> or <code>netstat -ano | findstr :3004</code> → it gives you the PID.</li>'+
+     '<li><b>Free a stuck port</b> (the EADDRINUSE fix): find that PID, then <code>Stop-Process -Id &lt;pid&gt;</code>. Something already owns the door.</li>'+
+     '<li><b>Change a service’s port:</b> it is almost always a config/env value — e.g. <code>PORT=3004</code> in <code>.env</code>, or a constant in the source. Change it, restart the service, and update anything that talks to it.</li>'+
+     '<li><b>The one rule:</b> one program per port. If two want the same one, the first wins and the second crashes with <code>EADDRINUSE</code>.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">🛠️ How to edit this card’s text (the tool itself)</div>'+
+     '<p>This whole tool is ONE file (<code>Build_a_Stack.html</code>). Every card’s text lives in a JavaScript array called <code>GLOSSARY</code> inside the <code>&lt;script&gt;</code> block — e.g. <code>{t:&#39;Port&#39;, d:&#39;…&#39;, s:&#39;…&#39;, p:&#39;…&#39;}</code>. It is hardcoded, not a separate database.</p><ul>'+
+     '<li><b>Fastest — Ctrl+F:</b> open the file in a code editor (VS Code / Notepad++), press <b>Ctrl+F</b>, search a unique phrase from the card (e.g. “users hit ONE public port”), and type your new text right over the old.</li>'+
+     '<li><b>If you cannot find it in the HTML:</b> the data might sit in a separate <code>.json</code> file — open the page, press <b>F12 → Network</b>, refresh, and look for a <code>.json</code> file; edit that one instead.</li>'+
+     '<li><b>See exactly where text renders:</b> right-click the text on the page → <b>Inspect</b> → DevTools highlights the exact element and its class names.</li>'+
+     '<li><b>For THIS tool specifically:</b> it is all in the one HTML’s <code>GLOSSARY</code> array — no separate JSON file — so Ctrl+F is all you need.</li>'+
+     '</ul></div>'},
   {t:'Process / Service', tw:'running', h:'a program that stays running',
    d:'A service is just a program left running, waiting to do work (answer requests, push data). It has an ID, can crash, and can be restarted.',
    s:'Each node on the map is a service: tv-bridge, market-state, the dashboard. When one "goes red," its process died or its port stopped answering.',
@@ -279,13 +314,15 @@ GLOSSARY.forEach((g,i)=>{
   row.innerHTML=`<div class="spine"><span class="pulse"></span><span class="dot"></span></div>
     <div class="card"><div class="head"><div class="meta"><div class="title">${g.t}</div><div class="hook">${g.h}</div></div>
     <div class="tw">${g.tw}</div><div class="chev">▾</div></div>
-    <div class="body"><div class="bclip"><div class="bin"><div class="segp">${seg}</div><div class="pane">${g.d}</div>${g.extra?'<div class="extra">'+g.extra+'</div>':''}</div></div></div></div>`;
+    <div class="body"><div class="bclip"><div class="bin"><div class="segp">${seg}</div><div class="pane">${g.d}</div>${g.extra?'<div class="extra">'+g.extra+'</div>':''}${g.x?'<div class="xrow"><button class="xbtn">🔍 Explore</button></div><div class="exwrap"><div class="exclip"><div class="exin">'+g.x+'</div></div></div>':''}</div></div></div></div>`;
   learnList.appendChild(row);
   const card=row.querySelector('.card'),head=row.querySelector('.head'),pane=row.querySelector('.pane'),segp=row.querySelector('.segp');
   head.addEventListener('click',()=>{const o=card.classList.toggle('open');row.classList.toggle('open',o);if(o){opened.add(i);prog();}});
   segp.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;segp.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
     const k=b.getAttribute('data-k'),sg=SEG.find(x=>x[0]===k);segp.style.setProperty('--seg',sg[2]);
     pane.classList.add('fade');setTimeout(()=>{pane.innerHTML=g[k];pane.classList.remove('fade');},150);});
+  const xbtn=row.querySelector('.xbtn');
+  if(xbtn){xbtn.addEventListener('click',ev=>{ev.stopPropagation();card.classList.toggle('explore-open');});}
   card.addEventListener('pointermove',e=>{const r=card.getBoundingClientRect();const px=(e.clientX-r.left)/r.width-.5,py=(e.clientY-r.top)/r.height-.5;
     card.style.setProperty('--ry',(px*7).toFixed(2)+'deg');card.style.setProperty('--rx',(-py*7).toFixed(2)+'deg');});
   card.addEventListener('pointerleave',()=>{card.style.setProperty('--ry','0deg');card.style.setProperty('--rx','0deg');});
