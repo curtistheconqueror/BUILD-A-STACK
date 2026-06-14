@@ -360,23 +360,113 @@ const GLOSSARY = [
   {t:'Gateway', tw:'entry point', h:'one front door that routes to many services',
    d:'A gateway is a single entry point that receives traffic and routes it to the right internal service, often adding auth, logging, or message handling along the way.',
    s:'Your Hermes gateway is the one place Telegram/Discord messages flow through to reach the right handler.',
-   p:'Production puts an API gateway / reverse proxy in front of everything as the single hardened door.'},
+   p:'Production puts an API gateway / reverse proxy in front of everything as the single hardened door.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🧩 What a gateway does</div>'+
+     '<p>One <b>front door</b> all traffic enters, which then routes each request to the right internal service — and handles shared concerns (auth, logging, limits) in that one place instead of in every service.</p><ul>'+
+     '<li>Think of a building <b>reception desk</b>: everyone checks in at one counter, then gets pointed to the right office.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">🆚 Gateway vs reverse proxy vs bridge</div><ul>'+
+     '<li><b>Reverse proxy</b> — forwards traffic to internal ports (plumbing).</li>'+
+     '<li><b>Gateway</b> — a reverse proxy that ALSO adds smarts: auth, rate limits, routing rules.</li>'+
+     '<li><b>Bridge</b> — translates between two incompatible systems. A gateway <i>routes</i>; a bridge <i>converts</i>.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🧰 What a gateway adds</div><ul>'+
+     '<li><b>Auth</b> — check the caller once, up front. <b>Rate limiting</b> — stop abuse.</li>'+
+     '<li><b>Routing</b> — send <code>/chart/*</code> to one service, <code>/orders/*</code> to another.</li>'+
+     '<li><b>Logging / metrics</b> — one place that sees every request.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff6fb5"><div class="ech">⚖️ Real ones</div><ul>'+
+     '<li><b>nginx</b> / <b>Caddy</b> / <b>Traefik</b> · <b>Kong</b> · cloud API gateways (AWS / Cloudflare).</li>'+
+     '<li>Your <b>Hermes gateway</b> is the one place Telegram/Discord messages flow through to reach the right handler.</li>'+
+     '</ul></div>'},
   {t:'Webhook', tw:'call-me-back', h:'a server pushes to YOUR url on an event',
    d:'A webhook flips the direction: instead of you asking, another system calls a URL you gave it the moment an event happens ("a trade alert fired").',
    s:'TradingView alerts hit your webhook-receiver (:3000), which routes them to the right bot. It is push, triggered by events.',
-   p:'Same pattern; production adds a shared secret/signature so you know the call is really from the sender.'},
+   p:'Same pattern; production adds a shared secret/signature so you know the call is really from the sender.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🔁 Webhook vs API — the direction flips</div><ul>'+
+     '<li>An <b>API</b>: YOU call them when you want data (you knock on their door).</li>'+
+     '<li>A <b>webhook</b>: THEY call you the instant something happens (they knock on YOUR door).</li>'+
+     '<li>Same HTTP underneath — it is just <b>who initiates</b> that flips. Webhooks are push; polling an API is the opposite.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🛠️ How to receive one</div><ul>'+
+     '<li>Stand up a small server with an endpoint (e.g. <code>POST /webhook</code>) and give that <b>public URL</b> to the sender.</li>'+
+     '<li>When the event fires, the sender POSTs a <b>body</b> (usually JSON) describing what happened — you read it and act.</li>'+
+     '<li>Reply <code>200</code> fast; do slow work afterward, or the sender may retry or give up.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ffb454"><div class="ech">🔒 Make it safe</div><ul>'+
+     '<li>Anyone who learns your URL can POST to it — so <b>verify the sender</b>.</li>'+
+     '<li>Most providers sign each call with a <b>shared secret</b> (an HMAC signature in a header); check it before trusting the body.</li>'+
+     '<li>Always HTTPS, and treat the payload as untrusted input.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff6fb5"><div class="ech">🌍 Real examples</div><ul>'+
+     '<li>Stripe (payment succeeded) · GitHub (new push) · Discord/Slack · <b>TradingView alerts → your webhook-receiver :3000 → the right bot.</b></li>'+
+     '</ul></div>'},
   {t:'Watchdog', tw:'∞ loop', h:'restarts a service when it dies',
    d:'A watchdog is a small loop (or supervisor) that notices when a service stops and starts it again — so the system heals itself instead of staying down.',
    s:'Your run-*.bat wrappers are watchdogs: they relaunch a node service 5s after any exit, and Task Scheduler runs them at logon. (When those got deleted, your whole stack failed to come back.)',
-   p:'Production uses a real supervisor — Docker restart policies, systemd, or Kubernetes — with health checks, instead of .bat loops.'},
+   p:'Production uses a real supervisor — Docker restart policies, systemd, or Kubernetes — with health checks, instead of .bat loops.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🔁 What it does</div>'+
+     '<p>A small supervisor that watches a service and <b>restarts it the moment it dies</b> — so the system heals itself instead of staying down.</p><ul>'+
+     '<li>Like a smoke alarm wired to a fire extinguisher: notices the problem and acts, no human needed.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🛠️ The simplest watchdog</div><ul>'+
+     '<li>A loop: <b>launch → wait for it to exit → wait a few seconds → launch again</b>, forever.</li>'+
+     '<li>That is exactly what your <code>run-*.bat</code> wrappers do — relaunch a node service 5s after any exit.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ffb454"><div class="ech">⚠️ The gotchas (you have lived these)</div><ul>'+
+     '<li><b>Crash-loops:</b> if the service dies instantly every time, the watchdog just restarts a corpse forever — fix the cause, do not only restart.</li>'+
+     '<li><b>Who watches the watcher?</b> If the watchdog itself dies (or never starts at boot), nothing heals. Your stack needed a supervisor the OS starts at logon.</li>'+
+     '<li><b>It must survive reboots</b> — a watchdog that does not auto-start is no watchdog at all.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff6fb5"><div class="ech">⚖️ Real supervisors (the production answer)</div><ul>'+
+     '<li><b>systemd</b> (<code>Restart=always</code>) — the Linux standard. <b>Docker</b> restart policies. <b>Kubernetes</b> (restarts + health probes).</li>'+
+     '<li><b>pm2</b> for Node; <b>Windows Task Scheduler / Services</b> for Windows (what your stack uses).</li>'+
+     '<li>The upgrade over a <code>.bat</code> loop: they add <b>health checks</b>, so "running but frozen" also triggers a restart.</li>'+
+     '</ul></div>'},
   {t:'Push vs Poll', tw:'efficiency', h:'be told vs keep asking',
    d:'Poll = ask over and over "anything new?" (simple, wasteful). Push = the source tells you the instant something changes (efficient, a bit more setup). Most live systems want push.',
    s:'Your old bots polled the chart every cycle (expensive). The market-state engine flipped it to push: read once, push to everyone. The map does the same with SSE.',
-   p:'Identical principle at any scale — push + a message bus is the production shape.'},
+   p:'Identical principle at any scale — push + a message bus is the production shape.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🔁 The difference</div><ul>'+
+     '<li><b>Poll</b> = you keep asking "anything new? anything new?" on a timer.</li>'+
+     '<li><b>Push</b> = you sit quiet and the source <b>tells you</b> the moment something changes.</li>'+
+     '<li>Everyday version: hitting refresh on your inbox every minute (poll) vs getting a notification the second mail arrives (push).</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ffb454"><div class="ech">💸 Why it matters</div><ul>'+
+     '<li><b>Cost:</b> polling makes thousands of calls that mostly answer "nothing new" — wasted CPU, bandwidth, and (for paid APIs) money.</li>'+
+     '<li><b>Latency:</b> polling is only as fresh as your interval — poll every 30s and you can be up to 30s late. Push is instant.</li>'+
+     '<li>Your old bots polled the chart every cycle; the market-state engine flipped it to push — read once, push to everyone.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🛠️ How push is actually done</div><ul>'+
+     '<li><b>WebSocket</b> (two-way), <b>SSE</b> (one-way stream), <b>webhooks</b> (event POSTed to your URL), or a <b>message bus</b> behind it.</li>'+
+     '<li>All four are just "the source initiates" instead of "you keep asking".</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff6fb5"><div class="ech">⚖️ When polling is actually fine</div><ul>'+
+     '<li>The source offers <b>no push</b> option (plenty of REST APIs do not).</li>'+
+     '<li>The data changes <b>slowly</b> or you only need it occasionally — a 5-minute poll is simpler than wiring a socket.</li>'+
+     '<li>Simplicity wins for one-offs; push wins the moment things go live or need to scale.</li>'+
+     '</ul></div>'},
   {t:'MCP (Model Context Protocol)', tw:'AI tools', h:'a standard way to give an AI tools & data',
    d:'MCP is a shared standard for connecting an AI model to tools and data sources, so the model can DO things (read a chart, place an order) instead of just talking.',
    s:'Your TradingView MCP and TopStep MCP are how an AI agent reads the chart and the account through one common interface.',
-   p:'Same — MCP is itself the modern, fairly senior way to wire AI into a stack.'},
+   p:'Same — MCP is itself the modern, fairly senior way to wire AI into a stack.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🧩 What it is</div>'+
+     '<p>A shared standard for plugging an AI model into <b>tools and data</b> — so the model can DO things (read a chart, query a DB, place an order), not just talk.</p><ul>'+
+     '<li>Think <b>USB-C for AI</b>: one connector shape, so any model can use any tool that speaks MCP.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🛠️ How it works</div><ul>'+
+     '<li>An <b>MCP server</b> exposes a set of <b>tools</b> (actions it can run) and <b>resources</b> (data it can read).</li>'+
+     '<li>The AI <b>client</b> (e.g. Claude) discovers those tools and calls them — passing arguments, getting results back.</li>'+
+     '<li>The model decides <i>which</i> tool to call and <i>when</i>; you just expose the capabilities.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">🌍 Examples</div><ul>'+
+     '<li>Your <b>TradingView MCP</b> (read the chart) and <b>TopStep MCP</b> (read the account, place orders).</li>'+
+     '<li>Off-the-shelf: filesystem, GitHub, Postgres, Slack — each a small MCP server.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff6fb5"><div class="ech">⚖️ Why it is a big deal</div><ul>'+
+     '<li><b>Before MCP:</b> every AI-to-tool integration was bespoke glue, rebuilt per app.</li>'+
+     '<li><b>With MCP:</b> build the connector once, and any MCP-aware AI can use it — like going from custom cables to one universal port.</li>'+
+     '</ul></div>'},
 
   {sec:'Intermediate — how the pieces really talk', t:'IPC (file feed)', tw:'JSON files', h:'two programs talk by sharing a file',
    d:'Inter-process communication is how separate programs hand data to each other. The simplest form: one writes a file, the other reads it — no network, no protocol, just the filesystem as a shared mailbox.',
