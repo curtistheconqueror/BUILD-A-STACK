@@ -107,6 +107,16 @@
   .excat li{font-size:12.6px;line-height:1.6;color:#cdd9ef;margin-bottom:5px}
   .excat code{font-family:ui-monospace,monospace;font-size:11.5px;background:rgba(255,255,255,.06);color:var(--cc);padding:1px 5px;border-radius:5px}
   .excat b{color:var(--ink)}
+  .term{color:var(--acc);border-bottom:1px dashed rgba(53,208,224,.55);cursor:help;font-weight:600;transition:color .2s,text-shadow .2s,border-color .2s}
+  .term:hover{color:#9ff2fb;border-bottom-color:var(--acc);text-shadow:0 0 8px rgba(53,208,224,.55)}
+  dialog.termpop{border:none;background:transparent;padding:0;max-width:430px;color:var(--ink)}
+  dialog.termpop::backdrop{background:rgba(3,6,12,.62);backdrop-filter:blur(3px)}
+  .tp-card{position:relative;background:var(--glass);backdrop-filter:blur(20px) saturate(1.3);border:1px solid var(--acc);border-radius:16px;padding:18px 20px;box-shadow:0 24px 64px rgba(0,0,0,.6),0 0 44px -12px var(--acc)}
+  .tp-x{position:absolute;top:9px;right:12px;background:transparent;border:none;color:var(--muted);font-size:17px;cursor:pointer;line-height:1}
+  .tp-x:hover{color:var(--ink)}
+  .tp-title{font-size:16px;font-weight:800;color:var(--acc);margin:0 22px 8px 0;letter-spacing:.4px}
+  .tp-text{font-size:13.6px;line-height:1.65;color:#dbe6fb}
+  .tp-foot{margin-top:13px;font-size:10px;color:var(--muted);letter-spacing:.6px;text-transform:uppercase}
   .goal{background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin-bottom:16px}
   .goal h2{margin:0 0 5px;font-size:17px}
   .goal p{margin:0;color:var(--muted);font-size:13px}
@@ -162,6 +172,7 @@
     <button class="btn" id="reset">↺ reset</button>
   </div>
 </div>
+<dialog id="termPopout" class="termpop"><div class="tp-card"><button class="tp-x" id="tpClose" aria-label="Close">✕</button><div class="tp-title" id="tpTitle"></div><div class="tp-text" id="tpText"></div><div class="tp-foot">quick definition · Esc or click outside to close</div></div></dialog>
 <footer>Self-contained · open in any browser · Phase A·1–A·2 (22 concepts) · Phase B·1–B·2 (4 challenges)</footer>
 <script>
 /* ===== living background wires ===== */
@@ -521,6 +532,26 @@ const GLOSSARY = [
    s:'Your bridges and engine expose /health; the Stack Map’s :3009 helper polls them for rich vitals (and TCP-connects the UI-only nodes). That is what flips a node green or red within ~1.5s of a change.',
    p:'Same concept; production wires health checks INTO the orchestrator (Kubernetes liveness/readiness probes) so a failing service is auto-restarted or pulled from rotation — not just shown red on a map.'},
 ];
+/* ---- clickable jargon terms: highlight known words, popout a plain-English definition ---- */
+const TERMS = {
+  javascript:{title:'JavaScript',text:'The programming language of the web. It runs in every browser to make pages interactive — and, through Node.js, it also runs as servers, scripts, and tools.'},
+  json:{title:'JSON',text:'A simple text format for data, written as { key: value } pairs. It is how programs and APIs hand structured data to each other.'},
+  html:{title:'HTML',text:'The markup that defines a web page’s structure — headings, paragraphs, buttons. This whole tool is a single HTML file.'},
+  css:{title:'CSS',text:'The styling language that controls how a page looks — colors, spacing, layout, animation. HTML is the structure; CSS is the paint.'},
+  runtime:{title:'Runtime',text:'The program that actually executes your code. Node.js is a runtime for JavaScript — it turns your .js files into running programs.'},
+  framework:{title:'Framework',text:'A pre-built set of tools and conventions you build on top of, so you do not start from scratch — e.g. Express for Node servers, React for user interfaces.'},
+  endpoint:{title:'Endpoint',text:'One specific URL an API answers on, like /chart/quote. Each endpoint does one job; an API is a collection of them.'},
+  protocol:{title:'Protocol',text:'An agreed set of rules for how two programs talk — HTTP, WebSocket, TCP. Like a shared language plus etiquette.'},
+  localhost:{title:'localhost',text:'A nickname for “this computer.” localhost:3004 means a service running on your own machine at port 3004 — not out on the public internet.'},
+  server:{title:'Server',text:'A program that stays running and answers requests from other programs or your browser. Most boxes on a stack map are servers.'},
+  npm:{title:'npm',text:'Node’s package manager. It downloads reusable code packages into your project so you do not have to rewrite common things.'},
+  async:{title:'Async (asynchronous)',text:'Code that does not wait. It kicks off slow work (like a network call) and keeps going, handling the result later — which keeps the program responsive.'},
+  backend:{title:'Backend',text:'The server-side half of an app — the logic, the database, the APIs. The part users do not see directly.'},
+  frontend:{title:'Frontend',text:'The part you see and click — the user interface in your browser. The backend feeds it data.'}
+};
+const TERM_RE = new RegExp('\\b(' + Object.keys(TERMS).join('|') + ')\\b','gi');
+function linkTerms(t){ var seen={}; return String(t).replace(TERM_RE,function(m){ var k=m.toLowerCase(); if(seen[k]||!TERMS[k]) return m; seen[k]=1; return '<span class="term" data-term="'+k+'">'+m+'</span>'; }); }
+
 const learnList=document.getElementById('learn-list');
 document.getElementById('tot').textContent=GLOSSARY.length;
 const SEG=[['d','What it is','var(--ink)'],['s','In your stack','var(--acc)'],['p','Pragmatic vs production','var(--warn)']];
@@ -534,13 +565,13 @@ GLOSSARY.forEach((g,i)=>{
   row.innerHTML=`<div class="spine"><span class="pulse"></span><span class="dot"></span></div>
     <div class="card"><div class="head"><div class="meta"><div class="title">${g.t}</div><div class="hook">${g.h}</div></div>
     <div class="tw">${g.tw}</div><div class="chev">▾</div></div>
-    <div class="body"><div class="bclip"><div class="bin"><div class="segp">${seg}</div><div class="pane">${g.d}</div>${g.extra?'<div class="extra">'+g.extra+'</div>':''}${g.x?'<div class="xrow"><button class="xbtn">🔍 Explore</button></div><div class="exwrap"><div class="exclip"><div class="exin">'+g.x+'</div></div></div>':''}</div></div></div></div>`;
+    <div class="body"><div class="bclip"><div class="bin"><div class="segp">${seg}</div><div class="pane">${linkTerms(g.d)}</div>${g.extra?'<div class="extra">'+g.extra+'</div>':''}${g.x?'<div class="xrow"><button class="xbtn">🔍 Explore</button></div><div class="exwrap"><div class="exclip"><div class="exin">'+g.x+'</div></div></div>':''}</div></div></div></div>`;
   learnList.appendChild(row);
   const card=row.querySelector('.card'),head=row.querySelector('.head'),pane=row.querySelector('.pane'),segp=row.querySelector('.segp');
   head.addEventListener('click',()=>{const o=card.classList.toggle('open');row.classList.toggle('open',o);if(o){opened.add(i);prog();}});
   segp.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;segp.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
     const k=b.getAttribute('data-k'),sg=SEG.find(x=>x[0]===k);segp.style.setProperty('--seg',sg[2]);
-    pane.classList.add('fade');setTimeout(()=>{pane.innerHTML=g[k];pane.classList.remove('fade');},150);});
+    pane.classList.add('fade');setTimeout(()=>{pane.innerHTML=linkTerms(g[k]);pane.classList.remove('fade');},150);});
   const xbtn=row.querySelector('.xbtn');
   if(xbtn){xbtn.addEventListener('click',ev=>{ev.stopPropagation();card.classList.toggle('explore-open');});}
   card.addEventListener('pointermove',e=>{const r=card.getBoundingClientRect();const px=(e.clientX-r.left)/r.width-.5,py=(e.clientY-r.top)/r.height-.5;
@@ -550,6 +581,21 @@ GLOSSARY.forEach((g,i)=>{
 function prog(){const n=opened.size;document.getElementById('pc').textContent=n;document.getElementById('fill').style.width=Math.round(n/GLOSSARY.length*100)+'%';}
 const io=new IntersectionObserver((es)=>{es.forEach(en=>{if(en.isIntersecting){const idx=[...learnList.querySelectorAll('.row')].indexOf(en.target);en.target.style.transitionDelay=(Math.min(idx,6)*55)+'ms';en.target.classList.add('in');io.unobserve(en.target);}})},{threshold:.05});
 learnList.querySelectorAll('.row').forEach(r=>io.observe(r));
+
+/* ---- term popout: click a highlighted word -> plain-English definition; stopPropagation keeps the card from reacting ---- */
+(function(){
+  var dlg=document.getElementById('termPopout'); if(!dlg) return;
+  learnList.addEventListener('click',function(e){
+    var t=e.target.closest('.term'); if(!t) return;
+    e.stopPropagation();
+    var d=TERMS[t.getAttribute('data-term')]; if(!d) return;
+    document.getElementById('tpTitle').textContent=d.title;
+    document.getElementById('tpText').textContent=d.text;
+    try{ dlg.showModal(); }catch(_){ dlg.setAttribute('open',''); }
+  });
+  document.getElementById('tpClose').addEventListener('click',function(){ dlg.close(); });
+  dlg.addEventListener('click',function(e){ if(e.target===dlg) dlg.close(); });
+})();
 
 /* ===== BUILD: drag-connect challenges (one slot engine, many chains) ===== */
 const CHALLENGES=[
