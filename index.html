@@ -208,7 +208,7 @@
   </div>
 </div>
 <dialog id="termPopout" class="termpop"><div class="tp-card"><button class="tp-x" id="tpClose" aria-label="Close">✕</button><div class="tp-title" id="tpTitle"></div><div class="tp-text" id="tpText"></div><div class="tp-foot">quick definition · Esc or click outside to close</div></div></dialog>
-<footer>Self-contained · works on phone · tablet · desktop · Phase A·1–A·2 (22 concepts) · Phase B·1–B·2 (4 challenges, tap or drag)</footer>
+<footer>Self-contained · works on phone · tablet · desktop · Phase A·1–A·3 (28 concepts) · Phase B·1–B·2 (4 challenges, tap or drag)</footer>
 <script>
 /* ===== living background wires ===== */
 (function(){
@@ -696,6 +696,130 @@ const GLOSSARY = [
      '<li>A supervisor, a load balancer, an orchestrator (Kubernetes), or your <b>Stack Map :3009</b> helper.</li>'+
      '<li>On a red result it acts: restart the service, or stop sending it traffic.</li>'+
      '</ul></div>'},
+
+  {sec:'Advanced — running it for real', t:'Observability', tw:'logs·metrics·traces', h:'how you SEE what the system is doing',
+   d:'Observability is your ability to answer “what is it doing, and why is it broken?” from the outside, without guessing. The three pillars: logs (what happened), metrics (numbers over time — CPU, request rate, error %), and traces (the full path one request took across services).',
+   s:'You already do the logs pillar — reconcile.log, the Discord briefings, DONE-TASKS — and the Stack Map :5174 is a live metric of sorts (nodes flip red/green from :3009 health polls every ~1.5s). The gap is metrics-over-time and traces: when one hop in the feed chain lags, nothing yet shows you WHICH hop.',
+   p:'Production ships logs to one searchable place (Loki / ELK), graphs metrics (Prometheus + Grafana), and traces a request across every service (OpenTelemetry). The goal: never remote into a box to guess — the dashboard already says where it hurts.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">📊 The three pillars</div><ul>'+
+     '<li><b>Logs</b> — timestamped “what happened” lines. Easy to start, hard to search at volume.</li>'+
+     '<li><b>Metrics</b> — numbers sampled over time (CPU, req/s, error %). Cheap to store, great for graphs and alerts.</li>'+
+     '<li><b>Traces</b> — follow ONE request as it hops service→service, with timing at each step. The “where is the slowness?” pillar.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🔎 The upgrade it buys you</div><ul>'+
+     '<li>From <i>“I tail a log file and squint”</i> → to <i>“a dashboard already shows the spike and which service caused it.”</i></li>'+
+     '<li>Good observability answers three things fast: <b>is it up?</b> · <b>how fast?</b> · <b>where did it break?</b></li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">🛠️ The real tools</div><ul>'+
+     '<li><b>Metrics:</b> Prometheus + Grafana. <b>Logs:</b> Loki or ELK. <b>Traces:</b> OpenTelemetry + Jaeger.</li>'+
+     '<li><b>Errors:</b> Sentry. <b>Uptime:</b> a simple external pinger that alerts when /health goes quiet.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ffb454"><div class="ech">⚖️ At your scale</div><ul>'+
+     '<li>Your Stack Map + Discord briefings already ARE lightweight observability — do not bolt on a full Grafana stack for one PC.</li>'+
+     '<li>The one cheap upgrade worth it: a <b>metric over time</b> (e.g. feed latency graphed), so “it feels laggy” becomes a number you can see.</li>'+
+     '</ul></div>'},
+  {t:'Containers (Docker)', tw:'🐳 ship the env', h:'package an app with everything it needs',
+   d:'A container bundles your app WITH its exact runtime, libraries, and config into one image that runs identically on any machine. It is lighter than a virtual machine (it shares the host kernel) and starts in seconds. Docker is the common tool for building and running them.',
+   s:'You run zero containers — every service is a bare “node file.js” on Windows, supervised by Task Scheduler + .bat watchdogs. That is exactly why your Process/Service and Watchdog cards keep pointing at Docker: it would make each bot reproducible and isolated, instead of all of them sharing one fragile machine state.',
+   p:'Production builds an image from a Dockerfile, versions it in a registry, and runs it with a restart policy — “works on my machine” disappears because the machine ships INSIDE the container. The cost you take on: a build step and somewhere to store images.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🐳 Container vs virtual machine</div><ul>'+
+     '<li>Both <b>isolate</b> an app. A <b>VM</b> virtualizes a whole operating system (heavy, gigabytes, boots in minutes).</li>'+
+     '<li>A <b>container</b> shares the host’s kernel and packages just your app + its deps (light, megabytes, starts in seconds).</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">📦 The three nouns</div><ul>'+
+     '<li><b>Dockerfile</b> — the recipe (base image, copy code, install deps, start command).</li>'+
+     '<li><b>Image</b> — the built artifact from that recipe. <b>Container</b> — a running instance of an image.</li>'+
+     '<li>Two commands carry you far: <code>docker build</code> (recipe → image) and <code>docker run</code> (image → container).</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">✅ Why it kills “works on my machine”</div><ul>'+
+     '<li>The image carries the exact Node version, libraries, and config — so dev, CI, and prod run the <b>same bits</b>.</li>'+
+     '<li>One bot crashing can’t corrupt another’s state — each lives in its own box.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ffb454"><div class="ech">⚖️ Would it help YOUR stack?</div><ul>'+
+     '<li>Yes for reproducibility + isolation; the cost is a build step and Docker Desktop / WSL2 on Windows.</li>'+
+     '<li>Honest read: your single-machine scheduler works today — containers are the next maturity step, not an emergency.</li>'+
+     '</ul></div>'},
+  {t:'Orchestration (Kubernetes)', tw:'k8s', h:'run, heal & scale many containers for you',
+   d:'An orchestrator runs lots of containers across one or many machines and keeps them at a desired state: if one dies it restarts it, if load rises it adds copies, if a machine fails it reschedules the work elsewhere. Kubernetes (k8s) is the industry standard.',
+   s:'Your reconcile-loop.ps1 + Task Scheduler + the mutex-serialized supervisor IS a hand-rolled, single-machine orchestrator — “if a service is down and unsupervised, relaunch it.” Kubernetes is that same instinct, industrialized across a cluster, with health probes instead of a .bat loop.',
+   p:'Production declares the desired state (“always 3 healthy copies of this”) and k8s makes reality match it — restarts, rolling updates, autoscaling. It is heavy: most solo or single-box setups do NOT need it, and yours is rightly nowhere near it.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🧩 What it actually does</div><ul>'+
+     '<li><b>Desired-state engine:</b> you declare “3 healthy copies,” it constantly works to keep that true.</li>'+
+     '<li>A machine dies → it reschedules those containers onto a healthy one. Traffic rises → it adds copies.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🆚 vs a plain watchdog</div><ul>'+
+     '<li>A <b>watchdog</b> restarts one service on one box. An <b>orchestrator</b> does that PLUS scaling, rolling deploys, and multi-machine scheduling.</li>'+
+     '<li>Its health <b>probes</b> also catch “running but frozen,” which a simple restart-on-exit loop misses.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">🗂️ The vocabulary</div><ul>'+
+     '<li><b>Pod</b> (one or more containers) · <b>Deployment</b> (desired count + update strategy) · <b>Service</b> (a stable address for pods) · <b>Node</b> (a machine in the cluster).</li>'+
+     '<li><code>kubectl</code> is the command you drive it with.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff5d6c"><div class="ech">⚠️ Do you need it? (almost certainly not)</div><ul>'+
+     '<li>k8s earns its complexity at <b>many services × many machines × real traffic</b>. Your one PC + ~12 services = a supervisor script is the correct tool.</li>'+
+     '<li>Know it exists and what it solves; do not adopt it for a home stack — it would add far more pain than it removes.</li>'+
+     '</ul></div>'},
+  {t:'CI/CD pipeline', tw:'push → deploy', h:'auto-test and auto-ship on every change',
+   d:'CI (continuous integration) automatically builds and TESTS your code on every push; CD (continuous delivery/deployment) automatically ships it when the tests pass. The point: catch breakage before users do, and remove the manual, error-prone deploy steps a human forgets.',
+   s:'Your pipeline is manual: edit → git push → restart by hand (you literally just did that to update this page on your iPad). KEYDENZA adds “bump the service-worker cache, push main.” There is no automated test gate yet — nothing currently blocks a broken push from shipping.',
+   p:'Production wires a pipeline (GitHub Actions, GitLab CI) that, on every push, runs the tests, builds the artifact or image, and deploys only on green — with a one-click rollback. A red test blocks the deploy automatically, no human judgement needed.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🔁 CI vs CD</div><ul>'+
+     '<li><b>CI</b> — on every push, automatically <b>build + run the tests</b>. Did this change break anything?</li>'+
+     '<li><b>CD</b> — if CI is green, automatically <b>deploy</b> it. No manual restart, no “did I forget a step?”</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">⚙️ A pipeline is just ordered steps</div><ul>'+
+     '<li>on push → <b>install</b> deps → <b>test</b> → <b>build</b> → <b>deploy</b>. Each step must pass before the next runs.</li>'+
+     '<li>You define them in a YAML file IN the repo — GitHub Actions reads <code>.github/workflows/*.yml</code>.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">🛡️ Why it is worth it</div><ul>'+
+     '<li>The <b>test gate</b> catches breakage before it ships; the <b>auto-deploy</b> removes the hand-restart you do today.</li>'+
+     '<li>Every deploy becomes identical and logged — no “what did I do differently this time?”</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ffb454"><div class="ech">⚖️ A realistic starter for YOU</div><ul>'+
+     '<li>You already verify this page by hand (the <code>node</code> syntax check before each push). CI just <b>automates exactly that</b>.</li>'+
+     '<li>One small GitHub Action running <code>node --check</code> on push would block a broken Build-a-Stack before it ever reached your iPad.</li>'+
+     '</ul></div>'},
+  {t:'Redundancy & failover', tw:'no single point', h:'survive any one thing dying',
+   d:'Redundancy means having more than one of something critical; failover is automatically switching to the spare the moment the primary dies — so a single failure does not take the whole system down. What you are hunting and removing is the “single point of failure” (SPoF).',
+   s:'Your stack is SPoFs all the way down: one PC (thecube), one TradingView session, one Tailscale exit, one home connection. Your random Raptor-Lake reboots are unplanned failovers with no spare to fail over TO — everything just goes dark. The XFA hedge incident was a failure mode with no safe fallback in place.',
+   p:'Production runs at least two of anything that matters, on separate machines or zones, with health checks that promote a standby automatically. The honest tradeoff: real redundancy costs roughly 2× the hardware and adds coordination complexity — you buy uptime with money and effort.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🎯 Find the SPoF</div><ul>'+
+     '<li>Ask of each piece: <i>“if this ONE thing dies, does everything stop?”</i> If yes, it is a single point of failure.</li>'+
+     '<li>For you, the honest answers: thecube, the TradingView session, the home link — all <b>yes</b>.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">🆚 Redundancy vs failover vs backup</div><ul>'+
+     '<li><b>Redundancy</b> — a spare already exists and is ready.</li>'+
+     '<li><b>Failover</b> — the system auto-switches to that spare on failure.</li>'+
+     '<li><b>Backup</b> — a copy you restore from later (slower; protects data, not uptime). Different jobs — you usually want all three.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🛠️ The patterns</div><ul>'+
+     '<li><b>Active-passive</b> — a standby waits idle and takes over on failure. <b>Active-active</b> — both serve at once, survivors absorb the load.</li>'+
+     '<li>Something must DO the switch — a load balancer or DNS health check promoting the survivor.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ffb454"><div class="ech">⚖️ For a home trading box</div><ul>'+
+     '<li>Full redundancy is overkill, but cheap wins exist: a <b>UPS</b> for power blips, <b>auto-restart on boot</b> (your supervisor), and a documented <b>manual-flatten</b> so a reboot mid-trade is survivable.</li>'+
+     '<li>Match the spend to the stakes — a live position raises the stakes a lot.</li>'+
+     '</ul></div>'},
+  {t:'Load balancing & scaling', tw:'handle more', h:'spread work so more load fits',
+   d:'Scaling is handling more work; a load balancer is the piece that spreads incoming requests across multiple copies of a service so no single copy is overwhelmed. Scale UP = move to a bigger machine; scale OUT = add more machines behind a balancer.',
+   s:'At one user and one machine you do not load-balance — but you already use the deeper principle. market-state reads the chart ONCE and pushes to every consumer, instead of each bot polling. That “do the expensive work once, fan the result out” is scaling by efficiency rather than by buying hardware.',
+   p:'Production puts a load balancer (nginx, HAProxy, a cloud LB) in front of N identical instances and adds or removes instances with demand (autoscaling), health-checking each one. Vertical scaling is simplest; horizontal scaling is what survives real growth.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">↕️ Scale up vs scale out</div><ul>'+
+     '<li><b>Up (vertical)</b> — a bigger box. Simple, but there is a ceiling and it is one SPoF.</li>'+
+     '<li><b>Out (horizontal)</b> — more boxes behind a balancer. Harder (state must be shared), but nearly unlimited and redundant.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">⚖️ What a load balancer does</div><ul>'+
+     '<li>One front address; it spreads requests across N copies, <b>health-checks</b> each, and stops routing to a dead one.</li>'+
+     '<li>It is a close cousin of your <b>Reverse proxy</b> and <b>Gateway</b> cards — same “one door, many behind it” shape.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">🧠 Scale by efficiency FIRST</div><ul>'+
+     '<li>Before adding machines, remove wasted work: <b>push instead of poll</b>, cache, batch. market-state’s read-once-push-many is exactly this.</li>'+
+     '<li>Often the cheapest “scaling” is simply doing less work per request.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ffb454"><div class="ech">⚖️ At your scale</div><ul>'+
+     '<li>You will likely never run a load balancer — one PC serves one trader fine.</li>'+
+     '<li>The transferable lesson is the <b>efficiency mindset</b> (push &gt; poll), not the hardware.</li>'+
+     '</ul></div>'},
 ];
 /* ---- clickable jargon terms: highlight known words, popout a plain-English definition ---- */
 const TERMS = {
@@ -744,7 +868,7 @@ const SEG=[['d','What it is','var(--ink)'],['s','In your stack','var(--acc)'],['
 const opened=new Set();
 let tierAccent='var(--acc)';
 GLOSSARY.forEach((g,i)=>{
-  if(g.sec){tierAccent=/Intermediate/.test(g.sec)?'var(--acc2)':'var(--acc)';
+  if(g.sec){tierAccent=/Intermediate/.test(g.sec)?'var(--acc2)':/Advanced/.test(g.sec)?'var(--acc3)':'var(--acc)';
     const sl=document.createElement('div');sl.className='seclabel';sl.style.setProperty('--ca',tierAccent);sl.textContent=g.sec;learnList.appendChild(sl);}
   const row=document.createElement('div');row.className='row';row.style.setProperty('--ca',tierAccent);
   const seg=SEG.map((x,j)=>`<button data-k="${x[0]}" class="${j===0?'on':''}">${x[1]}</button>`).join('');
