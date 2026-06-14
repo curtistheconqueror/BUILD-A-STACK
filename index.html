@@ -206,11 +206,64 @@ const GLOSSARY = [
   {t:'Process / Service', tw:'running', h:'a program that stays running',
    d:'A service is just a program left running, waiting to do work (answer requests, push data). It has an ID, can crash, and can be restarted.',
    s:'Each node on the map is a service: tv-bridge, market-state, the dashboard. When one "goes red," its process died or its port stopped answering.',
-   p:'Production runs services in containers (Docker) so they are isolated, reproducible, and restart on a policy — instead of loose programs on one PC.'},
+   p:'Production runs services in containers (Docker) so they are isolated, reproducible, and restart on a policy — instead of loose programs on one PC.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">📚 What actually counts as a service</div>'+
+     '<p>A <b>program</b> runs once and exits (a script that prints a number). A <b>service</b> stays running and waits for work:</p><ul>'+
+     '<li>a <b>web server</b> answering requests · a <b>database</b> holding data · a <b>worker</b> chewing through a queue · a <b>watcher</b> reacting to events.</li>'+
+     '<li>On Linux a long-running background service is a <b>daemon</b>; on Windows it is a <b>Service</b> (or just a background process).</li>'+
+     '<li>Rule of thumb: if it has a server <code>listen()</code>, a <code>while(true)</code>, or an event loop that never ends, it is a service.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">🔁 Lifecycle &amp; how you know it is alive</div><ul>'+
+     '<li>Every running process gets a <b>PID</b> (process id) from the OS — that is its handle for inspecting or killing it.</li>'+
+     '<li>It can <b>start → run → crash → restart</b>. A "crash" just means the process exited unexpectedly.</li>'+
+     '<li><b>Foreground</b> = tied to your terminal (dies when you close it). <b>Background</b> = detached, keeps running — servers run in the background.</li>'+
+     '<li>You tell a service is healthy two ways: its <b>port answers</b>, or it replies on a <code>/health</code> endpoint.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🛠️ Managing one (Windows)</div><ul>'+
+     '<li><b>List:</b> Task Manager, or <code>Get-Process</code> / <code>tasklist</code>. Just node: <code>Get-Process node</code>.</li>'+
+     '<li><b>Kill:</b> <code>Stop-Process -Id &lt;pid&gt;</code> or <code>taskkill /PID &lt;pid&gt; /F</code>.</li>'+
+     '<li><b>Start detached</b> (survives the terminal): <code>Start-Process node app.js</code>.</li>'+
+     '<li><b>Keep it alive</b> = a <i>supervisor</i> that relaunches it when it dies (see the Watchdog card). Your stack uses Task Scheduler + a supervisor loop for exactly this.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff6fb5"><div class="ech">⚖️ Ways to keep a service running (alternatives)</div><ul>'+
+     '<li><b>Task Scheduler / Windows Services / NSSM</b> — native, no extra tools (what your stack uses).</li>'+
+     '<li><b>pm2</b> — popular Node process manager: auto-restart, logs, clustering; cross-platform.</li>'+
+     '<li><b>systemd</b> — the Linux standard (<code>Restart=always</code>); the "production ideal" your stack keeps pointing at.</li>'+
+     '<li><b>Docker</b> — run it in a container with a restart policy; isolated and reproducible.</li>'+
+     '</ul></div>'},
   {t:'Node.js', tw:'runtime', h:'runs JavaScript outside the browser',
    d:'Node.js is a runtime that lets JavaScript run as a normal program (a server), not just inside a web page. It is great at handling lots of network connections at once.',
    s:'Almost every box on your map is a Node.js service — the bridges, the engine, the sink, the dashboards. They are all "node <file>.js".',
-   p:'Same in production; the difference is how they are supervised and deployed, not the runtime.'},
+   p:'Same in production; the difference is how they are supervised and deployed, not the runtime.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🧠 The mental model (start here)</div>'+
+     '<p>Node.js is just <b>JavaScript running as a program</b> instead of inside a web page. It bundles Google’s <b>V8</b> engine (the same one in Chrome) so your <code>.js</code> files can run as servers, scripts, and tools.</p><ul>'+
+     '<li>It is <b>single-threaded</b> with an <b>event loop</b>: instead of one thread per request, one loop juggles thousands of connections by never sitting and waiting.</li>'+
+     '<li>So it is <b>great at I/O</b> (network, files, lots of live connections) and <b>weak at heavy CPU math</b> (which blocks the one loop).</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">▶️ Run your first one (5 minutes)</div><ul>'+
+     '<li><b>Install</b> from nodejs.org, then check it: <code>node -v</code> and <code>npm -v</code>.</li>'+
+     '<li><b>Play live:</b> type <code>node</code> by itself for an interactive prompt (a REPL) — try <code>1 + 1</code>; Ctrl+C twice to exit.</li>'+
+     '<li><b>A script:</b> put <code>console.log(&#39;hello&#39;)</code> in <code>app.js</code>, then run <code>node app.js</code>.</li>'+
+     '<li><b>A real web server in 2 lines:</b> <code>const http = require(&#39;http&#39;);</code> then <code>http.createServer((req, res) =&gt; res.end(&#39;hi&#39;)).listen(3000);</code> — run it, open <code>http://localhost:3000</code>, and you just built a server.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">📦 npm, package.json &amp; node_modules</div><ul>'+
+     '<li><b>npm</b> is Node’s package manager — the largest code library on earth. <code>npm install express</code> pulls a package (e.g. a web framework) into a <code>node_modules</code> folder.</li>'+
+     '<li><b>package.json</b> is your project’s manifest — its dependencies + named scripts. <code>npm run dev</code> runs the "dev" script defined there.</li>'+
+     '<li><b>Use a package</b> with <code>const express = require(&#39;express&#39;)</code> (or modern <code>import express from &#39;express&#39;</code>).</li>'+
+     '<li>Never hand-edit or commit <code>node_modules</code> — it rebuilds any time from <code>package.json</code> via <code>npm install</code>.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ffb454"><div class="ech">⚡ Async — the thing that confuses everyone</div>'+
+     '<p>Because Node never waits, slow work (a network call, reading a file) finishes <b>later</b>. The #1 beginner bug is expecting the result on the very next line — it is not there yet.</p><ul>'+
+     '<li>The evolution: <b>callbacks</b> → <b>Promises</b> → <b>async/await</b> (today’s clean way).</li>'+
+     '<li><code>const data = await fetch(url);</code> — <code>await</code> pauses just that function until the answer arrives, without freezing the whole program.</li>'+
+     '<li><b>Golden rule:</b> do not block the event loop — one long synchronous loop freezes every other request at once.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ff6fb5"><div class="ech">⚖️ Alternatives &amp; when to reach for Node</div><ul>'+
+     '<li><b>Other JS runtimes:</b> <b>Deno</b> (secure by default, TypeScript built in) and <b>Bun</b> (much faster startup, npm-compatible) — newer, drop-in-ish.</li>'+
+     '<li><b>Other backends:</b> <b>Python</b> (data/AI, readable), <b>Go</b> (compiled, high-throughput services), <b>Rust</b> (max performance + safety).</li>'+
+     '<li><b>Pick Node</b> for: one language front-to-back, lots of live connections, or the huge npm ecosystem.</li>'+
+     '<li><b>Skip Node</b> for: CPU-bound number-crunching — a compiled language runs circles around it.</li>'+
+     '</ul></div>'},
   {t:'API', tw:'contract', h:'a defined way to ask a program for something',
    d:'An API (Application Programming Interface) is the agreed set of requests a program accepts — "ask me this way, I will answer that way." It hides the internals behind a clean contract.',
    s:'TopStep X exposes an API your bots call to place orders. Your bridges expose little APIs too (e.g. tv-bridge /chart/quote).',
