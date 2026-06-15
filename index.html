@@ -367,7 +367,7 @@
   </div>
 </div>
 <dialog id="termPopout" class="termpop"><div class="tp-card"><button class="tp-x" id="tpClose" aria-label="Close">✕</button><div class="tp-title" id="tpTitle"></div><div class="tp-text" id="tpText"></div><div class="tp-foot">quick definition · Esc or click outside to close</div></div></dialog>
-<footer>Self-contained · works on phone · tablet · desktop · Phase A·1–A·3 (28 concepts) · Phase B·1–B·2 (4 challenges) · Phase D·1 (PC vs Mac) · D·2 (Keyboard — 3 boards)</footer>
+<footer>Self-contained · works on phone · tablet · desktop · Phase A·1–A·3 (29 concepts) · Phase B·1–B·2 (4 challenges) · Phase D·1 (PC vs Mac) · D·2 (Keyboard — 3 boards)</footer>
 <script>
 /* ===== living background wires ===== */
 (function(){
@@ -435,6 +435,34 @@ const GLOSSARY = [
      '<li><b>pm2</b> — popular Node process manager: auto-restart, logs, clustering; cross-platform.</li>'+
      '<li><b>systemd</b> — the Linux standard (<code>Restart=always</code>); the "production ideal" your stack keeps pointing at.</li>'+
      '<li><b>Docker</b> — run it in a container with a restart policy; isolated and reproducible.</li>'+
+     '</ul></div>'},
+  {t:'Terminal', tw:'>_', h:'type commands to the computer instead of clicking',
+   d:'A terminal is a text window where you type commands to the computer instead of clicking buttons. You type one line, press Enter, and the machine does exactly that — run a program, move a file, start a server. It looks bare (just text and a blinking cursor), but it is often the fastest, most precise way to control a computer, and many developer tools only work this way. One vocabulary note: the window is the “terminal,” and the program inside it that reads your commands is the “shell” (PowerShell on Windows, zsh or bash on Mac/Linux).',
+   s:'You practically live in the terminal here. Every bot starts with a command like <code>node market-state.js</code>; you find a stuck port with <code>Get-NetTCPConnection -LocalPort 3004</code> and free it with <code>Stop-Process</code>; you ship code with <code>git push</code>. The whole stack is launched and healed through PowerShell — and when something breaks, the terminal is where the error shows up.',
+   p:'Same tool, higher stakes. Production servers usually have NO desktop at all — they are “headless,” so the terminal is the only way in. You reach them remotely over SSH (a secure terminal into another machine) and do everything — deploys, logs, restarts — by command. There, comfort in the terminal stops being optional.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">📟 What you are actually looking at</div><ul>'+
+     '<li>A <b>prompt</b> (something like <code>C:\\Users\\you&gt;</code>) waiting for you, and a blinking <b>cursor</b>.</li>'+
+     '<li>You <b>type a command, press Enter</b>, it runs, you get output, and the prompt comes back for the next one.</li>'+
+     '<li>The <b>window</b> is the terminal; the <b>shell</b> inside it (PowerShell, bash, zsh) is what actually understands the commands.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🖥️ Where to find one (apps, incl. VS Code)</div><ul>'+
+     '<li><b>Windows:</b> <b>PowerShell</b>, Command Prompt, or the newer <b>Windows Terminal</b>.</li>'+
+     '<li><b>Mac / Linux:</b> the <b>Terminal</b> app (or <b>iTerm</b> on Mac).</li>'+
+     '<li><b>Inside a code editor — e.g. VS Code:</b> press <b>Ctrl + &#96;</b> (the key above Tab), or View ▸ Terminal, and a terminal docks at the bottom so you <b>edit and run in one window</b>. Most editors/IDEs have this built in.</li>'+
+     '<li>You will also meet terminals <b>embedded in web tools</b> (cloud consoles, dashboards) — same idea, just in a browser.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">⌨️ Five safe commands to try</div><ul>'+
+     '<li><code>pwd</code> (Mac) / <code>cd</code> (Windows) — <b>where am I?</b> prints the folder you are in.</li>'+
+     '<li><code>ls</code> (Mac) / <code>dir</code> (Windows) — <b>list</b> the files here.</li>'+
+     '<li><code>cd foldername</code> — <b>move into</b> a folder (<code>cd ..</code> goes back up one).</li>'+
+     '<li><code>node -v</code> — print a program’s version, proving it is installed.</li>'+
+     '<li><code>echo hello</code> — print text back. Harmless, and a satisfying first “it works.”</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ffb454"><div class="ech">💡 Why bother instead of clicking</div><ul>'+
+     '<li><b>Precision &amp; repeatability:</b> a command does the exact same thing every time, and you can save a sequence of them as a <b>script</b>.</li>'+
+     '<li><b>It is the only door</b> for many developer tools and for remote/headless servers — there are no buttons to click.</li>'+
+     '<li><b>Speed:</b> once it is in your fingers, one typed line beats hunting through menus.</li>'+
+     '<li>Commands differ a little between Windows and Mac — the <b>PC vs Mac</b> tab maps them side by side.</li>'+
      '</ul></div>'},
   {t:'Node.js', tw:'runtime', h:'runs JavaScript outside the browser',
    d:'Node.js is a runtime that lets JavaScript run as a normal program (a server), not just inside a web page. It is great at handling lots of network connections at once.',
