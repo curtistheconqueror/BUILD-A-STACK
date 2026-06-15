@@ -241,6 +241,41 @@
     .os-hero{padding:17px 17px}
     .os-hero h2{font-size:19px}
   }
+
+  /* ===== Keyboard tab (scoped from sandbox) ===== */
+
+  :root{--bg0:#05080f;--bg1:#0a1020;--ink:#eaf1ff;--muted:#8ea0c4;--acc:#35d0e0;--acc2:#b78cff;--acc3:#ff6fb5;
+    --ok:#51e08a;--warn:#ffb454;--glass:rgba(22,30,50,.55);--border:rgba(130,155,200,.22);--keybg:#161f33;--keytop:#1d2840;}#view-keyboard .bg{position:fixed;inset:0;z-index:-2;background:
+    radial-gradient(900px 640px at 14% 6%,rgba(53,208,224,.16),transparent 60%),
+    radial-gradient(840px 600px at 88% 94%,rgba(183,140,255,.18),transparent 58%),
+    radial-gradient(700px 560px at 70% 12%,rgba(255,111,181,.10),transparent 60%),
+    linear-gradient(180deg,var(--bg0),var(--bg1))}#view-keyboard .grid{position:fixed;inset:-2px;z-index:-1;opacity:.4;pointer-events:none;
+    background-image:linear-gradient(rgba(120,160,220,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(120,160,220,.06) 1px,transparent 1px);
+    background-size:46px 46px;mask-image:radial-gradient(80% 70% at 50% 30%,#000,transparent)}#view-keyboard header{padding:24px 28px 6px;max-width:1180px;margin:0 auto}#view-keyboard h1{margin:0;font-size:24px;letter-spacing:2px;font-weight:800;
+    background:linear-gradient(90deg,#35d0e0,#b78cff,#ff6fb5,#35d0e0);background-size:300% 100%;
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:sheen 8s linear infinite}
+  @keyframes sheen{to{background-position:300% 0}}#view-keyboard .sub{color:var(--muted);font-size:13px;margin-top:5px}#view-keyboard .sandtag{display:inline-block;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;font-weight:800;color:var(--warn);border:1px solid rgba(255,180,84,.4);background:rgba(255,180,84,.08);border-radius:7px;padding:2px 9px;margin-left:8px;vertical-align:2px}#view-keyboard .wrap{max-width:1180px;margin:0 auto;padding:10px 22px 70px}#view-keyboard .bar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin:6px 0 14px}#view-keyboard .hint{color:var(--muted);font-size:12.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}#view-keyboard .hint b{color:var(--acc)}#view-keyboard .dotkey{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--acc3);box-shadow:0 0 8px var(--acc3);vertical-align:1px}#view-keyboard .toggle{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:12.5px;color:var(--muted);user-select:none;white-space:nowrap}#view-keyboard .toggle input{display:none}#view-keyboard .toggle .tg{width:38px;height:21px;border-radius:20px;background:rgba(130,155,200,.2);border:1px solid var(--border);position:relative;transition:.2s;flex:none}#view-keyboard .toggle .tg::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#cfe0ff;transition:.2s}#view-keyboard .toggle input:checked + .tg{background:linear-gradient(90deg,var(--acc),var(--acc2));border-color:transparent}#view-keyboard .toggle input:checked + .tg::after{transform:translateX(17px)}#view-keyboard .toggles{display:flex;gap:16px;flex-wrap:wrap}#view-keyboard .legend{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 14px}#view-keyboard .leglabel{font-size:11px;color:var(--muted);margin-right:2px}#view-keyboard .legchip{display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-size:11.5px;font-weight:700;color:var(--muted);background:rgba(8,12,22,.5);border:1px solid var(--border);border-radius:20px;padding:5px 12px;transition:.2s;user-select:none}#view-keyboard .legchip .ld{width:9px;height:9px;border-radius:50%;background:var(--cl);box-shadow:0 0 8px var(--cl);transition:.2s}#view-keyboard .legchip.on{color:var(--ink);border-color:var(--cl);box-shadow:inset 0 0 0 1px var(--cl)}#view-keyboard .legchip:not(.on){opacity:.5}#view-keyboard .legchip:not(.on) .ld{background:var(--muted);box-shadow:none}#view-keyboard .key.press{animation:thunk .15s ease}
+  @keyframes thunk{0%{transform:translateY(3px) scale(.97)}100%{transform:translateY(0) scale(1)}}#view-keyboard .kbsel{display:flex;gap:10px;flex-wrap:wrap;margin:2px 0 12px}#view-keyboard .kbcard{cursor:pointer;text-align:left;background:rgba(8,12,22,.5);border:1px solid var(--border);border-radius:13px;padding:10px 15px;color:var(--ink);transition:.2s;min-width:160px}#view-keyboard .kbcard:hover{border-color:var(--acc);transform:translateY(-2px)}#view-keyboard .kbcard.on{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc),0 0 22px -8px var(--acc);background:linear-gradient(180deg,rgba(53,208,224,.14),rgba(53,208,224,.03))}#view-keyboard .kbcard .kbn{font-size:14px;font-weight:800}#view-keyboard .kbcard .kbs{font-size:11px;color:var(--muted);margin-top:2px}#view-keyboard .kbinfo{font-size:12.6px;line-height:1.6;color:#cdd9ef;background:var(--glass);border:1px solid var(--border);border-radius:12px;padding:11px 14px;margin:0 0 14px;max-width:860px}#view-keyboard .kbinfo b{color:var(--ink)}#view-keyboard .advtoggle{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:rgba(255,180,84,.08);border:1px solid rgba(255,180,84,.4);border-radius:12px;padding:10px 14px;margin:0 0 14px;max-width:860px}#view-keyboard .advtoggle b{color:var(--warn)}#view-keyboard .advhint{font-size:12px;color:var(--muted)}#view-keyboard .advhint b{color:#f0dcc0}#view-keyboard .key.ability{border-color:var(--warn)!important;box-shadow:0 0 0 2px var(--warn),0 0 22px -4px var(--warn);animation:abilitypulse 1.8s ease-in-out infinite}
+  @keyframes abilitypulse{0%,100%{box-shadow:0 0 0 2px var(--warn),0 0 18px -4px var(--warn)}50%{box-shadow:0 0 0 2px var(--warn),0 0 30px 0 var(--warn)}}#view-keyboard .board.advmode .key:not(.ability){opacity:.26;filter:saturate(.5)}#view-keyboard .board.advmode .key.ability{cursor:pointer}#view-keyboard .board.advmode .key.linked{opacity:1;filter:none;border-color:var(--warn);box-shadow:0 0 0 1px var(--warn),0 0 16px -5px var(--warn)}#view-keyboard /* Mac board: space-gray aluminum body + black keys + blue secondary legends (like a real Mac keyboard) */
+  .board.mac{background:linear-gradient(180deg,#4a4d53,#2f3136);border-color:#62656c;box-shadow:0 26px 70px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.14)}#view-keyboard .board.mac .key{background:linear-gradient(180deg,#303237,#24262a);border:1px solid rgba(255,255,255,.05);border-bottom:2px solid rgba(0,0,0,.55);color:#f3f4f6;border-radius:9px}#view-keyboard .board.mac .key.mod{background:linear-gradient(180deg,#34373c,#2a2c31);color:#eef0f3}#view-keyboard .board.mac .key .sub{color:#7fa8e6}#view-keyboard .board.mac .key:hover{border-color:#aeb4bf;box-shadow:0 8px 22px -6px rgba(0,0,0,.6)}#view-keyboard /* board */
+  .stage{position:relative;overflow-x:auto;padding-bottom:6px}#view-keyboard .board{position:relative;display:inline-block;padding:18px;border-radius:20px;
+    background:linear-gradient(180deg,rgba(20,28,46,.9),rgba(10,15,28,.92));
+    border:1px solid var(--border);box-shadow:0 26px 70px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.04)}#view-keyboard .row{display:flex;gap:7px;margin-bottom:7px}#view-keyboard .row:last-child{margin-bottom:0}#view-keyboard .spacer{flex:0 0 auto}#view-keyboard .key{position:relative;height:52px;min-width:52px;border-radius:10px;cursor:pointer;
+    background:linear-gradient(180deg,var(--keytop),var(--keybg));border:1px solid rgba(140,165,210,.18);
+    border-bottom:2px solid rgba(0,0,0,.45);display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:4px 6px;color:#dfe9fb;user-select:none;transition:transform .12s,box-shadow .2s,border-color .2s,background .2s,opacity .2s;flex:0 0 auto}#view-keyboard .key .lab{font-size:13px;font-weight:700;line-height:1.05;text-align:center}#view-keyboard .key .sub{font-size:9px;color:var(--muted);margin-top:1px;font-weight:600}#view-keyboard .key:hover{transform:translateY(-2px);border-color:var(--acc);box-shadow:0 8px 22px -6px var(--acc),0 0 0 1px rgba(53,208,224,.35)}#view-keyboard .key:active{transform:translateY(1px)}#view-keyboard .key.mod{background:linear-gradient(180deg,#243150,#1a2238);color:#cfe0ff}#view-keyboard .key.sel{border-color:var(--acc2);box-shadow:0 0 0 2px var(--acc2),0 0 26px -4px var(--acc2);transform:translateY(-3px);background:linear-gradient(180deg,#2a2150,#1d1838)}#view-keyboard .key.held{animation:heldpulse 1.5s ease-in-out infinite}#view-keyboard .key.held::before{content:"🔒";position:absolute;top:-11px;left:-7px;font-size:12px;filter:drop-shadow(0 0 4px var(--acc3));z-index:3}
+  @keyframes heldpulse{0%,100%{box-shadow:0 0 0 2px var(--acc2),0 0 24px -4px var(--acc2)}50%{box-shadow:0 0 0 2px var(--acc3),0 0 32px -2px var(--acc3)}}#view-keyboard .heldnote{margin-top:11px;font-size:12.2px;color:var(--acc3);font-weight:700;background:rgba(255,111,181,.1);border:1px solid rgba(255,111,181,.35);border-radius:9px;padding:8px 12px;line-height:1.5}#view-keyboard /* subtle dot: this key forms a shortcut with the focused key (double-click it) */
+  .key.hint::after{content:"";position:absolute;top:5px;right:6px;width:6px;height:6px;border-radius:50%;background:var(--acc3);box-shadow:0 0 8px var(--acc3);animation:pop .25s ease}
+  @keyframes pop{from{transform:scale(0)}to{transform:scale(1)}}#view-keyboard /* fully lit partner of the currently revealed connection */
+  .key.partner{border-color:var(--acc3);box-shadow:0 0 0 2px var(--acc3),0 0 22px -4px var(--acc3);transform:translateY(-2px)}#view-keyboard .key.dim{opacity:.34;filter:saturate(.6)}#view-keyboard /* svg relationship overlay */
+  .links{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:5}#view-keyboard .links path{fill:none;stroke-width:2.4;stroke-linecap:round;opacity:0;filter:drop-shadow(0 0 5px currentColor)}#view-keyboard .links path.on{animation:draw .5s ease forwards}
+  @keyframes draw{from{opacity:0;stroke-dasharray:0 700}to{opacity:.92;stroke-dasharray:700 0}}#view-keyboard .links .lbl{font-size:11.5px;font-weight:800;fill:#eaf1ff;paint-order:stroke;stroke:#05080f;stroke-width:3.5px;opacity:0;transition:opacity .4s .2s}#view-keyboard .links .lbl.on{opacity:1}#view-keyboard /* detail panel */
+  .panel{margin-top:20px;background:var(--glass);backdrop-filter:blur(16px);border:1px solid var(--border);border-left:3px solid var(--acc2);border-radius:16px;padding:17px 19px;min-height:96px;max-width:780px}#view-keyboard .panel.empty{border-left-color:var(--border);color:var(--muted);font-size:13px;line-height:1.6}#view-keyboard .panel.empty b{color:var(--acc)}#view-keyboard .pk-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}#view-keyboard .pk-name{font-size:19px;font-weight:800}#view-keyboard .pk-type{font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;font-weight:800;color:var(--acc)}#view-keyboard .pk-desc{font-size:13.6px;line-height:1.6;color:#dbe6fb;margin:9px 0 0}#view-keyboard .pk-combos{margin-top:14px}#view-keyboard .pk-combos h4{margin:0 0 8px;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--acc3);font-weight:800;display:flex;align-items:center;gap:8px}#view-keyboard .pk-combos h4::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--acc3),transparent);opacity:.45}#view-keyboard .combo{display:flex;align-items:center;gap:10px;padding:8px 11px;margin:3px -9px;border-radius:9px;font-size:13px;color:#dbe6fb;cursor:pointer;border-left:3px solid var(--rc,transparent);transition:background .15s,box-shadow .15s}#view-keyboard .combo:hover{background:rgba(255,255,255,.04)}#view-keyboard .combo.active{background:rgba(255,111,181,.12);box-shadow:inset 0 0 0 1px rgba(255,111,181,.5)}#view-keyboard .combo .keys{display:flex;align-items:center;gap:4px;flex:0 0 auto}#view-keyboard .kc{font-family:ui-monospace,monospace;font-size:11px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:2px 7px;color:#fff;white-space:nowrap}#view-keyboard .combo .plus{color:var(--muted);font-size:11px}#view-keyboard .combo .res{color:#cdd9ef}#view-keyboard .combo .res b{color:var(--ink)}#view-keyboard .none{color:var(--muted);font-size:12.5px;margin-top:8px}
+  @media (max-width:900px){#view-keyboard .key{height:46px;min-width:46px}#view-keyboard .key .lab{font-size:12px} }
+  @media (max-width:640px){#view-keyboard .board{padding:11px}#view-keyboard .row{gap:5px;margin-bottom:5px}#view-keyboard .key{height:40px;min-width:36px;border-radius:8px}#view-keyboard .key .lab{font-size:10.5px}#view-keyboard .key .sub{display:none} }
+
+#view-keyboard .row{opacity:1;transform:none}
+#view-keyboard .key .sub{animation:none}
 </style>
 </head>
 <body>
@@ -250,7 +285,7 @@
   <h1>BUILD-A-STACK</h1>
   <div class="sub">Learn how real systems connect — bridges, ports, sockets, gateways — then wire one yourself. Built off the Tradenificent Stack Map.</div>
 </header>
-<div class="tabs"><button id="tab-learn" class="on">📖 Learn</button><button id="tab-build">🔧 Build</button><button id="tab-pcmac">💻 PC vs Mac</button></div>
+<div class="tabs"><button id="tab-learn" class="on">📖 Learn</button><button id="tab-build">🔧 Build</button><button id="tab-pcmac">💻 PC vs Mac</button><button id="tab-keyboard">⌨️ Keyboard</button></div>
 <div class="wrap">
   <div id="view-learn" class="view">
     <div class="prog"><span>explored <span class="pct" id="pc">0</span>/<span id="tot">0</span></span><span class="pbar"><i id="fill"></i></span></div>
@@ -308,9 +343,31 @@
     <div class="oskey"><span class="winkey">⊞ Windows</span><span class="mackey">🍎 Mac</span></div>
     <div id="pcmac-list"></div>
   </div>
+  <div id="view-keyboard" class="view hide">
+<div class="bar">
+    <div class="hint"><b>Single-click</b> a key to focus &amp; read it. <b>Double-click</b> it to 🔒 <b>hold</b>, then single-click its dotted partners <span class="dotkey"></span> to reveal each connection — or just <b>click a row</b> below. <kbd>Esc</kbd> clears.</div>
+    <div class="toggles">
+      <label class="toggle"><input type="checkbox" id="snd"><span class="tg"></span> Key sound</label>
+      <label class="toggle"><input type="checkbox" id="showall"><span class="tg"></span> Show all</label>
+    </div>
+  </div>
+  <div class="kbsel" id="kbsel"></div>
+  <div class="kbinfo" id="kbinfo"></div>
+  <div class="advtoggle" id="advtoggle" style="display:none">
+    <label class="toggle"><input type="checkbox" id="advmode"><span class="tg"></span> <b>⚡ Advanced-only mode</b></label>
+    <span class="advhint">— show just what this board can do that a <b>standard</b> one can’t (Easy-Switch, media keys, dual-OS…).</span>
+  </div>
+  <div class="legend" id="legend"><span class="leglabel">Connection types — tap to filter:</span></div>
+  <div class="stage">
+    <div class="board" id="board">
+      <svg class="links" id="links"></svg>
+    </div>
+  </div>
+  <div class="panel empty" id="panel">Nothing selected — <b>single-click</b> any key to focus it, then <b>double-click</b> it to 🔒 hold and explore its partners. Modifiers like <b>Ctrl</b>, <b>Alt</b>, <b>Shift</b> and <b>Win</b> are the hubs.</div>
+  </div>
 </div>
 <dialog id="termPopout" class="termpop"><div class="tp-card"><button class="tp-x" id="tpClose" aria-label="Close">✕</button><div class="tp-title" id="tpTitle"></div><div class="tp-text" id="tpText"></div><div class="tp-foot">quick definition · Esc or click outside to close</div></div></dialog>
-<footer>Self-contained · works on phone · tablet · desktop · Phase A·1–A·3 (28 concepts) · Phase B·1–B·2 (4 challenges) · Phase D·1 (PC vs Mac)</footer>
+<footer>Self-contained · works on phone · tablet · desktop · Phase A·1–A·3 (28 concepts) · Phase B·1–B·2 (4 challenges) · Phase D·1 (PC vs Mac) · D·2 (Keyboard — 3 boards)</footer>
 <script>
 /* ===== living background wires ===== */
 (function(){
@@ -1198,9 +1255,442 @@ const PCMAC=[
 })();
 
 /* ===== tabs (crossfade, N tabs) ===== */
-const TABS=[['learn','tab-learn','view-learn'],['build','tab-build','view-build'],['pcmac','tab-pcmac','view-pcmac']];
+const TABS=[['learn','tab-learn','view-learn'],['build','tab-build','view-build'],['pcmac','tab-pcmac','view-pcmac'],['keyboard','tab-keyboard','view-keyboard']];
 function show(which){TABS.forEach(function(t){var on=t[0]===which;document.getElementById(t[1]).classList.toggle('on',on);var v=document.getElementById(t[2]);v.classList.toggle('hide',!on);if(on){v.style.animation='none';void v.offsetWidth;v.style.animation='';}});}
 TABS.forEach(function(t){document.getElementById(t[1]).addEventListener('click',function(){show(t[0]);});});
+
+/* ===== Keyboard tab logic (scoped IIFE from sandbox) ===== */
+(function(){
+
+const svgns='http://www.w3.org/2000/svg';
+/* ---------- key layout (standard PC, TKL-style: main block + arrows) ---------- */
+const U=59;
+const STD_ROWS=[
+  [['esc','Esc'],['sp',0.5],['f1','F1'],['f2','F2'],['f3','F3'],['f4','F4'],['sp',0.5],['f5','F5'],['f6','F6'],['f7','F7'],['f8','F8'],['sp',0.5],['f9','F9'],['f10','F10'],['f11','F11'],['f12','F12'],['sp',1.0],['prtsc','PrtSc'],['scrlk','ScrLk'],['pause','Pause']],
+  [['tilde','~','`'],['1','!','1'],['2','@','2'],['3','#','3'],['4','$','4'],['5','%','5'],['6','^','6'],['7','&','7'],['8','*','8'],['9','(','9'],['0',')','0'],['minus','_','-'],['equal','+','='],['backspace','⌫ Back','',2],['sp',0.5],['ins','Ins'],['home','Home'],['pgup','PgUp'],['sp',0.4],['numlk','Num'],['npdiv','/'],['npmul','*'],['npsub','−']],
+  [['tab','Tab','',1.5],['q','Q'],['w','W'],['e','E'],['r','R'],['t','T'],['y','Y'],['u','U'],['i','I'],['o','O'],['p','P'],['lb','[','{'],['rb',']','}'],['bslash','\\','|',1.5],['sp',0.5],['del','Del'],['end','End'],['pgdn','PgDn'],['sp',0.4],['np7','7','Hm'],['np8','8','↑'],['np9','9','PgUp'],['npadd','+']],
+  [['caps','Caps','',1.75,'mod'],['a','A'],['s','S'],['d','D'],['f','F'],['g','G'],['h','H'],['j','J'],['k','K'],['l','L'],['semi',';',':'],['quote','&#39;','"'],['enter','⏎ Enter','',2.25],['sp',0.5],['sp',3.0],['sp',0.4],['np4','4','←'],['np5','5'],['np6','6','→'],['sp',1.0]],
+  [['lshift','⇧ Shift','',2.25,'mod'],['z','Z'],['x','X'],['c','C'],['v','V'],['b','B'],['n','N'],['m','M'],['comma','<',','],['period','>','.'],['slash','?','/'],['rshift','⇧ Shift','',2.75,'mod'],['sp',0.5],['sp',1.0],['up','↑'],['sp',1.0],['sp',0.4],['np1','1','End'],['np2','2','↓'],['np3','3','PgDn'],['npent','Ent']],
+  [['lctrl','Ctrl','',1.25,'mod'],['win','⊞ Win','',1.25,'mod'],['lalt','Alt','',1.25,'mod'],['space','Space','',6.25],['ralt','Alt','',1.25,'mod'],['rwin','⊞ Win','',1.25,'mod'],['menu','▤','',1.25],['rctrl','Ctrl','',1.25,'mod'],['sp',0.5],['left','←'],['down','↓'],['right','→'],['sp',0.4],['np0','0','Ins',2],['npdot','.','Del'],['sp',1.0]],
+];
+/* ---------- shortcut graph (the relationship map) ---------- */
+const COMBOS_PC=[
+  /* editing (cyan) */
+  {keys:['lctrl','c'],res:'Copy',cat:'edit',desc:'Copy the selection to the clipboard.'},
+  {keys:['lctrl','v'],res:'Paste',cat:'edit',desc:'Paste what you copied.'},
+  {keys:['lctrl','x'],res:'Cut',cat:'edit',desc:'Copy AND remove the selection.'},
+  {keys:['lctrl','z'],res:'Undo',cat:'edit',desc:'Take back your last action.'},
+  {keys:['lctrl','y'],res:'Redo',cat:'edit',desc:'Re-do what you just undid.'},
+  {keys:['lctrl','a'],res:'Select all',cat:'edit',desc:'Select everything in view.'},
+  {keys:['lctrl','s'],res:'Save',cat:'edit',desc:'Save the current file.'},
+  {keys:['lctrl','o'],res:'Open',cat:'edit',desc:'Open a file.'},
+  {keys:['lctrl','n'],res:'New',cat:'edit',desc:'New document or window.'},
+  {keys:['lctrl','p'],res:'Print',cat:'edit',desc:'Open the print dialog.'},
+  {keys:['lctrl','f'],res:'Find',cat:'edit',desc:'Search within the page or document.'},
+  {keys:['lctrl','b'],res:'Bold',cat:'edit',desc:'Bold the selected text.'},
+  {keys:['lctrl','i'],res:'Italic',cat:'edit',desc:'Italicize the selected text.'},
+  {keys:['lctrl','u'],res:'Underline',cat:'edit',desc:'Underline the selected text.'},
+  {keys:['lctrl','backspace'],res:'Delete word',cat:'edit',desc:'Delete the whole word to the left.'},
+  {keys:['lctrl','equal'],res:'Zoom in',cat:'edit',desc:'Make everything bigger.'},
+  {keys:['lctrl','minus'],res:'Zoom out',cat:'edit',desc:'Make everything smaller.'},
+  {keys:['lctrl','0'],res:'Reset zoom',cat:'edit',desc:'Back to 100%.'},
+  /* move the cursor & select (green) */
+  {keys:['lctrl','left'],res:'Word left',cat:'nav',desc:'Jump the cursor a whole word left.'},
+  {keys:['lctrl','right'],res:'Word right',cat:'nav',desc:'Jump the cursor a whole word right.'},
+  {keys:['lctrl','home'],res:'To top',cat:'nav',desc:'Jump to the very start of the document.'},
+  {keys:['lctrl','end'],res:'To bottom',cat:'nav',desc:'Jump to the very end of the document.'},
+  {keys:['lshift','left'],res:'Select left',cat:'nav',desc:'Extend the selection one character left.'},
+  {keys:['lshift','right'],res:'Select right',cat:'nav',desc:'Extend the selection one character right.'},
+  {keys:['lshift','home'],res:'Select to start',cat:'nav',desc:'Select from the cursor to the line start.'},
+  {keys:['lshift','end'],res:'Select to end',cat:'nav',desc:'Select from the cursor to the line end.'},
+  {keys:['lctrl','ins'],res:'Copy',cat:'nav',desc:'Legacy copy (same as Ctrl+C).'},
+  {keys:['lshift','ins'],res:'Paste',cat:'nav',desc:'Legacy paste (same as Ctrl+V).'},
+  /* windows & tabs (purple) */
+  {keys:['lctrl','t'],res:'New tab',cat:'win',desc:'Open a fresh browser tab.'},
+  {keys:['lctrl','w'],res:'Close tab',cat:'win',desc:'Close the current tab or window.'},
+  {keys:['lctrl','lshift','t'],res:'Reopen tab',cat:'win',desc:'Bring back the tab you just closed.'},
+  {keys:['lctrl','tab'],res:'Next tab',cat:'win',desc:'Cycle to the next open tab.'},
+  {keys:['lctrl','pgup'],res:'Prev tab',cat:'win',desc:'Switch to the previous browser tab.'},
+  {keys:['lctrl','pgdn'],res:'Next tab',cat:'win',desc:'Switch to the next browser tab.'},
+  {keys:['lctrl','r'],res:'Reload',cat:'win',desc:'Refresh the page.'},
+  {keys:['lctrl','d'],res:'Bookmark',cat:'win',desc:'Save the current page to bookmarks.'},
+  {keys:['lalt','tab'],res:'Switch apps',cat:'win',desc:'Jump between open programs.'},
+  {keys:['lalt','f4'],res:'Close app',cat:'win',desc:'Quit the active program.'},
+  {keys:['lalt','space'],res:'Window menu',cat:'win',desc:'Open the window’s move / size / close menu.'},
+  {keys:['lalt','enter'],res:'Properties',cat:'win',desc:'Open properties of the selected item.'},
+  {keys:['lalt','left'],res:'Back',cat:'win',desc:'Go back (browser / File Explorer).'},
+  {keys:['lalt','right'],res:'Forward',cat:'win',desc:'Go forward.'},
+  {keys:['win','d'],res:'Show desktop',cat:'win',desc:'Minimize everything at once.'},
+  {keys:['win','e'],res:'File Explorer',cat:'win',desc:'Open the file browser.'},
+  {keys:['win','r'],res:'Run',cat:'win',desc:'Open the Run command box.'},
+  {keys:['win','i'],res:'Settings',cat:'win',desc:'Open Windows Settings.'},
+  {keys:['win','tab'],res:'Task view',cat:'win',desc:'See all open windows and desktops.'},
+  {keys:['win','space'],res:'Switch language',cat:'win',desc:'Switch the keyboard input language.'},
+  {keys:['win','up'],res:'Maximize',cat:'win',desc:'Maximize the current window.'},
+  {keys:['win','down'],res:'Minimize',cat:'win',desc:'Minimize or restore the window.'},
+  {keys:['win','left'],res:'Snap left',cat:'win',desc:'Snap the window to the left half of the screen.'},
+  {keys:['win','right'],res:'Snap right',cat:'win',desc:'Snap the window to the right half.'},
+  /* system & screenshots (pink) */
+  {keys:['win','l'],res:'Lock PC',cat:'sys',desc:'Lock the screen instantly.'},
+  {keys:['win','lshift','s'],res:'Screenshot',cat:'sys',desc:'Snip part of the screen to the clipboard.'},
+  {keys:['win','prtsc'],res:'Save screenshot',cat:'sys',desc:'Save a full screenshot to a file.'},
+  {keys:['lalt','prtsc'],res:'Window shot',cat:'sys',desc:'Copy a screenshot of just the active window.'},
+  {keys:['lctrl','lalt','del'],res:'Security menu',cat:'sys',desc:'Lock, sign out, or open Task Manager.'},
+  {keys:['lctrl','lshift','esc'],res:'Task Manager',cat:'sys',desc:'See and close running programs.'},
+];
+const CATS={edit:{label:'Editing',color:'#35d0e0'},nav:{label:'Move & select',color:'#51e08a'},win:{label:'Windows & tabs',color:'#b78cff'},sys:{label:'System',color:'#ff6fb5'}};
+const CAT_ORDER=['edit','nav','win','sys'];
+let activeCats=new Set(CAT_ORDER);
+
+/* ===== the Logi K860 "Advanced" board: same key ids (so PC shortcuts work), but a
+   split layout, media F-row, Easy-Switch keys, and dual Win/Mac legends ===== */
+const K860_ROWS=[
+  [['esc','Esc'],['sp',0.5],['f1','F1','🔅'],['f2','F2','🔆'],['f3','F3','🗗'],['f4','F4','🔍'],['sp',0.4],['f5','F5','🎙'],['f6','F6','🌙'],['f7','F7','⏮'],['f8','F8','⏯'],['sp',0.4],['f9','F9','⏭'],['f10','F10','🔇'],['f11','F11','🔉'],['f12','F12','🔊'],['sp',0.7],['prtsc','PrtSc'],['es1','🖥','1'],['es2','🖥','2'],['es3','🖥','3'],['lock','🔒']],
+  [['tilde','~','`'],['1','!','1'],['2','@','2'],['3','#','3'],['4','$','4'],['5','%','5'],['6','^','6'],['sp',0.7],['7','&','7'],['8','*','8'],['9','(','9'],['0',')','0'],['minus','_','-'],['equal','+','='],['backspace','⌫','',1.5],['sp',0.5],['ins','Ins'],['home','Home'],['pgup','PgUp'],['sp',0.4],['numlk','Num'],['npdiv','/'],['npmul','*'],['npsub','−']],
+  [['tab','Tab','',1.5],['q','Q'],['w','W'],['e','E'],['r','R'],['t','T'],['sp',0.7],['y','Y'],['u','U'],['i','I'],['o','O'],['p','P'],['lb','[','{'],['rb',']','}'],['bslash','\\','|',1.25],['sp',0.5],['del','Del'],['end','End'],['pgdn','PgDn'],['sp',0.4],['np7','7','Hm'],['np8','8','↑'],['np9','9','PgUp'],['npadd','+']],
+  [['caps','Caps','',1.75,'mod'],['a','A'],['s','S'],['d','D'],['f','F'],['g','G'],['sp',0.7],['h','H'],['j','J'],['k','K'],['l','L'],['semi',';',':'],['quote','&#39;','"'],['enter','⏎','',1.75],['sp',0.5],['sp',3.0],['sp',0.4],['np4','4','←'],['np5','5'],['np6','6','→'],['sp',1.0]],
+  [['lshift','⇧','',2.0,'mod'],['z','Z'],['x','X'],['c','C'],['v','V'],['b','B'],['sp',0.7],['n','N'],['m','M'],['comma','<',','],['period','>','.'],['slash','?','/'],['rshift','⇧','',1.75,'mod'],['sp',0.5],['sp',1.0],['up','↑'],['sp',1.0],['sp',0.4],['np1','1','End'],['np2','2','↓'],['np3','3','PgDn'],['npent','Ent']],
+  [['lctrl','Ctrl','⌃',1.25,'mod'],['win','⊞ start','⌥ opt',1.5,'mod'],['lalt','Alt','⌘ cmd',1.5,'mod'],['space','Space','',5.0],['ralt','Alt','⌘ cmd',1.5,'mod'],['fn','fn'],['menu','▤'],['rctrl','Ctrl','⌃',1.25,'mod'],['sp',0.5],['left','←'],['down','↓'],['right','→'],['sp',0.4],['np0','0','Ins',2],['npdot','.','Del'],['sp',1.0]],
+];
+/* abilities UNIQUE to the K860 — shown when "Advanced-only" mode is toggled on.
+   each: key id -> {what it does, what a STANDARD keyboard would need instead} */
+const ADV_ABILITIES={
+  es1:{what:'Instantly switch your typing to paired device #1',vs:'A standard keyboard talks to ONE computer only — it has nothing like this.'},
+  es2:{what:'Switch to paired device #2',vs:'Multi-device switching is radio + firmware; a basic board can’t do it at all.'},
+  es3:{what:'Switch to paired device #3',vs:'Jump between three machines in a blink — impossible on a plain keyboard.'},
+  f1:{what:'Turn screen brightness down',vs:'A dedicated tap here; most standard keyboards can’t dim your display at all.'},
+  f2:{what:'Turn screen brightness up',vs:'Brightness control built right into the F-row.'},
+  f3:{what:'Show all open windows (Task View / Mission Control)',vs:'One key for what’s normally a mouse trip or Win+Tab.',links:['win','tab']},
+  f4:{what:'Open search (Spotlight / Start search)',vs:'Launches search instantly; a standard board has no such key.'},
+  f5:{what:'Start voice dictation',vs:'Speech-to-text from a key — no standard equivalent.'},
+  f6:{what:'Do Not Disturb',vs:'Mutes notifications with one tap.'},
+  f7:{what:'Previous track',vs:'Media controls live on the board itself.'},
+  f8:{what:'Play / Pause',vs:'Control playback without touching the app.'},
+  f9:{what:'Next track',vs:'Skip a song from the keyboard.'},
+  f10:{what:'Mute',vs:'Dedicated media keys — a basic board has none.'},
+  f11:{what:'Volume down',vs:'Volume straight from the keyboard.'},
+  f12:{what:'Volume up',vs:'Volume straight from the keyboard.'},
+  lock:{what:'Lock the screen with one key',vs:'A standard keyboard needs the Win+L combo — here it’s a single dedicated key.',links:['win','l']},
+  fn:{what:'Second-function shifter',vs:'Hold it to turn the media row back into plain F1–F12.',links:['f1','f2','f3','f4','f5','f6','f7','f8','f9','f10','f11','f12']},
+  win:{what:'Dual Windows / Mac modifier',vs:'Printed for BOTH OSes (⊞ start / ⌥ opt) and adapts automatically — a standard board is Windows-only.'},
+  lalt:{what:'Dual Alt / Command modifier',vs:'Acts as Alt on Windows and ⌘ Command on Mac — one keyboard, both worlds.'},
+};
+/* ===== the Mac board: Apple layout (⌘ Command, ⌥ Option, Control) + Mac shortcut set ===== */
+const MAC_ROWS=[
+  [['esc','esc'],['sp',0.5],['f1','F1','🔅'],['f2','F2','🔆'],['f3','F3','🗗'],['f4','F4','🔍'],['sp',0.4],['f5','F5','🎙'],['f6','F6','🌙'],['f7','F7','⏮'],['f8','F8','⏯'],['sp',0.4],['f9','F9','⏭'],['f10','F10','🔇'],['f11','F11','🔉'],['f12','F12','🔊'],['sp',0.6],['eject','⏏']],
+  [['tilde','~','`'],['1','!','1'],['2','@','2'],['3','#','3'],['4','$','4'],['5','%','5'],['6','^','6'],['7','&','7'],['8','*','8'],['9','(','9'],['0',')','0'],['minus','_','-'],['equal','+','='],['backspace','⌫ delete','',2],['sp',0.5],['ins','Ins'],['home','Home'],['pgup','PgUp'],['sp',0.4],['nclear','clear'],['npequal','='],['npdiv','/'],['npmul','*']],
+  [['tab','⇥ tab','',1.5],['q','Q'],['w','W'],['e','E'],['r','R'],['t','T'],['y','Y'],['u','U'],['i','I'],['o','O'],['p','P'],['lb','[','{'],['rb',']','}'],['bslash','\\','|',1.5],['sp',0.5],['del','Del'],['end','End'],['pgdn','PgDn'],['sp',0.4],['np7','7','Hm'],['np8','8','↑'],['np9','9','PgUp'],['npsub','−']],
+  [['caps','⇪ caps','',1.75,'mod'],['a','A'],['s','S'],['d','D'],['f','F'],['g','G'],['h','H'],['j','J'],['k','K'],['l','L'],['semi',';',':'],['quote','&#39;','"'],['enter','return','',2.25],['sp',0.5],['sp',3.0],['sp',0.4],['np4','4','←'],['np5','5'],['np6','6','→'],['npadd','+']],
+  [['lshift','⇧','',2.25,'mod'],['z','Z'],['x','X'],['c','C'],['v','V'],['b','B'],['n','N'],['m','M'],['comma','<',','],['period','>','.'],['slash','?','/'],['rshift','⇧','',2.0,'mod'],['sp',0.4],['sp',1.0],['up','↑'],['sp',1.0],['sp',0.4],['np1','1','End'],['np2','2','↓'],['np3','3','PgDn'],['npent','enter']],
+  [['fn','fn'],['mctrl','control','⌃',1.1,'mod'],['opt','option','⌥',1.1,'mod'],['cmd','⌘','command',1.25,'mod'],['space','space','',6.0],['rcmd','⌘','command',1.25,'mod'],['ropt','option','⌥',1.1,'mod'],['sp',0.4],['left','←'],['down','↓'],['right','→'],['sp',0.4],['np0','0','Ins',2],['npdot','.','Del'],['sp',1.0]],
+];
+const COMBOS_MAC=[
+  /* editing */
+  {keys:['cmd','c'],res:'Copy',cat:'edit',desc:'Copy the selection.'},
+  {keys:['cmd','v'],res:'Paste',cat:'edit',desc:'Paste what you copied.'},
+  {keys:['cmd','x'],res:'Cut',cat:'edit',desc:'Cut the selection.'},
+  {keys:['cmd','z'],res:'Undo',cat:'edit',desc:'Undo your last action.'},
+  {keys:['cmd','lshift','z'],res:'Redo',cat:'edit',desc:'Redo — Mac uses ⌘⇧Z (not Ctrl+Y).'},
+  {keys:['cmd','a'],res:'Select all',cat:'edit',desc:'Select everything.'},
+  {keys:['cmd','s'],res:'Save',cat:'edit',desc:'Save the file.'},
+  {keys:['cmd','o'],res:'Open',cat:'edit',desc:'Open a file.'},
+  {keys:['cmd','n'],res:'New',cat:'edit',desc:'New document or window.'},
+  {keys:['cmd','p'],res:'Print',cat:'edit',desc:'Print.'},
+  {keys:['cmd','f'],res:'Find',cat:'edit',desc:'Find on the page.'},
+  {keys:['cmd','b'],res:'Bold',cat:'edit',desc:'Bold the text.'},
+  {keys:['cmd','i'],res:'Italic',cat:'edit',desc:'Italicize the text.'},
+  {keys:['cmd','u'],res:'Underline',cat:'edit',desc:'Underline the text.'},
+  {keys:['cmd','equal'],res:'Zoom in',cat:'edit',desc:'Make everything bigger.'},
+  {keys:['cmd','minus'],res:'Zoom out',cat:'edit',desc:'Make everything smaller.'},
+  /* move & select */
+  {keys:['opt','left'],res:'Word left',cat:'nav',desc:'Jump a word left — on Mac that’s ⌥ Option, not Ctrl.'},
+  {keys:['opt','right'],res:'Word right',cat:'nav',desc:'Jump a word right.'},
+  {keys:['cmd','left'],res:'Line start',cat:'nav',desc:'Jump to the start of the line.'},
+  {keys:['cmd','right'],res:'Line end',cat:'nav',desc:'Jump to the end of the line.'},
+  {keys:['cmd','up'],res:'To top',cat:'nav',desc:'Jump to the top of the document.'},
+  {keys:['cmd','down'],res:'To bottom',cat:'nav',desc:'Jump to the bottom.'},
+  {keys:['lshift','left'],res:'Select left',cat:'nav',desc:'Extend the selection left.'},
+  {keys:['lshift','right'],res:'Select right',cat:'nav',desc:'Extend the selection right.'},
+  /* apps & windows */
+  {keys:['cmd','t'],res:'New tab',cat:'win',desc:'Open a new tab.'},
+  {keys:['cmd','w'],res:'Close tab',cat:'win',desc:'Close the tab or window.'},
+  {keys:['cmd','lshift','t'],res:'Reopen tab',cat:'win',desc:'Reopen the last closed tab.'},
+  {keys:['cmd','q'],res:'Quit app',cat:'win',desc:'Fully QUIT the app — Mac apps keep running until you ⌘Q.'},
+  {keys:['cmd','m'],res:'Minimize',cat:'win',desc:'Minimize the window to the Dock.'},
+  {keys:['cmd','h'],res:'Hide app',cat:'win',desc:'Hide the current app from view.'},
+  {keys:['cmd','tab'],res:'Switch apps',cat:'win',desc:'Cycle between open apps.'},
+  {keys:['cmd','tilde'],res:'Switch windows',cat:'win',desc:'Cycle windows within the current app.'},
+  {keys:['cmd','comma'],res:'Preferences',cat:'win',desc:'Open the app’s Settings / Preferences (⌘, is universal on Mac).'},
+  {keys:['cmd','r'],res:'Reload',cat:'win',desc:'Refresh the page.'},
+  /* system */
+  {keys:['cmd','space'],res:'Spotlight',cat:'sys',desc:'Open Spotlight — the Mac’s search & app launcher.'},
+  {keys:['cmd','lshift','3'],res:'Screenshot',cat:'sys',desc:'Capture the whole screen.'},
+  {keys:['cmd','lshift','4'],res:'Screen area',cat:'sys',desc:'Capture a selected area.'},
+  {keys:['mctrl','cmd','q'],res:'Lock screen',cat:'sys',desc:'Lock the Mac.'},
+  {keys:['mctrl','up'],res:'Mission Control',cat:'sys',desc:'See all open windows & desktops.'},
+];
+const KEYBOARDS=[
+  {id:'standard',label:'⌨️ Standard',sub:'Everyday full-size PC · ANSI',rows:STD_ROWS,combos:COMBOS_PC,
+   blurb:'<b>The Standard board</b> — the full-size layout most Windows PCs ship with. One key, one job; wired or basic-wireless. This is the baseline every other keyboard is compared against.'},
+  {id:'advanced',label:'🖥️ Advanced',sub:'Logi K860 · multi-device, remappable',rows:K860_ROWS,combos:COMBOS_PC,abilities:ADV_ABILITIES,
+   blurb:'<b>An Advanced board (Logi K860).</b> Same letters and shortcuts as Standard, but it can do things a basic board can’t: <b>switch between 3 devices</b> (the 🖥 keys), run <b>wireless</b>, let you <b>remap any key</b> in software (Logi Options+), and print <b>both Windows and Mac legends</b>. ⚠️ <b>These powers come from its tech &amp; software — not its shape.</b> Plenty of flat keyboards have them, and plenty of curvy ones don’t; the split look here is just a visual cue that it’s a different board.'},
+  {id:'mac',label:'🍎 Mac',sub:'Apple · ⌘ Command shortcuts',rows:MAC_ROWS,combos:COMBOS_MAC,
+   blurb:'<b>The Mac board (Apple).</b> Same letters — but the shortcuts run on <b>⌘ Command</b> instead of Ctrl, so Copy is <b>⌘C</b>, Quit is <b>⌘Q</b>, and search is <b>⌘Space</b> (Spotlight). Watch the Mac names too: <b>return</b> (not Enter), <b>delete</b> (not Backspace), and <b>⌥ Option</b> (= Alt). Control still exists, but it’s a <i>secondary</i> modifier here — ⌘ is the boss.'},
+];
+let ROWS=STD_ROWS, COMBOS=COMBOS_PC, activeKb='standard';
+let advMode=false, curAbilities=null;
+const DESC={
+  esc:['Escape','Backs out — closes menus, cancels, or stops what is happening.'],
+  tab:['Tab','Jumps to the next field or indents. Also used (with Alt) to switch apps.'],
+  caps:['Caps Lock','Locks letters to UPPERCASE until you press it again.'],
+  enter:['Enter / Return','Confirms, submits, or makes a new line.'],
+  backspace:['Backspace','Deletes the character to the LEFT of the cursor.'],
+  space:['Spacebar','Inserts a space — the most-used key. In a browser it also scrolls the page down (and Shift+Space scrolls up).'],
+  rwin:['Windows key','Same as the left Windows key — opens Start and powers the Win+ shortcuts.'],
+  ins:['Insert','Toggles between inserting text and typing over it. Also does legacy copy/paste (Ctrl+Ins / Shift+Ins).'],
+  del:['Delete','Deletes the character to the RIGHT of the cursor (Backspace deletes to the left).'],
+  home:['Home','Jumps the cursor to the start of the line — or the very top of the page with Ctrl.'],
+  end:['End','Jumps to the end of the line — or the very bottom of the page with Ctrl.'],
+  pgup:['Page Up','Scrolls up one screenful.'],
+  pgdn:['Page Down','Scrolls down one screenful.'],
+  prtsc:['Print Screen','Captures the screen. Alone it copies it; with Win it saves a file; with Alt it grabs just the active window.'],
+  scrlk:['Scroll Lock','A leftover from old PCs — almost nothing uses it anymore.'],
+  pause:['Pause / Break','Another legacy key; it can pause scrolling output in some terminals.'],
+  numlk:['Num Lock','Switches the numpad between typing numbers and acting as arrow / Home / End keys.'],
+  es1:['Easy-Switch 1','Pairs this keyboard to device #1 — tap to instantly move your typing to it. A flagship feature: switch between up to 3 computers/tablets in a blink.'],
+  es2:['Easy-Switch 2','Pairs to device #2. The multi-device switching here is software + radio, nothing to do with the keyboard’s shape.'],
+  es3:['Easy-Switch 3','Pairs to device #3. Basic boards just don’t have this; some flat ones do.'],
+  lock:['Lock','Locks the screen — the K860 gives it a dedicated key (on a standard board it’s Win+L).'],
+  fn:['Fn','Hold it to reach a key’s second job — e.g. turning the media keys back into plain F1–F12.'],
+  cmd:['Command (⌘)','The Mac’s power modifier — it does what Ctrl does on Windows (⌘C, ⌘V, ⌘Q…).'],
+  rcmd:['Command (⌘)','Same as the left Command key.'],
+  opt:['Option (⌥)','The Mac modifier for word-jumps and alternate characters. Windows calls this Alt.'],
+  ropt:['Option (⌥)','Same as the left Option key.'],
+  mctrl:['Control (⌃)','On a Mac, Control is a SECONDARY modifier (right-click, a few shortcuts) — not the main one. ⌘ Command is the boss.'],
+  eject:['Eject (⏏)','Ejects a disc or external drive — a classic Mac key with no Windows equivalent.'],
+  nclear:['Clear','The Mac numpad’s top-left key — clears the current entry. (A PC keyboard puts Num Lock in this spot.)'],
+  npequal:['Numpad =','Mac numpads include an equals key (great in Calculator and spreadsheets) — PC numpads don’t have one.'],
+  lshift:['Shift','A modifier: hold it for capital letters, symbols, or to extend a selection.'],
+  rshift:['Shift','Same as the left Shift — held with another key to change what it does.'],
+  lctrl:['Control (Ctrl)','THE power modifier on Windows. Held with a letter it triggers shortcuts (Ctrl+C, Ctrl+V…). It connects to the most keys — reveal them one at a time.'],
+  rctrl:['Control (Ctrl)','Same as the left Ctrl — a modifier you hold with other keys.'],
+  lalt:['Alt','A modifier for app/system shortcuts (Alt+Tab to switch apps, Alt+F4 to close).'],
+  ralt:['Alt','Same modifier on the right side of the spacebar.'],
+  win:['Windows key','Opens the Start menu, and pairs with letters for system shortcuts (Win+E, Win+D…).'],
+  menu:['Menu key','Opens the right-click context menu for whatever is selected.'],
+  up:['Arrow Up','Moves the cursor or selection up.'],down:['Arrow Down','Moves the cursor or selection down.'],
+  left:['Arrow Left','Moves left one character — or extends a selection with Shift.'],right:['Arrow Right','Moves right one character — or extends a selection with Shift.'],
+  tilde:['Backtick / Tilde','` and ~ — used in code and to open consoles in many games.'],
+};
+function defaultDesc(id,label){
+  if(/^f\d+$/.test(id)) return ['Function key '+label.toUpperCase(),'A programmable key — does different things per app (e.g. F5 refreshes, F2 renames).'];
+  if(/^np/.test(id)) return ['Numpad '+label,'Part of the number pad — fast numeric entry when Num Lock is on; the same keys double as arrows / Home / End / PgUp / PgDn when it is off.'];
+  if(id.length===1 && /[a-z]/.test(id)) return ['The letter '+id.toUpperCase(),'Types “'+id.toUpperCase()+'”. Held with Ctrl/Alt/Win it becomes a shortcut — focus a modifier to see.'];
+  return [label,'A standard key. Focus a modifier (Ctrl, Alt, Win, Shift) to see the shortcuts it joins.'];
+}
+
+const board=document.getElementById('board'), links=document.getElementById('links'), panel=document.getElementById('panel');
+let keyEls={};
+function renderBoard(){
+  board.querySelectorAll('.row').forEach(function(r){r.remove();});
+  keyEls={};
+  ROWS.forEach(row=>{
+  const r=document.createElement('div');r.className='row';
+  row.forEach(k=>{
+    if(k[0]==='sp'){const s=document.createElement('div');s.className='spacer';s.style.width=(k[1]*U)+'px';r.appendChild(s);return;}
+    const id=k[0],label=k[1],sub=k[2],w=k[3],type=k[4];
+    const el=document.createElement('div');el.className='key'+(type==='mod'?' mod':'');
+    el.style.width=((w||1)*U-7)+'px';el.dataset.id=id;
+    el.innerHTML='<span class="lab">'+label+'</span>'+(sub?'<span class="sub">'+sub+'</span>':'');
+    el.addEventListener('click',()=>{press(el);onKeyClick(id);});
+    r.appendChild(el);keyEls[id]=el;
+  });
+  board.appendChild(r);
+  });
+}
+
+/* ---------- interaction ---------- */
+let focusedKey=null, held=false, showAll=false, currentList=[];
+const clickTimers={};
+function combosFor(id){return COMBOS.filter(c=>c.keys.indexOf(id)>=0);}
+function combosBetween(a,b){return COMBOS.filter(c=>c.keys.indexOf(a)>=0 && c.keys.indexOf(b)>=0);}
+function isPartner(a,b){return combosBetween(a,b).length>0;}
+function visCombos(id){return combosFor(id).filter(function(c){return activeCats.has(c.cat);});}  // only active categories
+let sndOn=false, actx=null;
+function blip(){ if(!sndOn)return; try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==='suspended')actx.resume(); var o=actx.createOscillator(),g=actx.createGain(); o.type='triangle'; o.frequency.value=420+Math.random()*70; o.connect(g);g.connect(actx.destination); var n=actx.currentTime; g.gain.setValueAtTime(.0001,n); g.gain.exponentialRampToValueAtTime(.10,n+.005); g.gain.exponentialRampToValueAtTime(.0001,n+.11); o.start(n);o.stop(n+.12);}catch(e){} }
+function press(el){ el.classList.remove('press'); void el.offsetWidth; el.classList.add('press'); setTimeout(function(){el.classList.remove('press');},170); blip(); }
+function kc(id){const el=keyEls[id];if(!el)return (id==='del'?'Del':id.toUpperCase());return el.querySelector('.lab').textContent.replace(/^[⇧⊞▤⏎⌫]\s?/,'').trim()||id;}
+function center(id){const el=keyEls[id];if(!el)return null;const b=board.getBoundingClientRect(),r=el.getBoundingClientRect();return {x:r.left-b.left+r.width/2,y:r.top-b.top+r.height/2};}
+
+function onKeyClick(id){
+  if(advMode){ showAbility(id); return; }   // advanced-only mode: a single click shows the ability
+  if(clickTimers[id]){clearTimeout(clickTimers[id]);clickTimers[id]=null;onDouble(id);}
+  else{clickTimers[id]=setTimeout(()=>{clickTimers[id]=null;onSingle(id);},230);}
+}
+/* ===== advanced-only ability mode ===== */
+function setAdvMode(on){
+  advMode=!!on; clearAll();
+  board.classList.toggle('advmode',advMode);
+  document.getElementById('legend').style.display=advMode?'none':'';
+  Object.values(keyEls).forEach(e=>e.classList.remove('ability','sel'));
+  if(advMode && curAbilities){
+    Object.keys(curAbilities).forEach(function(id){ if(keyEls[id]) keyEls[id].classList.add('ability'); });
+    panel.className='panel';
+    panel.innerHTML='<div class="pk-head"><span class="pk-name">⚡ Advanced-only abilities</span></div>'+
+      '<p class="pk-desc">The glowing keys do things a <b>standard keyboard simply can’t</b>. Click any one to see what it does — and what a basic board would need instead.</p>';
+  }
+}
+function showAbility(id){
+  Object.values(keyEls).forEach(e=>e.classList.remove('sel','linked'));
+  links.innerHTML='';
+  if(keyEls[id]) keyEls[id].classList.add('sel');
+  var a=curAbilities && curAbilities[id];
+  var name=(DESC[id]?DESC[id][0]:id);
+  panel.className='panel';
+  if(a){
+    var linkNote='';
+    if(a.links && a.links.length){
+      var aC=center(id);
+      a.links.forEach(function(k){ var b=center(k); if(!aC||!b)return; if(keyEls[k])keyEls[k].classList.add('linked'); drawCurve(aC,b,'#ffb454',''); });
+      linkNote='<div class="heldnote" style="color:#cfe0ff;background:rgba(53,208,224,.08);border-color:rgba(53,208,224,.4)">🔗 The <b>highlighted keys</b> are what this single key connects to (or replaces on a standard board).</div>';
+    }
+    panel.innerHTML='<div class="pk-head"><span class="pk-name">'+name+'</span><span class="pk-type" style="color:var(--warn)">advanced-only</span></div>'+
+      '<p class="pk-desc"><b>'+a.what+'.</b></p>'+
+      '<div class="heldnote" style="color:#f0dcc0;background:rgba(255,180,84,.1);border-color:rgba(255,180,84,.4)">🆚 <b>On a standard keyboard:</b> '+a.vs+'</div>'+linkNote;
+  } else {
+    panel.innerHTML='<div class="pk-head"><span class="pk-name">'+name+'</span></div>'+
+      '<p class="pk-desc">This is an ordinary key — no advanced-only ability. Toggle <b>⚡ off</b> to explore the standard shortcuts it shares with a regular keyboard.</p>';
+  }
+}
+function onSingle(id){
+  if(focusedKey===id){ clearAll(); return; }                              // click the anchor again -> clear
+  if(held && focusedKey){                                                  // HELD: single-click a partner reveals it
+    var cs=combosBetween(focusedKey,id).filter(function(c){return activeCats.has(c.cat);});
+    if(cs.length){ revealConnection(cs[0]); return; }
+  }
+  setFocus(id,false);                                                      // otherwise just browse-focus (switch)
+}
+function onDouble(id){
+  if(focusedKey===id && held){ clearAll(); return; }                       // double-click the held key -> release
+  setFocus(id,true);                                                       // double-click a key -> HOLD it
+}
+function clearAll(){
+  focusedKey=null;held=false;currentList=[];
+  Object.values(keyEls).forEach(e=>e.classList.remove('sel','held','hint','partner','dim'));
+  links.innerHTML='';panel.className='panel empty';
+  panel.innerHTML='Nothing selected — <b>single-click</b> any key to focus it, then <b>double-click</b> it to 🔒 hold and explore its partners. Modifiers like <b>Ctrl</b>, <b>Alt</b>, <b>Shift</b> and <b>Win</b> are the hubs.';
+}
+function focusPartners(id){const s=new Set();visCombos(id).forEach(c=>c.keys.forEach(k=>{if(k!==id)s.add(k);}));return s;}
+
+function setFocus(id,hold){
+  focusedKey=id;held=!!hold;
+  Object.values(keyEls).forEach(e=>e.classList.remove('sel','held','hint','partner','dim'));
+  links.innerHTML='';
+  keyEls[id].classList.add('sel');
+  if(held)keyEls[id].classList.add('held');
+  const list=visCombos(id);
+  const partners=focusPartners(id);
+  partners.forEach(k=>{if(keyEls[k])keyEls[k].classList.add('hint');});
+  renderPanel(id,list);
+  if(showAll) drawAll(id,list,partners);
+}
+
+function drawCurve(a,b,col,label){
+  const mx=(a.x+b.x)/2,my=(a.y+b.y)/2-38;
+  const p=document.createElementNS(svgns,'path');
+  p.setAttribute('d','M '+a.x+' '+a.y+' Q '+mx+' '+my+' '+b.x+' '+b.y);
+  p.setAttribute('stroke',col);p.setAttribute('style','color:'+col);p.classList.add('on');links.appendChild(p);
+  const t=document.createElementNS(svgns,'text');
+  t.setAttribute('x',b.x);t.setAttribute('y',b.y-30);t.setAttribute('text-anchor','middle');t.setAttribute('class','lbl');t.textContent=label;links.appendChild(t);
+  setTimeout(()=>t.classList.add('on'),90);
+}
+const COLS=['#35d0e0','#b78cff','#ff6fb5','#51e08a','#ffb454'];
+
+function revealConnection(combo){
+  if(!combo || !activeCats.has(combo.cat)) return;
+  links.innerHTML='';
+  // reset all partners back to dots, then light up just this combo (colored by its category)
+  Object.values(keyEls).forEach(e=>e.classList.remove('partner','hint'));
+  focusPartners(focusedKey).forEach(k=>{if(keyEls[k])keyEls[k].classList.add('hint');});
+  const a=center(focusedKey);const col=CATS[combo.cat].color;
+  combo.keys.filter(k=>k!==focusedKey).forEach(k=>{
+    const b=center(k);if(!a||!b)return;
+    if(keyEls[k]){keyEls[k].classList.remove('hint');keyEls[k].classList.add('partner');}
+    drawCurve(a,b,col,combo.res);
+  });
+  highlightRow(combo);
+}
+function highlightRow(combo){const j=currentList.indexOf(combo);panel.querySelectorAll('.combo').forEach(r=>r.classList.toggle('active',+r.dataset.ci===j));}
+
+function drawAll(id,list,partners){
+  links.innerHTML='';const a=center(id);const seen={};
+  list.forEach(c=>c.keys.forEach(k=>{if(k===id||seen[k])return;const b=center(k);if(!a||!b)return;seen[k]=1;drawCurve(a,b,CATS[c.cat].color,c.res);}));
+  partners.forEach(k=>{if(keyEls[k]){keyEls[k].classList.remove('hint');keyEls[k].classList.add('partner');}});
+  Object.keys(keyEls).forEach(k=>{if(k!==id && !partners.has(k))keyEls[k].classList.add('dim');});
+}
+
+function renderPanel(id,list){
+  currentList=list;
+  const d=DESC[id]||defaultDesc(id,keyEls[id].querySelector('.lab').textContent);
+  let combosHtml='';
+  if(list.length){
+    combosHtml='<div class="pk-combos"><h4>🔗 Shortcuts this key is part of — click one to reveal it</h4>'+list.map((c,j)=>{
+      const keys=c.keys.map(k=>'<span class="kc">'+kc(k)+'</span>').join('<span class="plus">+</span>');
+      return '<div class="combo" data-ci="'+j+'" style="--rc:'+CATS[c.cat].color+'"><div class="keys">'+keys+'</div><div class="res"><b>'+c.res+'</b> — '+c.desc+'</div></div>';
+    }).join('')+'</div>';
+  } else {
+    combosHtml='<div class="none">No common shortcuts use this key on its own — its power shows when you hold a modifier (Ctrl, Alt, Win, Shift) <i>with</i> it. Focus one of those to see its map.</div>';
+  }
+  const heldNote = (held && list.length) ? '<div class="heldnote">🔒 Held — now single-click its dotted partners on the board to reveal each connection (or click a row below).</div>' : '';
+  panel.className='panel';
+  panel.innerHTML='<div class="pk-head"><span class="pk-name">'+d[0]+'</span><span class="pk-type">'+(list.length+' connections')+'</span></div><p class="pk-desc">'+d[1]+'</p>'+heldNote+combosHtml;
+  panel.querySelectorAll('.combo').forEach(row=>{row.addEventListener('click',()=>revealConnection(currentList[+row.dataset.ci]));});
+}
+
+document.getElementById('showall').addEventListener('change',function(){ showAll=this.checked; if(focusedKey) setFocus(focusedKey,held); });
+document.getElementById('snd').addEventListener('change',function(){ sndOn=this.checked; });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') clearAll(); });
+// category legend (click a chip to filter that category on/off)
+(function(){
+  var L=document.getElementById('legend');
+  CAT_ORDER.forEach(function(c){
+    var b=document.createElement('button');b.className='legchip on';b.dataset.cat=c;
+    b.style.setProperty('--cl',CATS[c].color);
+    b.innerHTML='<span class="ld"></span>'+CATS[c].label;
+    b.addEventListener('click',function(){ toggleCat(c,b); });
+    L.appendChild(b);
+  });
+})();
+function toggleCat(c,btn){
+  if(activeCats.has(c)){ activeCats.delete(c); btn.classList.remove('on'); }
+  else { activeCats.add(c); btn.classList.add('on'); }
+  if(focusedKey) setFocus(focusedKey,held);   // re-render the focused key with the new filter
+}
+
+/* ===== keyboard selector: pick which board to explore (all kept for teaching) ===== */
+function selectKeyboard(id){
+  var kb=null; KEYBOARDS.forEach(function(k){ if(k.id===id) kb=k; }); if(!kb) return;
+  activeKb=id; ROWS=kb.rows; COMBOS=kb.combos; curAbilities=kb.abilities||null;
+  advMode=false; board.classList.remove('advmode'); board.classList.toggle('mac', id==='mac'); document.getElementById('legend').style.display='';
+  var cb=document.getElementById('advmode'); if(cb) cb.checked=false;
+  document.getElementById('advtoggle').style.display = curAbilities ? 'flex' : 'none';
+  clearAll(); renderBoard();
+  document.querySelectorAll('#kbsel .kbcard').forEach(function(c){ c.classList.toggle('on', c.dataset.kb===id); });
+  document.getElementById('kbinfo').innerHTML=kb.blurb;
+}
+document.getElementById('advmode').addEventListener('change',function(){ setAdvMode(this.checked); });
+(function(){
+  var S=document.getElementById('kbsel');
+  KEYBOARDS.forEach(function(kb){
+    var c=document.createElement('button');c.className='kbcard';c.dataset.kb=kb.id;
+    c.innerHTML='<div class="kbn">'+kb.label+'</div><div class="kbs">'+kb.sub+'</div>';
+    c.addEventListener('click',function(){ selectKeyboard(kb.id); });
+    S.appendChild(c);
+  });
+})();
+selectKeyboard(activeKb);  // initial render
+
+})();
 </script>
 </body>
 </html>
