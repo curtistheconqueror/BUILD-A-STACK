@@ -258,9 +258,9 @@
   @keyframes thunk{0%{transform:translateY(3px) scale(.97)}100%{transform:translateY(0) scale(1)}}#view-keyboard .kbsel{display:flex;gap:10px;flex-wrap:wrap;margin:2px 0 12px}#view-keyboard .kbcard{cursor:pointer;text-align:left;background:rgba(8,12,22,.5);border:1px solid var(--border);border-radius:13px;padding:10px 15px;color:var(--ink);transition:.2s;min-width:160px}#view-keyboard .kbcard:hover{border-color:var(--acc);transform:translateY(-2px)}#view-keyboard .kbcard.on{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc),0 0 22px -8px var(--acc);background:linear-gradient(180deg,rgba(53,208,224,.14),rgba(53,208,224,.03))}#view-keyboard .kbcard .kbn{font-size:14px;font-weight:800}#view-keyboard .kbcard .kbs{font-size:11px;color:var(--muted);margin-top:2px}#view-keyboard .kbinfo{font-size:12.6px;line-height:1.6;color:#cdd9ef;background:var(--glass);border:1px solid var(--border);border-radius:12px;padding:11px 14px;margin:0 0 14px;max-width:860px}#view-keyboard .kbinfo b{color:var(--ink)}#view-keyboard .advtoggle{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:rgba(255,180,84,.08);border:1px solid rgba(255,180,84,.4);border-radius:12px;padding:10px 14px;margin:0 0 14px;max-width:860px}#view-keyboard .advtoggle b{color:var(--warn)}#view-keyboard .advhint{font-size:12px;color:var(--muted)}#view-keyboard .advhint b{color:#f0dcc0}#view-keyboard .key.ability{border-color:var(--warn)!important;box-shadow:0 0 0 2px var(--warn),0 0 22px -4px var(--warn);animation:abilitypulse 1.8s ease-in-out infinite}
   @keyframes abilitypulse{0%,100%{box-shadow:0 0 0 2px var(--warn),0 0 18px -4px var(--warn)}50%{box-shadow:0 0 0 2px var(--warn),0 0 30px 0 var(--warn)}}#view-keyboard .board.advmode .key:not(.ability){opacity:.26;filter:saturate(.5)}#view-keyboard .board.advmode .key.ability{cursor:pointer}#view-keyboard .board.advmode .key.linked{opacity:1;filter:none;border-color:var(--warn);box-shadow:0 0 0 1px var(--warn),0 0 16px -5px var(--warn)}#view-keyboard /* Mac board: space-gray aluminum body + black keys + blue secondary legends (like a real Mac keyboard) */
   .board.mac{background:linear-gradient(180deg,#4a4d53,#2f3136);border-color:#62656c;box-shadow:0 26px 70px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.14)}#view-keyboard .board.mac .key{background:linear-gradient(180deg,#303237,#24262a);border:1px solid rgba(255,255,255,.05);border-bottom:2px solid rgba(0,0,0,.55);color:#f3f4f6;border-radius:9px}#view-keyboard .board.mac .key.mod{background:linear-gradient(180deg,#34373c,#2a2c31);color:#eef0f3}#view-keyboard .board.mac .key .sub{color:#7fa8e6}#view-keyboard .board.mac .key:hover{border-color:#aeb4bf;box-shadow:0 8px 22px -6px rgba(0,0,0,.6)}#view-keyboard /* board */
-  .stage{position:relative;overflow-x:auto;padding-bottom:6px}#view-keyboard .board{position:relative;display:inline-block;padding:18px;border-radius:20px;
+  .stage{position:relative;overflow-x:hidden;padding-bottom:6px;text-align:center;width:96vw;margin-left:calc(50% - 48vw)}#view-keyboard .board{position:relative;display:inline-block;padding:18px;border-radius:20px;
     background:linear-gradient(180deg,rgba(20,28,46,.9),rgba(10,15,28,.92));
-    border:1px solid var(--border);box-shadow:0 26px 70px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.04)}#view-keyboard .row{display:flex;gap:7px;margin-bottom:7px}#view-keyboard .row:last-child{margin-bottom:0}#view-keyboard .spacer{flex:0 0 auto}#view-keyboard .key{position:relative;height:52px;min-width:52px;border-radius:10px;cursor:pointer;
+    border:1px solid var(--border);box-shadow:0 26px 70px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.04)}#view-keyboard .row{display:flex;gap:7px;margin-bottom:7px}#view-keyboard .row:last-child{margin-bottom:0}#view-keyboard .spacer{flex:0 0 auto}#view-keyboard .key{position:relative;height:var(--kh,52px);min-width:0;border-radius:10px;cursor:pointer;
     background:linear-gradient(180deg,var(--keytop),var(--keybg));border:1px solid rgba(140,165,210,.18);
     border-bottom:2px solid rgba(0,0,0,.45);display:flex;flex-direction:column;align-items:center;justify-content:center;
     padding:4px 6px;color:#dfe9fb;user-select:none;transition:transform .12s,box-shadow .2s,border-color .2s,background .2s,opacity .2s;flex:0 0 auto}#view-keyboard .key .lab{font-size:13px;font-weight:700;line-height:1.05;text-align:center}#view-keyboard .key .sub{font-size:9px;color:var(--muted);margin-top:1px;font-weight:600}#view-keyboard .key:hover{transform:translateY(-2px);border-color:var(--acc);box-shadow:0 8px 22px -6px var(--acc),0 0 0 1px rgba(53,208,224,.35)}#view-keyboard .key:active{transform:translateY(1px)}#view-keyboard .key.mod{background:linear-gradient(180deg,#243150,#1a2238);color:#cfe0ff}#view-keyboard .key.sel{border-color:var(--acc2);box-shadow:0 0 0 2px var(--acc2),0 0 26px -4px var(--acc2);transform:translateY(-3px);background:linear-gradient(180deg,#2a2150,#1d1838)}#view-keyboard .key.held{animation:heldpulse 1.5s ease-in-out infinite}#view-keyboard .key.held::before{content:"🔒";position:absolute;top:-11px;left:-7px;font-size:12px;filter:drop-shadow(0 0 4px var(--acc3));z-index:3}
@@ -271,8 +271,8 @@
   .links{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:5}#view-keyboard .links path{fill:none;stroke-width:2.4;stroke-linecap:round;opacity:0;filter:drop-shadow(0 0 5px currentColor)}#view-keyboard .links path.on{animation:draw .5s ease forwards}
   @keyframes draw{from{opacity:0;stroke-dasharray:0 700}to{opacity:.92;stroke-dasharray:700 0}}#view-keyboard .links .lbl{font-size:11.5px;font-weight:800;fill:#eaf1ff;paint-order:stroke;stroke:#05080f;stroke-width:3.5px;opacity:0;transition:opacity .4s .2s}#view-keyboard .links .lbl.on{opacity:1}#view-keyboard /* detail panel */
   .panel{margin-top:20px;background:var(--glass);backdrop-filter:blur(16px);border:1px solid var(--border);border-left:3px solid var(--acc2);border-radius:16px;padding:17px 19px;min-height:96px;max-width:780px}#view-keyboard .panel.empty{border-left-color:var(--border);color:var(--muted);font-size:13px;line-height:1.6}#view-keyboard .panel.empty b{color:var(--acc)}#view-keyboard .pk-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}#view-keyboard .pk-name{font-size:19px;font-weight:800}#view-keyboard .pk-type{font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;font-weight:800;color:var(--acc)}#view-keyboard .pk-desc{font-size:13.6px;line-height:1.6;color:#dbe6fb;margin:9px 0 0}#view-keyboard .pk-combos{margin-top:14px}#view-keyboard .pk-combos h4{margin:0 0 8px;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--acc3);font-weight:800;display:flex;align-items:center;gap:8px}#view-keyboard .pk-combos h4::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--acc3),transparent);opacity:.45}#view-keyboard .combo{display:flex;align-items:center;gap:10px;padding:8px 11px;margin:3px -9px;border-radius:9px;font-size:13px;color:#dbe6fb;cursor:pointer;border-left:3px solid var(--rc,transparent);transition:background .15s,box-shadow .15s}#view-keyboard .combo:hover{background:rgba(255,255,255,.04)}#view-keyboard .combo.active{background:rgba(255,111,181,.12);box-shadow:inset 0 0 0 1px rgba(255,111,181,.5)}#view-keyboard .combo .keys{display:flex;align-items:center;gap:4px;flex:0 0 auto}#view-keyboard .kc{font-family:ui-monospace,monospace;font-size:11px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:2px 7px;color:#fff;white-space:nowrap}#view-keyboard .combo .plus{color:var(--muted);font-size:11px}#view-keyboard .combo .res{color:#cdd9ef}#view-keyboard .combo .res b{color:var(--ink)}#view-keyboard .none{color:var(--muted);font-size:12.5px;margin-top:8px}
-  @media (max-width:900px){#view-keyboard .key{height:46px;min-width:46px}#view-keyboard .key .lab{font-size:12px} }
-  @media (max-width:640px){#view-keyboard .board{padding:11px}#view-keyboard .row{gap:5px;margin-bottom:5px}#view-keyboard .key{height:40px;min-width:36px;border-radius:8px}#view-keyboard .key .lab{font-size:10.5px}#view-keyboard .key .sub{display:none} }
+  @media (max-width:900px){#view-keyboard .key .lab{font-size:12px} }
+  @media (max-width:640px){#view-keyboard .board{padding:11px}#view-keyboard .row{gap:5px;margin-bottom:5px}#view-keyboard .key{border-radius:8px}#view-keyboard .key .lab{font-size:10.5px}#view-keyboard .key .sub{display:none} }
 
 #view-keyboard .row{opacity:1;transform:none}
 #view-keyboard .key .sub{animation:none}
@@ -1260,7 +1260,7 @@ function show(which){TABS.forEach(function(t){var on=t[0]===which;document.getEl
 TABS.forEach(function(t){document.getElementById(t[1]).addEventListener('click',function(){show(t[0]);});});
 
 /* ===== Keyboard tab logic (scoped IIFE from sandbox) ===== */
-(function(){
+;(function(){
 
 const svgns='http://www.w3.org/2000/svg';
 /* ---------- key layout (standard PC, TKL-style: main block + arrows) ---------- */
@@ -1497,16 +1497,17 @@ function renderBoard(){
   ROWS.forEach(row=>{
   const r=document.createElement('div');r.className='row';
   row.forEach(k=>{
-    if(k[0]==='sp'){const s=document.createElement('div');s.className='spacer';s.style.width=(k[1]*U)+'px';r.appendChild(s);return;}
+    if(k[0]==='sp'){const s=document.createElement('div');s.className='spacer';s.style.width='calc(var(--u,59px) * '+k[1]+')';r.appendChild(s);return;}
     const id=k[0],label=k[1],sub=k[2],w=k[3],type=k[4];
     const el=document.createElement('div');el.className='key'+(type==='mod'?' mod':'');
-    el.style.width=((w||1)*U-7)+'px';el.dataset.id=id;
+    el.style.width='calc(var(--u,59px) * '+(w||1)+' - 7px)';el.dataset.id=id;
     el.innerHTML='<span class="lab">'+label+'</span>'+(sub?'<span class="sub">'+sub+'</span>':'');
     el.addEventListener('click',()=>{press(el);onKeyClick(id);});
     r.appendChild(el);keyEls[id]=el;
   });
   board.appendChild(r);
   });
+  fitBoard();
 }
 
 /* ---------- interaction ---------- */
@@ -1687,6 +1688,30 @@ document.getElementById('advmode').addEventListener('change',function(){ setAdvM
     c.addEventListener('click',function(){ selectKeyboard(kb.id); });
     S.appendChild(c);
   });
+})();
+/* ===== scale-to-fit: lay the whole board out on screen; only scroll when it truly can't fit ===== */
+var BASE_U=59, MINU=44, fitTimer=null;
+function fitBoard(){
+  if(!board) return;
+  var st=board.parentElement; if(!st) return;
+  board.style.setProperty('--u', BASE_U+'px'); board.style.setProperty('--kh','52px'); // reset to natural to measure
+  var avail=st.clientWidth; if(!avail) return;        // hidden tab -> skip (re-runs when shown)
+  var natW=board.scrollWidth; if(!natW) return;
+  var u=BASE_U*(avail-2)/natW; if(u>BASE_U)u=BASE_U;  // never upscale past natural
+  var scroll=false; if(u<MINU){ u=MINU; scroll=true; }// floor the size; below it, allow a scrollbar
+  board.style.setProperty('--u', u+'px');
+  board.style.setProperty('--kh', Math.round(u*52/59)+'px');
+  st.style.overflowX = scroll ? 'auto' : 'hidden';
+  if(links) links.innerHTML='';                                  // clear stale lines after a resize
+  Object.values(keyEls).forEach(function(e){ e.classList.remove('partner'); });
+}
+/* ResizeObserver on the stage = robust trigger: fires when the tab becomes visible
+   (stage width 0 -> full) AND on window resize. (Observes the stage, not the board,
+   so fitBoard's own --u changes can't loop it.) */
+(function(){
+  var st = board && board.parentElement;
+  if(window.ResizeObserver && st){ new ResizeObserver(function(){ requestAnimationFrame(fitBoard); }).observe(st); }
+  window.addEventListener('resize', function(){ clearTimeout(fitTimer); fitTimer=setTimeout(fitBoard, 120); });
 })();
 selectKeyboard(activeKb);  // initial render
 
