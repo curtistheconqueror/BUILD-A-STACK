@@ -242,6 +242,42 @@
     .os-hero h2{font-size:21.5px}
   }
 
+  /* ===== Start Here tab (Phase E) ===== */
+  .sh-hero{background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--border);border-left:3px solid var(--ok);border-radius:18px;padding:20px 22px;margin-bottom:18px}
+  .sh-hero h2{margin:0 0 11px;font-size:21px;line-height:1.3}
+  .sh-hero p{margin:0 0 10px;font-size:14.7px;line-height:1.72;color:#dbe6fb}
+  .sh-hero p:last-child{margin-bottom:0}
+  .sh-hero b{color:#fff}
+  .sh-prog{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--muted);margin-bottom:14px}
+  .sh-prog b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .sh-prog .sh-bar{flex:1;height:7px;border-radius:9px;background:rgba(130,155,200,.14);overflow:hidden}
+  .sh-prog .sh-bar i{display:block;height:100%;width:0;border-radius:9px;background:linear-gradient(90deg,var(--ok),var(--acc));box-shadow:0 0 12px rgba(81,224,138,.5);transition:width .55s cubic-bezier(.34,1.4,.5,1)}
+  .ptcard{background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin-bottom:14px;transition:border-color .3s}
+  .ptcard.done{border-color:var(--ok)}
+  .ptcard .pth{display:flex;align-items:center;gap:13px}
+  .ptcard .pti{font-size:25px;flex:none}
+  .ptcard .ptq{font-size:15.5px;font-weight:700;color:#eaf1ff;line-height:1.35}
+  .ptbtns{display:flex;gap:10px;flex-wrap:wrap;margin-top:13px}
+  .ptbtn{cursor:pointer;border:1px solid var(--border);background:rgba(8,12,22,.5);color:var(--ink);font-size:13.3px;font-weight:700;padding:9px 16px;border-radius:11px;transition:.2s}
+  .ptbtn.know:hover{border-color:var(--ok);box-shadow:0 0 18px -6px var(--ok)}
+  .ptbtn.teach:hover{border-color:var(--acc);box-shadow:0 0 18px -6px var(--acc)}
+  .ptbtn.know.sel{background:var(--ok);color:#06101d;border-color:var(--ok)}
+  .ptbtn.teach.sel{background:var(--acc);color:#06101d;border-color:var(--acc)}
+  .ptwrap{display:grid;grid-template-rows:0fr;transition:grid-template-rows .44s cubic-bezier(.34,1.4,.5,1)}
+  .ptcard.open .ptwrap{grid-template-rows:1fr}
+  .ptclip{overflow:hidden}
+  .ptbody{padding-top:13px;font-size:13.9px;line-height:1.66;color:#dbe6fb}
+  .ptbody .pt-why{margin-top:9px;color:#cdd9ef}
+  .ptbody .pt-why b{color:var(--ink)} .ptbody b{color:var(--ink)}
+  .ptbody .pt-try{margin-top:11px;border-left:3px solid var(--acc);background:rgba(8,12,22,.4);border-radius:0 10px 10px 0;padding:9px 12px;font-size:13.2px;color:#cdd9ef}
+  .ptbody .pt-try b{color:var(--acc)}
+  .ptbody kbd{font-family:ui-monospace,monospace;font-size:11.5px;background:rgba(255,255,255,.09);border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:#fff}
+  .sh-summary{background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--ok);border-radius:16px;padding:18px 20px;margin-top:4px;box-shadow:0 0 34px -12px var(--ok)}
+  .sh-summary h3{margin:0 0 7px;font-size:18px}
+  .sh-summary p{margin:0 0 13px;font-size:14.2px;line-height:1.65;color:#dbe6fb}
+  .sh-summary b{color:var(--ink)}
+  .sh-summary .sh-go{cursor:pointer;background:linear-gradient(180deg,rgba(81,224,138,.22),rgba(81,224,138,.05));border:1px solid var(--ok);color:var(--ink);font-size:14px;font-weight:700;padding:11px 20px;border-radius:12px;transition:.2s}
+  .sh-summary .sh-go:hover{box-shadow:0 0 22px -6px var(--ok)}
   /* ===== Keyboard tab (scoped from sandbox) ===== */
 
   :root{--bg0:#05080f;--bg1:#0a1020;--ink:#eaf1ff;--muted:#8ea0c4;--acc:#35d0e0;--acc2:#b78cff;--acc3:#ff6fb5;
@@ -286,9 +322,20 @@
   <h1>BUILD-A-STACK</h1>
   <div class="sub">Learn how real systems connect — bridges, ports, sockets, gateways — then wire one yourself. Built off the Tradenificent Stack Map.</div>
 </header>
-<div class="tabs"><button id="tab-learn" class="on">📖 Learn</button><button id="tab-build">🔧 Build</button><button id="tab-pcmac">💻 PC vs Mac</button><button id="tab-keyboard">⌨️ Keyboard</button></div>
+<div class="tabs"><button id="tab-start" class="on">🚀 Start Here</button><button id="tab-learn">📖 Learn</button><button id="tab-build">🔧 Build</button><button id="tab-pcmac">💻 PC vs Mac</button><button id="tab-keyboard">⌨️ Keyboard</button></div>
 <div class="wrap">
-  <div id="view-learn" class="view">
+  <div id="view-start" class="view">
+    <div class="sh-hero">
+      <h2>👋 New to all this? You’re in exactly the right place.</h2>
+      <p>No experience needed. We start from the <i>very</i> beginning — yes, like turning on your computer — and build up one small step at a time, until how a whole software “stack” fits together actually makes sense.</p>
+      <p>First, a <b>2-minute warm-up</b> on a few things you bump into every day. Be honest about what you know — and learn the ones you don’t. No grades, just gaps filled.</p>
+    </div>
+    <div class="seclabel" style="--ca:var(--ok)">Quick knowledge check</div>
+    <div class="sh-prog"><span><b id="sh-count">0</b> of <span id="sh-total">4</span> checked</span><span class="sh-bar"><i id="sh-fill"></i></span></div>
+    <div id="pretest-list"></div>
+    <div id="pretest-summary"></div>
+  </div>
+  <div id="view-learn" class="view hide">
     <div class="prog"><span>explored <span class="pct" id="pc">0</span>/<span id="tot">0</span></span><span class="pbar"><i id="fill"></i></span></div>
     <div id="learn-list"></div>
   </div>
@@ -368,7 +415,7 @@
   </div>
 </div>
 <dialog id="termPopout" class="termpop"><div class="tp-card"><button class="tp-x" id="tpClose" aria-label="Close">✕</button><div class="tp-title" id="tpTitle"></div><div class="tp-text" id="tpText"></div><div class="tp-foot">quick definition · Esc or click outside to close</div></div></dialog>
-<footer>Self-contained · works on phone · tablet · desktop · Phase A·1–A·3 (29 concepts) · Phase B·1–B·2 (4 challenges) · Phase D·1 (PC vs Mac) · D·2 (Keyboard — 3 boards)</footer>
+<footer>Self-contained · works on phone · tablet · desktop · Phase A·1–A·3 (29 concepts) · Phase B·1–B·2 (4 challenges) · Phase D·1 (PC vs Mac) · D·2 (Keyboard) · Phase E·1 (Start Here)</footer>
 <script>
 /* ===== living background wires ===== */
 (function(){
@@ -1283,9 +1330,61 @@ const PCMAC=[
   host.querySelectorAll('.cmpcard').forEach(function(c){io.observe(c);});
 })();
 
+/* ===== START HERE: knowledge pre-test (Phase E·1) ===== */
+const PRETEST=[
+  {icon:'🔖', t:'Bookmark', q:'Do you know what a bookmark is — and how to make one?',
+   a:'A bookmark is a <b>saved shortcut to a webpage</b>, so you can return with one click instead of re-typing the address. Think of it as a sticky note for the internet.',
+   why:'It saves you from hunting for the sites you visit often.',
+   tip:'Try it now: press <kbd>Ctrl</kbd>+<kbd>D</kbd> (or <kbd>⌘</kbd>+<kbd>D</kbd> on a Mac) to bookmark this very page.'},
+  {icon:'🧩', t:'Extension', q:'Do you know what a browser extension is?',
+   a:'A small <b>add-on that gives your browser extra powers</b> — ad blockers, password managers, grammar helpers. You install them from your browser’s store (like the Chrome Web Store).',
+   why:'They customize and supercharge your browser — but only install ones you trust, because an extension can see the pages you visit.',
+   tip:'Peek now: open your browser menu ▸ Extensions to see what’s already installed.'},
+  {icon:'🕘', t:'History', q:'Do you know what your browser history is?',
+   a:'A <b>running list of every page you’ve visited</b>, kept by the browser. Press <kbd>Ctrl</kbd>+<kbd>H</kbd> to open it.',
+   why:'Great for finding “that site from yesterday” — and worth knowing it’s logged on your computer (you can clear it any time).',
+   tip:'Try it: press <kbd>Ctrl</kbd>+<kbd>H</kbd> and scroll your recent pages.'},
+  {icon:'🗃️', t:'Cache', q:'Do you know what “cache” means?',
+   a:'A <b>stash of website pieces</b> (images, files) your browser quietly saved so pages load faster next time.',
+   why:'The catch: sometimes it shows you an <b>old</b> version of a page — which is exactly why “clear your cache” or a <b>hard refresh</b> (<kbd>Ctrl</kbd>+<kbd>F5</kbd>) fixes weird glitches.',
+   tip:'Remember it: next time a page looks broken or stale, hard-refresh with <kbd>Ctrl</kbd>+<kbd>F5</kbd>.'},
+];
+(function(){
+  var host=document.getElementById('pretest-list'); if(!host) return;
+  document.getElementById('sh-total').textContent=PRETEST.length;
+  var answered=0, knew=0;
+  PRETEST.forEach(function(p){
+    var card=document.createElement('div');card.className='ptcard';
+    card.innerHTML='<div class="pth"><span class="pti">'+p.icon+'</span><span class="ptq">'+p.q+'</span></div>'+
+      '<div class="ptbtns"><button class="ptbtn know">✅ I know this</button><button class="ptbtn teach">🤔 Teach me</button></div>'+
+      '<div class="ptwrap"><div class="ptclip"><div class="ptbody"><div class="pt-a">'+p.a+'</div><div class="pt-why"><b>Why it matters:</b> '+p.why+'</div><div class="pt-try">'+p.tip+'</div></div></div></div>';
+    host.appendChild(card);
+    var know=card.querySelector('.know'), teach=card.querySelector('.teach'), did=false;
+    function mark(which){
+      card.classList.add('open','done');
+      know.classList.toggle('sel', which==='know'); teach.classList.toggle('sel', which==='teach');
+      if(!did){ did=true; answered++; if(which==='know')knew++; prog(); }
+    }
+    know.addEventListener('click',function(){ mark('know'); });
+    teach.addEventListener('click',function(){ mark('teach'); });
+  });
+  function prog(){
+    document.getElementById('sh-count').textContent=answered;
+    document.getElementById('sh-fill').style.width=Math.round(answered/PRETEST.length*100)+'%';
+    if(answered===PRETEST.length){
+      var s=document.getElementById('pretest-summary');
+      s.className='sh-summary';
+      s.innerHTML='<h3>🎉 Warm-up complete — gaps filled.</h3><p>You already knew <b>'+knew+'</b> of '+PRETEST.length+'. The everyday stuff is out of the way — now you’re ready to see how the bigger pieces connect. Next stop: the <b>📖 Learn</b> tab, where each concept builds on the last.</p><button class="sh-go">Take me to Learn →</button>';
+      s.querySelector('.sh-go').addEventListener('click',function(){ show('learn'); window.scrollTo(0,0); });
+    }
+  }
+})();
+
 /* ===== tabs (crossfade, N tabs) ===== */
-const TABS=[['learn','tab-learn','view-learn'],['build','tab-build','view-build'],['pcmac','tab-pcmac','view-pcmac'],['keyboard','tab-keyboard','view-keyboard']];
-function show(which){TABS.forEach(function(t){var on=t[0]===which;document.getElementById(t[1]).classList.toggle('on',on);var v=document.getElementById(t[2]);v.classList.toggle('hide',!on);if(on){v.style.animation='none';void v.offsetWidth;v.style.animation='';}});}
+const TABS=[['start','tab-start','view-start'],['learn','tab-learn','view-learn'],['build','tab-build','view-build'],['pcmac','tab-pcmac','view-pcmac'],['keyboard','tab-keyboard','view-keyboard']];
+function show(which){TABS.forEach(function(t){var on=t[0]===which;document.getElementById(t[1]).classList.toggle('on',on);var v=document.getElementById(t[2]);v.classList.toggle('hide',!on);if(on){v.style.animation='none';void v.offsetWidth;v.style.animation='';}});
+  // Learn starts hidden now, so its scroll-reveal observer never fires — reveal its rows on open.
+  if(which==='learn'){var _lr=document.querySelectorAll('#view-learn .row');for(var _i=0;_i<_lr.length;_i++)_lr[_i].classList.add('in');}}
 TABS.forEach(function(t){document.getElementById(t[1]).addEventListener('click',function(){show(t[0]);});});
 
 /* ===== Keyboard tab logic (scoped IIFE from sandbox) ===== */
