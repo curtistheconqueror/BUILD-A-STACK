@@ -276,6 +276,7 @@
 
 #view-keyboard .row{opacity:1;transform:none}
 #view-keyboard .key .sub{animation:none}
+#view-keyboard .key,#view-keyboard .combo,#view-keyboard .kbcard,#view-keyboard .legchip,#view-keyboard .toggle{touch-action:manipulation}
 </style>
 </head>
 <body>
@@ -1530,7 +1531,7 @@ function renderBoard(){
     const el=document.createElement('div');el.className='key'+(type==='mod'?' mod':'');
     el.style.width='calc(var(--u,59px) * '+(w||1)+' - 7px)';el.dataset.id=id;
     el.innerHTML='<span class="lab">'+label+'</span>'+(sub?'<span class="sub">'+sub+'</span>':'');
-    el.addEventListener('click',()=>{press(el);onKeyClick(id);});
+    el.addEventListener('click',()=>{press(el); (TOUCH?onKeyTap:onKeyClick)(id);});
     r.appendChild(el);keyEls[id]=el;
   });
   board.appendChild(r);
@@ -1602,6 +1603,17 @@ function onSingle(id){
 function onDouble(id){
   if(focusedKey===id && held){ clearAll(); return; }                       // double-click the held key -> release
   setFocus(id,true);                                                       // double-click a key -> HOLD it
+}
+/* ===== touch-only path (gated: desktop never runs this) ===== */
+const TOUCH = window.matchMedia('(hover:none) and (pointer:coarse)').matches;  // primary input is touch
+function onKeyTap(id){   // one tap = focus+hold; tap dotted partners to reveal; tap the key again to clear
+  if(advMode){ showAbility(id); return; }
+  if(focusedKey===id){ clearAll(); return; }
+  if(held && focusedKey){
+    var cs=combosBetween(focusedKey,id).filter(function(c){return activeCats.has(c.cat);});
+    if(cs.length){ revealConnection(cs[0]); return; }
+  }
+  setFocus(id, true);
 }
 function clearAll(){
   focusedKey=null;held=false;currentList=[];
@@ -1740,8 +1752,12 @@ function fitBoard(){
   var st = board && board.parentElement;
   if(window.ResizeObserver && st){ new ResizeObserver(function(){ requestAnimationFrame(fitBoard); }).observe(st); }
   window.addEventListener('resize', function(){ clearTimeout(fitTimer); fitTimer=setTimeout(fitBoard, 120); });
+  // belt-and-suspenders: also re-fit when the Keyboard tab is opened (covers any observer timing quirk)
+  var tk=document.getElementById('tab-keyboard');
+  if(tk) tk.addEventListener('click', function(){ requestAnimationFrame(fitBoard); setTimeout(fitBoard,80); setTimeout(fitBoard,260); });
 })();
 selectKeyboard(activeKb);  // initial render
+if(TOUCH){ var _hn=document.querySelector('.hint'); if(_hn) _hn.innerHTML='<b>Tap</b> a key to explore its shortcuts — then <b>tap</b> its dotted partners <span class="dotkey"></span> (or a row below) to reveal each connection. Tap the key again to clear.'; }
 
 })();
 </script>
