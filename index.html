@@ -366,6 +366,9 @@
   #view-start .sh-gtxt{display:flex;flex-direction:column;line-height:1.32}
   #view-start .sh-gtxt b{font-size:14.5px;color:#eaf1ff}
   #view-start .sh-gtxt span{font-size:12.5px;color:var(--muted)}
+  #view-start .sh-resetwrap{text-align:center;margin-top:16px}
+  #view-start .sh-reset{cursor:pointer;background:none;border:none;color:var(--muted);font-size:12.5px;font-weight:600;text-decoration:underline;text-underline-offset:3px;padding:6px}
+  #view-start .sh-reset:hover{color:var(--bad)}
   @media (max-width:640px){ #view-start .sh-nav{gap:7px} #view-start .sh-itab{padding:8px 11px;font-size:12.4px} }
   /* ===== Keyboard tab (scoped from sandbox) ===== */
 
@@ -475,6 +478,7 @@
         <p>Here’s everything you’ve picked up. Clear all four stages and you’re <b>ready to Build a Stack</b> — the hand-off into the Learn &amp; Build tabs.</p></div>
       <div id="grad-checklist"></div>
       <div id="grad-panel" class="sh-summary"></div>
+      <div class="sh-resetwrap"><button class="sh-reset" onclick="shResetProgress()">↺ reset my progress</button></div>
       <div class="sh-pnav"><button class="sh-pnbtn" data-next="shp-tricks">← Back</button><button class="sh-pnbtn primary" onclick="show('learn');window.scrollTo(0,0);">Build a Stack →</button></div>
     </section>
   </div>
@@ -1473,6 +1477,22 @@ const PCMAC=[
   host.querySelectorAll('.cmpcard').forEach(function(c){io.observe(c);});
 })();
 
+/* ===== Start Here — progress persistence (localStorage) ===== */
+var SH_KEY='bas_starthere_v1';
+var shState;
+try{ shState=JSON.parse(localStorage.getItem(SH_KEY))||{}; }catch(e){ shState={}; }
+shState.warmup=shState.warmup||{}; shState.steps=shState.steps||{}; shState.dives=shState.dives||{}; shState.tricks=shState.tricks||{};
+function shSave(){ try{ localStorage.setItem(SH_KEY,JSON.stringify(shState)); }catch(e){} }
+function shResetProgress(){ try{ localStorage.removeItem(SH_KEY); }catch(e){} location.reload(); }
+var SH_PANES=['shp-warmup','shp-steps','shp-features','shp-tricks','shp-grad'];
+var shDone={};
+var GRAD_STAGES=[
+  {id:'shp-warmup',icon:'🔥',name:'Warm-up',got:'the everyday words — bookmarks, extensions, history, cache'},
+  {id:'shp-steps',icon:'🪜',name:'Do This Now',got:'7 hands-on moves you did yourself'},
+  {id:'shp-features',icon:'🔍',name:'Feature deep-dives',got:'how 6 core features actually affect you'},
+  {id:'shp-tricks',icon:'✨',name:'Cool tricks',got:'8 power-user shortcuts'},
+];
+
 /* ===== START HERE: knowledge pre-test (Phase E·1) ===== */
 const PRETEST=[
   {icon:'🔖', t:'Bookmark', q:'Do you know what a bookmark is — and how to make one?',
@@ -1495,22 +1515,25 @@ const PRETEST=[
 (function(){
   var host=document.getElementById('pretest-list'); if(!host) return;
   document.getElementById('sh-total').textContent=PRETEST.length;
-  var answered=0, knew=0;
-  PRETEST.forEach(function(p){
+  var answered=0, knew=0, marks=[];
+  PRETEST.forEach(function(p,idx){
     var card=document.createElement('div');card.className='ptcard';
     card.innerHTML='<div class="pth"><span class="pti">'+p.icon+'</span><span class="ptq">'+p.q+'</span></div>'+
       '<div class="ptbtns"><button class="ptbtn know">✅ I know this</button><button class="ptbtn teach">🤔 Teach me</button></div>'+
       '<div class="ptwrap"><div class="ptclip"><div class="ptbody"><div class="pt-a">'+p.a+'</div><div class="pt-why"><b>Why it matters:</b> '+p.why+'</div><div class="pt-try">'+p.tip+'</div></div></div></div>';
     host.appendChild(card);
     var know=card.querySelector('.know'), teach=card.querySelector('.teach'), did=false;
-    function mark(which){
+    function mark(which,restore){
       card.classList.add('open','done');
       know.classList.toggle('sel', which==='know'); teach.classList.toggle('sel', which==='teach');
       if(!did){ did=true; answered++; if(which==='know')knew++; prog(); }
+      if(!restore){ shState.warmup[idx]=which; shSave(); }
     }
+    marks[idx]=mark;
     know.addEventListener('click',function(){ mark('know'); });
     teach.addEventListener('click',function(){ mark('teach'); });
   });
+  PRETEST.forEach(function(p,idx){ if(shState.warmup[idx]) marks[idx](shState.warmup[idx],true); });
   function prog(){
     document.getElementById('sh-count').textContent=answered;
     document.getElementById('sh-fill').style.width=Math.round(answered/PRETEST.length*100)+'%';
@@ -1543,7 +1566,7 @@ const STEPS=[
 (function(){
   var host=document.getElementById('steps-list'); if(!host) return;
   document.getElementById('st-total').textContent=STEPS.length;
-  var done=0, cards=[];
+  var done=0, cards=[], completers=[];
   STEPS.forEach(function(s,idx){
     var card=document.createElement('div');card.className='sh-step'+(idx===0?'':' locked');
     card.innerHTML='<div class="sh-stepn">'+(idx+1)+'</div>'+
@@ -1553,7 +1576,7 @@ const STEPS=[
       '<div class="sh-stok"><div class="sh-stok-c"><div class="sh-stok-b"><b>Nice.</b> '+s.ok+'</div></div></div>';
     host.appendChild(card);cards.push(card);
     var didit=card.querySelector('.sh-didit'), skip=card.querySelector('.sh-skip');
-    function complete(){
+    function complete(restore){
       if(card.classList.contains('done')) return;
       card.classList.remove('locked');card.classList.add('done');
       didit.textContent='✓ Done';
@@ -1561,15 +1584,18 @@ const STEPS=[
       document.getElementById('st-count').textContent=done;
       document.getElementById('st-fill').style.width=Math.round(done/STEPS.length*100)+'%';
       if(idx+1<cards.length) cards[idx+1].classList.remove('locked');
+      if(!restore){ shState.steps[idx]=true; shSave(); }
       if(done===STEPS.length){
         shMarkDone('shp-steps');
         var sm=document.getElementById('steps-summary');sm.className='sh-summary';sm.style.marginTop='4px';
         sm.innerHTML='<h3>🎉 You just did '+STEPS.length+' real things.</h3><p>That’s more hands-on practice than most people try in a month. Hit <b>Next</b> below to see <i>why</i> these everyday features work the way they do.</p>';
       }
     }
+    completers[idx]=complete;
     didit.addEventListener('click',function(){ if(!card.classList.contains('locked')) complete(); });
     if(skip) skip.addEventListener('click',function(){ if(!card.classList.contains('locked')) complete(); });
   });
+  for(var ri=0;ri<STEPS.length;ri++){ if(shState.steps[ri]) completers[ri](true); }
 })();
 
 /* ===== Start Here · Stage 3 — Feature deep-dives (Phase E·3) ===== */
@@ -1590,27 +1616,29 @@ const DIVES=[
 (function(){
   var host=document.getElementById('dives-list'); if(!host) return;
   document.getElementById('dv-total').textContent=DIVES.length;
-  var seen=0;
-  DIVES.forEach(function(d){
+  var seen=0, revealers=[];
+  DIVES.forEach(function(d,idx){
     var card=document.createElement('div');card.className='sh-dive';
     card.innerHTML='<div class="sh-dvh"><span class="sh-dvi">'+d.icon+'</span><span class="sh-dvt">'+d.t+'</span><span class="sh-dvchev">▶</span></div>'+
       '<div class="sh-dvwrap"><div class="sh-dvclip"><div class="sh-dvbody"><div class="sh-dv-what">'+d.what+'</div><div class="sh-dv-you"><b>How it affects you:</b> '+d.you+'</div></div></div></div>';
     host.appendChild(card);
     var head=card.querySelector('.sh-dvh'), opened=false;
-    head.addEventListener('click',function(){
-      card.classList.toggle('open');
-      if(!opened && card.classList.contains('open')){
-        opened=true; card.classList.add('seen'); seen++;
-        document.getElementById('dv-count').textContent=seen;
-        document.getElementById('dv-fill').style.width=Math.round(seen/DIVES.length*100)+'%';
-        if(seen===DIVES.length){
-          shMarkDone('shp-features');
-          var sm=document.getElementById('dives-summary');sm.className='sh-summary';sm.style.marginTop='4px';
-          sm.innerHTML='<h3>🔍 You’ve seen how the everyday pieces work.</h3><p>None of it is magic — just features doing a job. Next up: a few <b>cool tricks</b> that make you feel fast.</p>';
-        }
+    function reveal(restore){
+      if(opened) return;
+      opened=true; card.classList.add('seen'); seen++;
+      document.getElementById('dv-count').textContent=seen;
+      document.getElementById('dv-fill').style.width=Math.round(seen/DIVES.length*100)+'%';
+      if(!restore){ shState.dives[idx]=true; shSave(); }
+      if(seen===DIVES.length){
+        shMarkDone('shp-features');
+        var sm=document.getElementById('dives-summary');sm.className='sh-summary';sm.style.marginTop='4px';
+        sm.innerHTML='<h3>🔍 You’ve seen how the everyday pieces work.</h3><p>None of it is magic — just features doing a job. Next up: a few <b>cool tricks</b> that make you feel fast.</p>';
       }
-    });
+    }
+    head.addEventListener('click',function(){ card.classList.toggle('open'); if(card.classList.contains('open')) reveal(false); });
+    revealers[idx]=reveal;
   });
+  for(var ri=0;ri<DIVES.length;ri++){ if(shState.dives[ri]) revealers[ri](true); }
 })();
 
 /* ===== Start Here · Stage 4 — Cool tricks (Phase E·5) ===== */
@@ -1635,38 +1663,32 @@ const TRICKS=[
 (function(){
   var host=document.getElementById('tricks-list'); if(!host) return;
   document.getElementById('tk-total').textContent=TRICKS.length;
-  var seen=0;
-  TRICKS.forEach(function(d){
+  var seen=0, revealers=[];
+  TRICKS.forEach(function(d,idx){
     var card=document.createElement('div');card.className='sh-dive';
     card.innerHTML='<div class="sh-dvh"><span class="sh-dvi">'+d.icon+'</span><span class="sh-dvt">'+d.t+'</span><span class="sh-dvchev">▶</span></div>'+
       '<div class="sh-dvwrap"><div class="sh-dvclip"><div class="sh-dvbody"><div class="sh-dv-what">'+d.what+'</div><div class="sh-dv-you"><b>Why it’s great:</b> '+d.you+'</div></div></div></div>';
     host.appendChild(card);
     var head=card.querySelector('.sh-dvh'), opened=false;
-    head.addEventListener('click',function(){
-      card.classList.toggle('open');
-      if(!opened && card.classList.contains('open')){
-        opened=true; card.classList.add('seen'); seen++;
-        document.getElementById('tk-count').textContent=seen;
-        document.getElementById('tk-fill').style.width=Math.round(seen/TRICKS.length*100)+'%';
-        if(seen===TRICKS.length){
-          shMarkDone('shp-tricks');
-          var sm=document.getElementById('tricks-summary');sm.className='sh-summary';sm.style.marginTop='4px';
-          sm.innerHTML='<h3>✨ Look at you — that’s a power-user toolkit.</h3><p>Keep using these and they’ll become second nature. One stage left: your <b>graduation</b>.</p>';
-        }
+    function reveal(restore){
+      if(opened) return;
+      opened=true; card.classList.add('seen'); seen++;
+      document.getElementById('tk-count').textContent=seen;
+      document.getElementById('tk-fill').style.width=Math.round(seen/TRICKS.length*100)+'%';
+      if(!restore){ shState.tricks[idx]=true; shSave(); }
+      if(seen===TRICKS.length){
+        shMarkDone('shp-tricks');
+        var sm=document.getElementById('tricks-summary');sm.className='sh-summary';sm.style.marginTop='4px';
+        sm.innerHTML='<h3>✨ Look at you — that’s a power-user toolkit.</h3><p>Keep using these and they’ll become second nature. One stage left: your <b>graduation</b>.</p>';
       }
-    });
+    }
+    head.addEventListener('click',function(){ card.classList.toggle('open'); if(card.classList.contains('open')) reveal(false); });
+    revealers[idx]=reveal;
   });
+  for(var ri=0;ri<TRICKS.length;ri++){ if(shState.tricks[ri]) revealers[ri](true); }
 })();
 
 /* ===== Start Here — stage sub-tabs (Phase E) ===== */
-var SH_PANES=['shp-warmup','shp-steps','shp-features','shp-tricks','shp-grad'];
-var shDone={};
-var GRAD_STAGES=[
-  {id:'shp-warmup',icon:'🔥',name:'Warm-up',got:'the everyday words — bookmarks, extensions, history, cache'},
-  {id:'shp-steps',icon:'🪜',name:'Do This Now',got:'7 hands-on moves you did yourself'},
-  {id:'shp-features',icon:'🔍',name:'Feature deep-dives',got:'how 6 core features actually affect you'},
-  {id:'shp-tricks',icon:'✨',name:'Cool tricks',got:'8 power-user shortcuts'},
-];
 function shGo(id){
   SH_PANES.forEach(function(p){var el=document.getElementById(p);if(el)el.classList.toggle('hide',p!==id);});
   var tabs=document.querySelectorAll('#view-start .sh-itab');
