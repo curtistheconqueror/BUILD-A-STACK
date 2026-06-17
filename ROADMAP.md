@@ -53,7 +53,7 @@ anyone attempts to build a stack.
 
 - **E·1 Knowledge pre-test** ✅ — live as Stage 1 (warm-up): bookmark, extensions, history, cache. `know`/`teach` reveal + try-it tips.
 - **E·2 Guided step-by-step** ✅ — live as Stage 2: 7 do-this-now steps (new tab, reopen tab, find-on-page, zoom, snap windows, copy/paste, screenshot) with **sequential unlock** (each unlocks the next), "✅ I did it" / "skip for now", a per-step "Nice — here's why" reveal, a per-stage progress bar, and stage-complete → overall tracker. Data-driven `STEPS` array + renderer (mirrors the `PRETEST` pattern). This is the reusable do-this-now engine E·3/E·5 build on.
-- **E·3 Feature deep-dives** 🔄 SHELL — each simple feature: what it is + how it affects YOU.
+- **E·3 Feature deep-dives** ✅ — live as Stage 3: 6 expandable cards (clipboard, files & folders, the address bar, downloads, notifications, accounts & passwords), each "what it is" + a "how it affects YOU" call-out. Free-browse (open in any order), tracks explored N/N (first-open only, no double-count), completes → overall tracker. Data-driven `DIVES` array + renderer.
 - **E·4 "Did You Know / Fun Fact" engine** — occasional popup with a brief, jaw-dropping fact about PCs, features, AI, etc. (reusable popup system).
 - **E·5 Cool-tricks library** — shortcuts and clever moves that make them feel powerful.
 - **E·6 Mastery / graduation** — progress tracking → "you're ready to Build a Stack."

@@ -335,6 +335,22 @@
   #view-start .sh-stok-c{overflow:hidden}
   #view-start .sh-stok-b{margin-top:11px;border-left:3px solid var(--ok);background:rgba(8,12,22,.4);border-radius:0 10px 10px 0;padding:9px 12px;font-size:13.2px;line-height:1.6;color:#cdd9ef}
   #view-start .sh-stok-b b{color:var(--ok)}
+  /* Feature deep-dives (E·3) — expandable cards */
+  #view-start .sh-dive{background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:16px;padding:15px 18px;margin-bottom:12px;transition:border-color .3s}
+  #view-start .sh-dive.seen{border-color:var(--acc2)}
+  #view-start .sh-dvh{display:flex;align-items:center;gap:13px;cursor:pointer;user-select:none}
+  #view-start .sh-dvi{font-size:23px;flex:none}
+  #view-start .sh-dvt{font-size:15.5px;font-weight:700;color:#eaf1ff;line-height:1.35;flex:1}
+  #view-start .sh-dvchev{flex:none;color:var(--muted);font-size:13px;transition:transform .35s}
+  #view-start .sh-dive.open .sh-dvchev{transform:rotate(90deg);color:var(--acc2)}
+  #view-start .sh-dvwrap{display:grid;grid-template-rows:0fr;transition:grid-template-rows .44s cubic-bezier(.34,1.4,.5,1)}
+  #view-start .sh-dive.open .sh-dvwrap{grid-template-rows:1fr}
+  #view-start .sh-dvclip{overflow:hidden}
+  #view-start .sh-dvbody{padding-top:13px;font-size:13.9px;line-height:1.66;color:#dbe6fb}
+  #view-start .sh-dvbody b{color:var(--ink)}
+  #view-start .sh-dv-you{margin-top:10px;border-left:3px solid var(--acc2);background:rgba(8,12,22,.4);border-radius:0 10px 10px 0;padding:9px 12px;color:#cdd9ef}
+  #view-start .sh-dv-you b{color:var(--acc2)}
+  #view-start .sh-dvbody kbd{font-family:ui-monospace,monospace;font-size:11.5px;background:rgba(255,255,255,.09);border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:#fff}
   @media (max-width:640px){ #view-start .sh-nav{gap:7px} #view-start .sh-itab{padding:8px 11px;font-size:12.4px} }
   /* ===== Keyboard tab (scoped from sandbox) ===== */
 
@@ -420,13 +436,11 @@
 
     <!-- Stage 3 · Feature deep-dives (shell) -->
     <section class="sh-pane hide" id="shp-features">
-      <div class="sh-phead"><h3>🔍 Feature deep-dives <span class="sh-stagetag">Phase E·3 — shell</span></h3>
-        <p>Each everyday feature explained in plain language: <b>what it is</b> + <b>how it affects YOU</b>. Expandable, one concept at a time — the Learn-tab card pattern, pitched a level lower.</p></div>
-      <div class="sh-card">
-        <div class="sh-ch"><span class="sh-ci">📋</span><span class="sh-ct">Sample deep-dive — The clipboard</span></div>
-        <div class="sh-cb">When you “copy,” the text goes to an invisible holding spot called the <b>clipboard</b>. It holds the <i>last</i> thing you copied until you copy something else or shut down.</div>
-      </div>
-      <div class="sh-shellnote"><b>Coming next.</b> Candidate topics: clipboard, files vs folders, the address bar, downloads, notifications, accounts &amp; passwords.</div>
+      <div class="sh-phead"><h3>🔍 Feature deep-dives</h3>
+        <p>Each everyday feature in plain language: <b>what it is</b> + <b>how it affects YOU</b>. Tap any card to open it — explore them in any order.</p></div>
+      <div class="sh-prog"><span>explored <b id="dv-count">0</b> of <span id="dv-total">0</span></span><span class="sh-bar"><i id="dv-fill"></i></span></div>
+      <div id="dives-list"></div>
+      <div id="dives-summary"></div>
       <div class="sh-pnav"><button class="sh-pnbtn" data-next="shp-steps">← Back</button><button class="sh-pnbtn primary" data-next="shp-tricks">Next: Cool Tricks →</button></div>
     </section>
 
@@ -1544,6 +1558,47 @@ const STEPS=[
     }
     didit.addEventListener('click',function(){ if(!card.classList.contains('locked')) complete(); });
     if(skip) skip.addEventListener('click',function(){ if(!card.classList.contains('locked')) complete(); });
+  });
+})();
+
+/* ===== Start Here · Stage 3 — Feature deep-dives (Phase E·3) ===== */
+const DIVES=[
+  {icon:'📋', t:'The clipboard', what:'When you “copy,” the words don’t go anywhere you can see — they wait on an invisible shelf called the <b>clipboard</b>. “Paste” drops a copy wherever your cursor is. It only ever holds the <i>last</i> thing you copied.',
+   you:'Copy something new and the old one is gone — so paste before you copy again. It’s the glue between every app: copy from an email, paste into a search box.'},
+  {icon:'📁', t:'Files &amp; folders', what:'A <b>file</b> is one thing — a photo, a document, a song. A <b>folder</b> is a box that holds files (and other folders). Your whole computer is folders inside folders, like nesting boxes.',
+   you:'“Where did it go?” almost always means it’s sitting in a folder you didn’t look in (usually <b>Downloads</b>). Knowing which box a thing is in is how you find anything again.'},
+  {icon:'🔗', t:'The address bar', what:'The strip at the top of your browser where the web address (the <b>URL</b>) lives. You can type a full address there — or just type words and it searches for you.',
+   you:'It doubles as a search box, so you rarely need to “go to Google” first. And glancing at the address is how you check you’re on the <i>real</i> site (your bank) and not a look-alike.'},
+  {icon:'⬇️', t:'Downloads', what:'When you save something from the internet — a PDF, a photo, an app installer — it’s <b>downloaded</b> onto your computer and lands in the <b>Downloads</b> folder by default.',
+   you:'That folder quietly fills up and eats storage. It’s also the first place to look for “the thing I just saved.” Press <kbd>Ctrl</kbd>+<kbd>J</kbd> in your browser to see recent downloads.'},
+  {icon:'🔔', t:'Notifications', what:'The pop-ups and little badges apps use to get your attention — a new message, an update, a reminder. They collect in a <b>notification center</b> you can open later.',
+   you:'You’re in charge of them, not the other way around. Every app’s notifications can be turned off in Settings — silencing the noisy ones is one of the biggest quality-of-life wins on any device.'},
+  {icon:'🔐', t:'Accounts &amp; passwords', what:'An <b>account</b> is your personal space on a service (email, a store, a bank), unlocked by a <b>password</b>. Your browser can remember — and even <i>generate</i> — strong passwords for you.',
+   you:'Reusing one password everywhere means a single leak unlocks everything. Let your browser or a password manager keep unique ones; you only memorize the one that opens it.'},
+];
+(function(){
+  var host=document.getElementById('dives-list'); if(!host) return;
+  document.getElementById('dv-total').textContent=DIVES.length;
+  var seen=0;
+  DIVES.forEach(function(d){
+    var card=document.createElement('div');card.className='sh-dive';
+    card.innerHTML='<div class="sh-dvh"><span class="sh-dvi">'+d.icon+'</span><span class="sh-dvt">'+d.t+'</span><span class="sh-dvchev">▶</span></div>'+
+      '<div class="sh-dvwrap"><div class="sh-dvclip"><div class="sh-dvbody"><div class="sh-dv-what">'+d.what+'</div><div class="sh-dv-you"><b>How it affects you:</b> '+d.you+'</div></div></div></div>';
+    host.appendChild(card);
+    var head=card.querySelector('.sh-dvh'), opened=false;
+    head.addEventListener('click',function(){
+      card.classList.toggle('open');
+      if(!opened && card.classList.contains('open')){
+        opened=true; card.classList.add('seen'); seen++;
+        document.getElementById('dv-count').textContent=seen;
+        document.getElementById('dv-fill').style.width=Math.round(seen/DIVES.length*100)+'%';
+        if(seen===DIVES.length){
+          shMarkDone('shp-features');
+          var sm=document.getElementById('dives-summary');sm.className='sh-summary';sm.style.marginTop='4px';
+          sm.innerHTML='<h3>🔍 You’ve seen how the everyday pieces work.</h3><p>None of it is magic — just features doing a job. Next up: a few <b>cool tricks</b> that make you feel fast.</p>';
+        }
+      }
+    });
   });
 })();
 
