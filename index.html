@@ -351,6 +351,11 @@
   #view-start .sh-dv-you{margin-top:10px;border-left:3px solid var(--acc2);background:rgba(8,12,22,.4);border-radius:0 10px 10px 0;padding:9px 12px;color:#cdd9ef}
   #view-start .sh-dv-you b{color:var(--acc2)}
   #view-start .sh-dvbody kbd{font-family:ui-monospace,monospace;font-size:11.5px;background:rgba(255,255,255,.09);border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:#fff}
+  /* Cool tricks (E·5) — same card, pink accent */
+  #view-start .sh-tricks .sh-dive.seen{border-color:var(--acc3)}
+  #view-start .sh-tricks .sh-dive.open .sh-dvchev{color:var(--acc3)}
+  #view-start .sh-tricks .sh-dv-you{border-left-color:var(--acc3)}
+  #view-start .sh-tricks .sh-dv-you b{color:var(--acc3)}
   @media (max-width:640px){ #view-start .sh-nav{gap:7px} #view-start .sh-itab{padding:8px 11px;font-size:12.4px} }
   /* ===== Keyboard tab (scoped from sandbox) ===== */
 
@@ -446,13 +451,11 @@
 
     <!-- Stage 4 · Cool tricks (shell) -->
     <section class="sh-pane hide" id="shp-tricks">
-      <div class="sh-phead"><h3>✨ Cool tricks <span class="sh-stagetag">Phase E·5 — shell</span></h3>
-        <p>Shortcuts and clever moves that make you <b>feel powerful</b>. Quick wins that pay off immediately and make the computer feel like yours.</p></div>
-      <div class="sh-card">
-        <div class="sh-ch"><span class="sh-ci">🔎</span><span class="sh-ct">Sample trick — Find anything on a page</span></div>
-        <div class="sh-cb">Press <kbd>Ctrl</kbd>+<kbd>F</kbd> on any webpage or document to instantly search the words on it. Stop scrolling — let the computer find it for you.</div>
-      </div>
-      <div class="sh-shellnote"><b>Coming next.</b> A small library of crowd-pleasers (reopen closed tab, undo anything, screenshot a region, rename fast).</div>
+      <div class="sh-phead"><h3>✨ Cool tricks</h3>
+        <p>Shortcuts and clever moves that make you <b>feel powerful</b>. Tap one, then go try it — each is a quick win that pays off the second you use it.</p></div>
+      <div class="sh-prog"><span>explored <b id="tk-count">0</b> of <span id="tk-total">0</span></span><span class="sh-bar"><i id="tk-fill"></i></span></div>
+      <div id="tricks-list" class="sh-tricks"></div>
+      <div id="tricks-summary"></div>
       <div class="sh-pnav"><button class="sh-pnbtn" data-next="shp-features">← Back</button><button class="sh-pnbtn primary" data-next="shp-grad">Next: Graduation →</button></div>
     </section>
 
@@ -1596,6 +1599,51 @@ const DIVES=[
           shMarkDone('shp-features');
           var sm=document.getElementById('dives-summary');sm.className='sh-summary';sm.style.marginTop='4px';
           sm.innerHTML='<h3>🔍 You’ve seen how the everyday pieces work.</h3><p>None of it is magic — just features doing a job. Next up: a few <b>cool tricks</b> that make you feel fast.</p>';
+        }
+      }
+    });
+  });
+})();
+
+/* ===== Start Here · Stage 4 — Cool tricks (Phase E·5) ===== */
+const TRICKS=[
+  {icon:'↩️', t:'Undo almost anything', what:'Made a mistake? Press <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo it — deleted text, a moved file, a bad edit. (<kbd>⌘</kbd>+<kbd>Z</kbd> on a Mac.)',
+   you:'It works in nearly every app, over and over — tap it a few times to walk back several steps. Your safety net for everything.'},
+  {icon:'🔄', t:'Switch apps instantly', what:'Hold <kbd>Alt</kbd> and tap <kbd>Tab</kbd> to flip between your open windows without touching the mouse. (<kbd>⌘</kbd>+<kbd>Tab</kbd> on a Mac.)',
+   you:'Once it’s muscle memory you’ll feel twice as fast — no more hunting along the taskbar.'},
+  {icon:'🔒', t:'Lock your screen', what:'Stepping away? Press <kbd>⊞ Win</kbd>+<kbd>L</kbd> to lock instantly — your stuff is private, and your password drops you right back in. (<kbd>⌃</kbd>+<kbd>⌘</kbd>+<kbd>Q</kbd> on a Mac.)',
+   you:'A pro habit: lock it every time you leave the desk. Faster and safer than fully logging out.'},
+  {icon:'🖥️', t:'See the desktop', what:'Press <kbd>⊞ Win</kbd>+<kbd>D</kbd> to minimize everything and reveal your desktop; press it again to bring it all back.',
+   you:'Buried under a dozen windows? This clears the decks in a blink.'},
+  {icon:'😀', t:'Emoji anywhere', what:'Press <kbd>⊞ Win</kbd>+<kbd>.</kbd> (the period key) to pop an emoji picker in almost any text box. (<kbd>⌃</kbd>+<kbd>⌘</kbd>+<kbd>Space</kbd> on a Mac.)',
+   you:'Yes — emoji in emails, file names, notes, anywhere you can type. 🎉'},
+  {icon:'🎯', t:'Select everything at once', what:'Press <kbd>Ctrl</kbd>+<kbd>A</kbd> to select it all — every word of text, every file in a folder — in one move. (<kbd>⌘</kbd>+<kbd>A</kbd> on a Mac.)',
+   you:'Pair it with copy (<kbd>Ctrl</kbd>+<kbd>C</kbd>) or delete to act on a whole list instantly.'},
+  {icon:'💾', t:'Save your work', what:'Press <kbd>Ctrl</kbd>+<kbd>S</kbd> often while you write or edit — it saves whatever you’re working on. (<kbd>⌘</kbd>+<kbd>S</kbd> on a Mac.)',
+   you:'The cheapest insurance there is. Tap it out of habit and a crash never costs you much.'},
+  {icon:'🖱️', t:'The right-click menu', what:'<b>Right-click</b> almost anything — a file, a word, the desktop — to reveal a hidden menu of things you can do with it.',
+   you:'It’s the computer’s “what are my options here?” button. When you’re stuck, right-click first.'},
+];
+(function(){
+  var host=document.getElementById('tricks-list'); if(!host) return;
+  document.getElementById('tk-total').textContent=TRICKS.length;
+  var seen=0;
+  TRICKS.forEach(function(d){
+    var card=document.createElement('div');card.className='sh-dive';
+    card.innerHTML='<div class="sh-dvh"><span class="sh-dvi">'+d.icon+'</span><span class="sh-dvt">'+d.t+'</span><span class="sh-dvchev">▶</span></div>'+
+      '<div class="sh-dvwrap"><div class="sh-dvclip"><div class="sh-dvbody"><div class="sh-dv-what">'+d.what+'</div><div class="sh-dv-you"><b>Why it’s great:</b> '+d.you+'</div></div></div></div>';
+    host.appendChild(card);
+    var head=card.querySelector('.sh-dvh'), opened=false;
+    head.addEventListener('click',function(){
+      card.classList.toggle('open');
+      if(!opened && card.classList.contains('open')){
+        opened=true; card.classList.add('seen'); seen++;
+        document.getElementById('tk-count').textContent=seen;
+        document.getElementById('tk-fill').style.width=Math.round(seen/TRICKS.length*100)+'%';
+        if(seen===TRICKS.length){
+          shMarkDone('shp-tricks');
+          var sm=document.getElementById('tricks-summary');sm.className='sh-summary';sm.style.marginTop='4px';
+          sm.innerHTML='<h3>✨ Look at you — that’s a power-user toolkit.</h3><p>Keep using these and they’ll become second nature. One stage left: your <b>graduation</b>.</p>';
         }
       }
     });
