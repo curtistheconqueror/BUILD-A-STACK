@@ -312,6 +312,29 @@
   #view-start .sh-pnbtn.primary{background:linear-gradient(180deg,rgba(81,224,138,.22),rgba(81,224,138,.05));border-color:var(--ok)}
   #view-start .sh-pnbtn.primary:hover{box-shadow:0 0 22px -6px var(--ok)}
   #view-start .sh-pnbtn[disabled]{opacity:.3;cursor:default;box-shadow:none;border-color:var(--border)}
+  /* Do-this-now steps (E·2) */
+  #view-start .sh-step{position:relative;background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:16px;padding:16px 18px 16px 56px;margin-bottom:14px;transition:opacity .35s,border-color .3s,filter .35s}
+  #view-start .sh-step.done{border-color:var(--ok)}
+  #view-start .sh-step.locked{opacity:.45;filter:saturate(.55)}
+  #view-start .sh-stepn{position:absolute;left:16px;top:16px;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--acc);background:rgba(53,208,224,.1);border:1px solid var(--border);transition:.3s}
+  #view-start .sh-step.done .sh-stepn{color:#06101d;background:var(--ok);border-color:var(--ok)}
+  #view-start .sh-step.locked .sh-stepn{color:var(--muted)}
+  #view-start .sh-sttitle{font-size:15.5px;font-weight:700;color:#eaf1ff;line-height:1.35;display:flex;align-items:center;gap:9px}
+  #view-start .sh-sti{font-size:20px;flex:none}
+  #view-start .sh-stdo{font-size:13.9px;line-height:1.66;color:#dbe6fb;margin-top:8px}
+  #view-start .sh-stdo b{color:var(--ink)}
+  #view-start .sh-step kbd{font-family:ui-monospace,monospace;font-size:11.5px;background:rgba(255,255,255,.09);border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:#fff;white-space:nowrap}
+  #view-start .sh-stbtns{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:13px}
+  #view-start .sh-didit{cursor:pointer;border:1px solid var(--ok);background:linear-gradient(180deg,rgba(81,224,138,.18),rgba(81,224,138,.04));color:var(--ink);font-size:13.3px;font-weight:700;padding:9px 16px;border-radius:11px;transition:.2s}
+  #view-start .sh-didit:hover{box-shadow:0 0 18px -6px var(--ok)}
+  #view-start .sh-step.done .sh-didit{background:var(--ok);color:#06101d;cursor:default;box-shadow:none}
+  #view-start .sh-skip{cursor:pointer;background:none;border:none;color:var(--muted);font-size:12.5px;font-weight:600;text-decoration:underline;text-underline-offset:3px;padding:6px 2px}
+  #view-start .sh-skip:hover{color:var(--ink)}
+  #view-start .sh-stok{display:grid;grid-template-rows:0fr;transition:grid-template-rows .44s cubic-bezier(.34,1.4,.5,1)}
+  #view-start .sh-step.done .sh-stok{grid-template-rows:1fr}
+  #view-start .sh-stok-c{overflow:hidden}
+  #view-start .sh-stok-b{margin-top:11px;border-left:3px solid var(--ok);background:rgba(8,12,22,.4);border-radius:0 10px 10px 0;padding:9px 12px;font-size:13.2px;line-height:1.6;color:#cdd9ef}
+  #view-start .sh-stok-b b{color:var(--ok)}
   @media (max-width:640px){ #view-start .sh-nav{gap:7px} #view-start .sh-itab{padding:8px 11px;font-size:12.4px} }
   /* ===== Keyboard tab (scoped from sandbox) ===== */
 
@@ -387,13 +410,11 @@
 
     <!-- Stage 2 · Do This Now (shell) -->
     <section class="sh-pane hide" id="shp-steps">
-      <div class="sh-phead"><h3>🪜 Do this now <span class="sh-stagetag">Phase E·2 — shell</span></h3>
-        <p>Learn by <b>performing</b>, not reading. Short “do-this-now” prompts that walk a true beginner from “turn on your computer” forward — each one asks you to actually try the move.</p></div>
-      <div class="sh-card">
-        <div class="sh-ch"><span class="sh-ci">🪟</span><span class="sh-ct">Sample step — Snap two windows side by side</span></div>
-        <div class="sh-cb">Open any two windows. Press <kbd>⊞ Win</kbd>+<kbd>←</kbd> on one, then click the other. <b>Try it now</b> — you just split your screen like a pro.</div>
-      </div>
-      <div class="sh-shellnote"><b>Coming next.</b> The full guided sequence (boot → desktop → windows → files → browser → search) gets built in a later checkpoint.</div>
+      <div class="sh-phead"><h3>🪜 Do this now</h3>
+        <p>Learn by <b>performing</b>, not reading. Do each move on your own computer right now — they unlock one at a time, and there’s no wrong way to try.</p></div>
+      <div class="sh-prog"><span><b id="st-count">0</b> of <span id="st-total">0</span> done</span><span class="sh-bar"><i id="st-fill"></i></span></div>
+      <div id="steps-list"></div>
+      <div id="steps-summary"></div>
       <div class="sh-pnav"><button class="sh-pnbtn" data-next="shp-warmup">← Back</button><button class="sh-pnbtn primary" data-next="shp-features">Next: Deep-Dives →</button></div>
     </section>
 
@@ -1475,6 +1496,55 @@ const PRETEST=[
       s.innerHTML='<h3>🎉 Warm-up complete — gaps filled.</h3><p>You already knew <b>'+knew+'</b> of '+PRETEST.length+'. Use <b>Next</b> below — or the stage tabs above — to keep going.</p>';
     }
   }
+})();
+
+/* ===== Start Here · Stage 2 — "Do this now" guided steps (Phase E·2) ===== */
+const STEPS=[
+  {icon:'🆕', t:'Open a new tab', steptext:'Click the little <b>+</b> at the top of your browser — or press <kbd>Ctrl</kbd>+<kbd>T</kbd> (<kbd>⌘</kbd>+<kbd>T</kbd> on a Mac). A fresh blank tab pops open.',
+   ok:'That’s how you keep several pages going at once without losing this one. Power users run a dozen tabs at a time.'},
+  {icon:'↩️', t:'Reopen a tab you closed', steptext:'Close that new tab (its little <b>×</b>), then bring it right back with <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> (<kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> on a Mac).',
+   ok:'Closed the wrong thing? This undoes it. Press it again to reopen the last several tabs in order.'},
+  {icon:'🔎', t:'Find a word on this page', steptext:'Press <kbd>Ctrl</kbd>+<kbd>F</kbd> (<kbd>⌘</kbd>+<kbd>F</kbd> on a Mac), type <b>stack</b>, and watch it jump to every match on the page.',
+   ok:'Never scroll hunting for a word again — the computer finds it instantly. Works in web pages, documents, almost everywhere.'},
+  {icon:'🔠', t:'Make the text bigger', steptext:'Hold <kbd>Ctrl</kbd> and tap <kbd>+</kbd> a few times to zoom in, <kbd>−</kbd> to zoom out, and <kbd>Ctrl</kbd>+<kbd>0</kbd> to snap back to normal. (Use <kbd>⌘</kbd> on a Mac.)',
+   ok:'Text too small to read comfortably? Make it bigger on any website — your eyes will thank you.'},
+  {icon:'🪟', t:'Put two windows side by side', steptext:'Click a window, press <kbd>⊞ Win</kbd>+<kbd>←</kbd> to snap it to the left half. Click another and press <kbd>⊞ Win</kbd>+<kbd>→</kbd>. <span style="color:var(--muted)">(On a Mac, hover a window’s green ● and pick a side.)</span>',
+   ok:'Now you can read one thing while you work in another — no more flipping back and forth.'},
+  {icon:'📋', t:'Copy something, then paste it', steptext:'Select a sentence with your mouse, press <kbd>Ctrl</kbd>+<kbd>C</kbd> to copy, click an empty spot (a new tab’s address bar works), and press <kbd>Ctrl</kbd>+<kbd>V</kbd> to paste. (<kbd>⌘</kbd> on a Mac.)',
+   ok:'Copy-and-paste is the single handiest move on a computer. The text rides along on an invisible “clipboard” until you paste it.'},
+  {icon:'📸', t:'Take a screenshot', steptext:'On Windows press <kbd>⊞ Win</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>, then drag a box around anything to capture it. <span style="color:var(--muted)">(On a Mac press <kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>4</kbd>.)</span>',
+   ok:'Grab a picture of anything on your screen to save or share — perfect for asking someone “what is this?” later.'},
+];
+(function(){
+  var host=document.getElementById('steps-list'); if(!host) return;
+  document.getElementById('st-total').textContent=STEPS.length;
+  var done=0, cards=[];
+  STEPS.forEach(function(s,idx){
+    var card=document.createElement('div');card.className='sh-step'+(idx===0?'':' locked');
+    card.innerHTML='<div class="sh-stepn">'+(idx+1)+'</div>'+
+      '<div class="sh-sttitle"><span class="sh-sti">'+s.icon+'</span>'+s.t+'</div>'+
+      '<div class="sh-stdo">'+s.steptext+'</div>'+
+      '<div class="sh-stbtns"><button class="sh-didit">✅ I did it</button>'+(idx<STEPS.length-1?'<button class="sh-skip">skip for now</button>':'')+'</div>'+
+      '<div class="sh-stok"><div class="sh-stok-c"><div class="sh-stok-b"><b>Nice.</b> '+s.ok+'</div></div></div>';
+    host.appendChild(card);cards.push(card);
+    var didit=card.querySelector('.sh-didit'), skip=card.querySelector('.sh-skip');
+    function complete(){
+      if(card.classList.contains('done')) return;
+      card.classList.remove('locked');card.classList.add('done');
+      didit.textContent='✓ Done';
+      done++;
+      document.getElementById('st-count').textContent=done;
+      document.getElementById('st-fill').style.width=Math.round(done/STEPS.length*100)+'%';
+      if(idx+1<cards.length) cards[idx+1].classList.remove('locked');
+      if(done===STEPS.length){
+        shMarkDone('shp-steps');
+        var sm=document.getElementById('steps-summary');sm.className='sh-summary';sm.style.marginTop='4px';
+        sm.innerHTML='<h3>🎉 You just did '+STEPS.length+' real things.</h3><p>That’s more hands-on practice than most people try in a month. Hit <b>Next</b> below to see <i>why</i> these everyday features work the way they do.</p>';
+      }
+    }
+    didit.addEventListener('click',function(){ if(!card.classList.contains('locked')) complete(); });
+    if(skip) skip.addEventListener('click',function(){ if(!card.classList.contains('locked')) complete(); });
+  });
 })();
 
 /* ===== Start Here — stage sub-tabs (Phase E) ===== */

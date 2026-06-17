@@ -52,7 +52,7 @@ anyone attempts to build a stack.
 > **SHELL SHIPPED** — the Start Here tab is now a **5-stage sub-tab journey** (inner nav, per-stage done-ticks, overall N/5 progress bar, Back/Next): 🔥 Warm-up · 🪜 Do This Now · 🔍 Deep-Dives · ✨ Cool Tricks · 🎓 Graduation. Each compartment is its own hidden pane (the nav is load-bearing — you can't just scroll past). Stage 1 (warm-up) is **live**; stages 2–5 are honest shells (one sample card + "coming next"). Scoped under `#view-start .sh-*`; inner switcher `shGo`/`shMarkDone` separate from the top-level `show()`. Next checkpoints fill the shells with real content.
 
 - **E·1 Knowledge pre-test** ✅ — live as Stage 1 (warm-up): bookmark, extensions, history, cache. `know`/`teach` reveal + try-it tips.
-- **E·2 Guided step-by-step** 🔄 SHELL — do-this-now prompts; learn by performing, not reading.
+- **E·2 Guided step-by-step** ✅ — live as Stage 2: 7 do-this-now steps (new tab, reopen tab, find-on-page, zoom, snap windows, copy/paste, screenshot) with **sequential unlock** (each unlocks the next), "✅ I did it" / "skip for now", a per-step "Nice — here's why" reveal, a per-stage progress bar, and stage-complete → overall tracker. Data-driven `STEPS` array + renderer (mirrors the `PRETEST` pattern). This is the reusable do-this-now engine E·3/E·5 build on.
 - **E·3 Feature deep-dives** 🔄 SHELL — each simple feature: what it is + how it affects YOU.
 - **E·4 "Did You Know / Fun Fact" engine** — occasional popup with a brief, jaw-dropping fact about PCs, features, AI, etc. (reusable popup system).
 - **E·5 Cool-tricks library** — shortcuts and clever moves that make them feel powerful.
