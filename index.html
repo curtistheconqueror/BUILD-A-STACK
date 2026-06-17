@@ -278,6 +278,41 @@
   .sh-summary b{color:var(--ink)}
   .sh-summary .sh-go{cursor:pointer;background:linear-gradient(180deg,rgba(81,224,138,.22),rgba(81,224,138,.05));border:1px solid var(--ok);color:var(--ink);font-size:14px;font-weight:700;padding:11px 20px;border-radius:12px;transition:.2s}
   .sh-summary .sh-go:hover{box-shadow:0 0 22px -6px var(--ok)}
+  /* ===== Start Here — stage sub-tabs (Phase E) ===== */
+  #view-start .sh-nav{display:flex;gap:9px;flex-wrap:wrap;margin:0 0 6px}
+  #view-start .sh-itab{position:relative;cursor:pointer;display:inline-flex;align-items:center;gap:8px;font-size:13.6px;font-weight:700;color:var(--muted);background:var(--glass);backdrop-filter:blur(10px);border:1px solid var(--border);border-radius:12px;padding:10px 15px;transition:.22s}
+  #view-start .sh-itab .sh-em{font-size:15px}
+  #view-start .sh-itab:hover{color:var(--ink);border-color:var(--acc);transform:translateY(-1px)}
+  #view-start .sh-itab.on{color:var(--ink);border-color:var(--acc);box-shadow:0 0 0 1px rgba(53,208,224,.4),0 0 22px rgba(53,208,224,.22);background:linear-gradient(180deg,rgba(53,208,224,.16),rgba(53,208,224,.04))}
+  #view-start .sh-itab .sh-tick{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border);display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:transparent;transition:.25s;flex:none}
+  #view-start .sh-itab.done .sh-tick{background:var(--ok);border-color:var(--ok);color:#06101d}
+  #view-start .sh-ovr{display:flex;align-items:center;gap:12px;font-size:12.6px;color:var(--muted);margin:12px 0 18px}
+  #view-start .sh-ovr b{color:var(--ink);font-variant-numeric:tabular-nums}
+  #view-start .sh-ob{flex:1;height:6px;border-radius:9px;background:rgba(130,155,200,.14);overflow:hidden}
+  #view-start .sh-ob i{display:block;height:100%;width:0;border-radius:9px;background:linear-gradient(90deg,var(--ok),var(--acc));box-shadow:0 0 12px rgba(81,224,138,.5);transition:width .55s cubic-bezier(.34,1.4,.5,1)}
+  #view-start .sh-pane{animation:fadein .4s ease both}
+  #view-start .sh-pane.hide{display:none}
+  #view-start .sh-phead{margin:4px 0 14px}
+  #view-start .sh-phead h3{margin:0;font-size:20px;display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+  #view-start .sh-phead p{margin:9px 0 0;font-size:14px;line-height:1.65;color:#cdd9ef;max-width:720px}
+  #view-start .sh-phead p b{color:var(--ink)}
+  #view-start .sh-stagetag{font-size:10px;letter-spacing:1.4px;text-transform:uppercase;font-weight:800;color:var(--acc2);border:1px solid rgba(183,140,255,.4);background:rgba(183,140,255,.08);border-radius:7px;padding:2px 9px}
+  #view-start .sh-card{background:var(--glass);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin-bottom:14px}
+  #view-start .sh-card .sh-ch{display:flex;align-items:center;gap:13px}
+  #view-start .sh-card .sh-ci{font-size:24px;flex:none}
+  #view-start .sh-card .sh-ct{font-size:15.5px;font-weight:700;line-height:1.35}
+  #view-start .sh-card .sh-cb{font-size:13.9px;line-height:1.66;color:#dbe6fb;margin-top:10px}
+  #view-start .sh-card .sh-cb b{color:var(--ink)}
+  #view-start .sh-card kbd{font-family:ui-monospace,monospace;font-size:11.5px;background:rgba(255,255,255,.09);border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:#fff}
+  #view-start .sh-shellnote{font-size:12.5px;color:var(--muted);border:1px dashed var(--border);border-radius:12px;padding:11px 14px;margin-top:4px;line-height:1.6}
+  #view-start .sh-shellnote b{color:var(--acc2)}
+  #view-start .sh-pnav{display:flex;justify-content:space-between;gap:10px;margin-top:22px}
+  #view-start .sh-pnbtn{cursor:pointer;background:rgba(8,12,22,.5);border:1px solid var(--border);color:var(--ink);font-size:13.5px;font-weight:700;padding:11px 18px;border-radius:12px;transition:.2s}
+  #view-start .sh-pnbtn:hover{border-color:var(--acc);box-shadow:0 0 18px -8px var(--acc)}
+  #view-start .sh-pnbtn.primary{background:linear-gradient(180deg,rgba(81,224,138,.22),rgba(81,224,138,.05));border-color:var(--ok)}
+  #view-start .sh-pnbtn.primary:hover{box-shadow:0 0 22px -6px var(--ok)}
+  #view-start .sh-pnbtn[disabled]{opacity:.3;cursor:default;box-shadow:none;border-color:var(--border)}
+  @media (max-width:640px){ #view-start .sh-nav{gap:7px} #view-start .sh-itab{padding:8px 11px;font-size:12.4px} }
   /* ===== Keyboard tab (scoped from sandbox) ===== */
 
   :root{--bg0:#05080f;--bg1:#0a1020;--ink:#eaf1ff;--muted:#8ea0c4;--acc:#35d0e0;--acc2:#b78cff;--acc3:#ff6fb5;
@@ -328,12 +363,74 @@
     <div class="sh-hero">
       <h2>👋 New to all this? You’re in exactly the right place.</h2>
       <p>No experience needed. We start from the <i>very</i> beginning — yes, like turning on your computer — and build up one small step at a time, until how a whole software “stack” fits together actually makes sense.</p>
-      <p>First, a <b>2-minute warm-up</b> on a few things you bump into every day. Be honest about what you know — and learn the ones you don’t. No grades, just gaps filled.</p>
+      <p>Work through the <b>five stages</b> below in order — or jump to any one. Each stage is its own focused screen, so you’re never looking at more than one thing at a time.</p>
     </div>
-    <div class="seclabel" style="--ca:var(--ok)">Quick knowledge check</div>
-    <div class="sh-prog"><span><b id="sh-count">0</b> of <span id="sh-total">4</span> checked</span><span class="sh-bar"><i id="sh-fill"></i></span></div>
-    <div id="pretest-list"></div>
-    <div id="pretest-summary"></div>
+
+    <div class="sh-nav" id="sh-nav">
+      <button class="sh-itab on" data-pane="shp-warmup"><span class="sh-tick">✓</span><span class="sh-em">🔥</span> 1 · Warm-up</button>
+      <button class="sh-itab" data-pane="shp-steps"><span class="sh-tick">✓</span><span class="sh-em">🪜</span> 2 · Do This Now</button>
+      <button class="sh-itab" data-pane="shp-features"><span class="sh-tick">✓</span><span class="sh-em">🔍</span> 3 · Deep-Dives</button>
+      <button class="sh-itab" data-pane="shp-tricks"><span class="sh-tick">✓</span><span class="sh-em">✨</span> 4 · Cool Tricks</button>
+      <button class="sh-itab" data-pane="shp-grad"><span class="sh-tick">✓</span><span class="sh-em">🎓</span> 5 · Graduation</button>
+    </div>
+    <div class="sh-ovr"><span>overall <b id="sh-ovrn">0</b>/5 stages done</span><span class="sh-ob"><i id="sh-ovrfill"></i></span></div>
+
+    <!-- Stage 1 · Warm-up (live) -->
+    <section class="sh-pane" id="shp-warmup">
+      <div class="sh-phead"><h3>🔥 Warm-up knowledge check</h3>
+        <p>A <b>2-minute warm-up</b> on a few things you bump into every day. Be honest about what you know — and learn the ones you don’t. No grades, just gaps filled.</p></div>
+      <div class="sh-prog"><span><b id="sh-count">0</b> of <span id="sh-total">4</span> checked</span><span class="sh-bar"><i id="sh-fill"></i></span></div>
+      <div id="pretest-list"></div>
+      <div id="pretest-summary"></div>
+      <div class="sh-pnav"><button class="sh-pnbtn" disabled>← Back</button><button class="sh-pnbtn primary" data-next="shp-steps">Next: Do This Now →</button></div>
+    </section>
+
+    <!-- Stage 2 · Do This Now (shell) -->
+    <section class="sh-pane hide" id="shp-steps">
+      <div class="sh-phead"><h3>🪜 Do this now <span class="sh-stagetag">Phase E·2 — shell</span></h3>
+        <p>Learn by <b>performing</b>, not reading. Short “do-this-now” prompts that walk a true beginner from “turn on your computer” forward — each one asks you to actually try the move.</p></div>
+      <div class="sh-card">
+        <div class="sh-ch"><span class="sh-ci">🪟</span><span class="sh-ct">Sample step — Snap two windows side by side</span></div>
+        <div class="sh-cb">Open any two windows. Press <kbd>⊞ Win</kbd>+<kbd>←</kbd> on one, then click the other. <b>Try it now</b> — you just split your screen like a pro.</div>
+      </div>
+      <div class="sh-shellnote"><b>Coming next.</b> The full guided sequence (boot → desktop → windows → files → browser → search) gets built in a later checkpoint.</div>
+      <div class="sh-pnav"><button class="sh-pnbtn" data-next="shp-warmup">← Back</button><button class="sh-pnbtn primary" data-next="shp-features">Next: Deep-Dives →</button></div>
+    </section>
+
+    <!-- Stage 3 · Feature deep-dives (shell) -->
+    <section class="sh-pane hide" id="shp-features">
+      <div class="sh-phead"><h3>🔍 Feature deep-dives <span class="sh-stagetag">Phase E·3 — shell</span></h3>
+        <p>Each everyday feature explained in plain language: <b>what it is</b> + <b>how it affects YOU</b>. Expandable, one concept at a time — the Learn-tab card pattern, pitched a level lower.</p></div>
+      <div class="sh-card">
+        <div class="sh-ch"><span class="sh-ci">📋</span><span class="sh-ct">Sample deep-dive — The clipboard</span></div>
+        <div class="sh-cb">When you “copy,” the text goes to an invisible holding spot called the <b>clipboard</b>. It holds the <i>last</i> thing you copied until you copy something else or shut down.</div>
+      </div>
+      <div class="sh-shellnote"><b>Coming next.</b> Candidate topics: clipboard, files vs folders, the address bar, downloads, notifications, accounts &amp; passwords.</div>
+      <div class="sh-pnav"><button class="sh-pnbtn" data-next="shp-steps">← Back</button><button class="sh-pnbtn primary" data-next="shp-tricks">Next: Cool Tricks →</button></div>
+    </section>
+
+    <!-- Stage 4 · Cool tricks (shell) -->
+    <section class="sh-pane hide" id="shp-tricks">
+      <div class="sh-phead"><h3>✨ Cool tricks <span class="sh-stagetag">Phase E·5 — shell</span></h3>
+        <p>Shortcuts and clever moves that make you <b>feel powerful</b>. Quick wins that pay off immediately and make the computer feel like yours.</p></div>
+      <div class="sh-card">
+        <div class="sh-ch"><span class="sh-ci">🔎</span><span class="sh-ct">Sample trick — Find anything on a page</span></div>
+        <div class="sh-cb">Press <kbd>Ctrl</kbd>+<kbd>F</kbd> on any webpage or document to instantly search the words on it. Stop scrolling — let the computer find it for you.</div>
+      </div>
+      <div class="sh-shellnote"><b>Coming next.</b> A small library of crowd-pleasers (reopen closed tab, undo anything, screenshot a region, rename fast).</div>
+      <div class="sh-pnav"><button class="sh-pnbtn" data-next="shp-features">← Back</button><button class="sh-pnbtn primary" data-next="shp-grad">Next: Graduation →</button></div>
+    </section>
+
+    <!-- Stage 5 · Graduation (shell) -->
+    <section class="sh-pane hide" id="shp-grad">
+      <div class="sh-phead"><h3>🎓 Graduation <span class="sh-stagetag">Phase E·6 — shell</span></h3>
+        <p>Track progress across all the stages. When you’ve cleared them, you’re <b>ready to Build a Stack</b> — the hand-off into the Learn &amp; Build tabs.</p></div>
+      <div class="sh-summary">
+        <h3 id="sh-gradh">🎓 Keep going — finish the stages above.</h3>
+        <p id="sh-gradp">As you complete each stage, its tab gets a green ✓ and the bar at the top fills. When all five are done, this becomes your “you’re ready to Build a Stack” moment.</p>
+      </div>
+      <div class="sh-pnav"><button class="sh-pnbtn" data-next="shp-tricks">← Back</button><button class="sh-pnbtn primary" onclick="show('learn');window.scrollTo(0,0);">Build a Stack →</button></div>
+    </section>
   </div>
   <div id="view-learn" class="view hide">
     <div class="prog"><span>explored <span class="pct" id="pc">0</span>/<span id="tot">0</span></span><span class="pbar"><i id="fill"></i></span></div>
@@ -1372,12 +1469,40 @@ const PRETEST=[
     document.getElementById('sh-count').textContent=answered;
     document.getElementById('sh-fill').style.width=Math.round(answered/PRETEST.length*100)+'%';
     if(answered===PRETEST.length){
+      shMarkDone('shp-warmup');
       var s=document.getElementById('pretest-summary');
       s.className='sh-summary';
-      s.innerHTML='<h3>🎉 Warm-up complete — gaps filled.</h3><p>You already knew <b>'+knew+'</b> of '+PRETEST.length+'. The everyday stuff is out of the way — now you’re ready to see how the bigger pieces connect. Next stop: the <b>📖 Learn</b> tab, where each concept builds on the last.</p><button class="sh-go">Take me to Learn →</button>';
-      s.querySelector('.sh-go').addEventListener('click',function(){ show('learn'); window.scrollTo(0,0); });
+      s.innerHTML='<h3>🎉 Warm-up complete — gaps filled.</h3><p>You already knew <b>'+knew+'</b> of '+PRETEST.length+'. Use <b>Next</b> below — or the stage tabs above — to keep going.</p>';
     }
   }
+})();
+
+/* ===== Start Here — stage sub-tabs (Phase E) ===== */
+var SH_PANES=['shp-warmup','shp-steps','shp-features','shp-tricks','shp-grad'];
+var shDone={};
+function shGo(id){
+  SH_PANES.forEach(function(p){var el=document.getElementById(p);if(el)el.classList.toggle('hide',p!==id);});
+  var tabs=document.querySelectorAll('#view-start .sh-itab');
+  for(var i=0;i<tabs.length;i++){tabs[i].classList.toggle('on',tabs[i].getAttribute('data-pane')===id);}
+  var v=document.getElementById('view-start');if(v)v.scrollIntoView({block:'start',behavior:'smooth'});
+}
+function shMarkDone(id){
+  if(shDone[id])return;shDone[id]=true;
+  var tab=document.querySelector('#view-start .sh-itab[data-pane="'+id+'"]');if(tab)tab.classList.add('done');
+  var n=0;for(var k in shDone){if(shDone.hasOwnProperty(k))n++;}
+  var nEl=document.getElementById('sh-ovrn');if(nEl)nEl.textContent=n;
+  var f=document.getElementById('sh-ovrfill');if(f)f.style.width=Math.round(n/SH_PANES.length*100)+'%';
+  if(n===SH_PANES.length){
+    var gh=document.getElementById('sh-gradh'),gp=document.getElementById('sh-gradp');
+    if(gh)gh.textContent='🎉 You’re ready to Build a Stack.';
+    if(gp)gp.innerHTML='Every stage complete. The everyday stuff is out of the way — now you’ll see how the bigger pieces connect.';
+  }
+}
+(function(){
+  var tabs=document.querySelectorAll('#view-start .sh-itab');
+  for(var i=0;i<tabs.length;i++){(function(t){t.addEventListener('click',function(){shGo(t.getAttribute('data-pane'));});})(tabs[i]);}
+  var nexts=document.querySelectorAll('#view-start [data-next]');
+  for(var j=0;j<nexts.length;j++){(function(b){b.addEventListener('click',function(){shGo(b.getAttribute('data-next'));});})(nexts[j]);}
 })();
 
 /* ===== tabs (crossfade, N tabs) ===== */

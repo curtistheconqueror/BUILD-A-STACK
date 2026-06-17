@@ -48,9 +48,12 @@ The most interactive section in the whole project. Walks a true beginner by the
 hand, starting from **"turn on your computer,"** and prompts them to actually DO
 things to get acclimated and become more tech-savvy. Pre-req knowledge before
 anyone attempts to build a stack.
-- **E·1 Knowledge pre-test** — gauge what they know: how to bookmark, what extensions are, how history is logged, what cache is and how it affects them.
-- **E·2 Guided step-by-step** — do-this-now prompts; learn by performing, not reading.
-- **E·3 Feature deep-dives** — each simple feature: what it is + how it affects YOU.
+
+> **SHELL SHIPPED** — the Start Here tab is now a **5-stage sub-tab journey** (inner nav, per-stage done-ticks, overall N/5 progress bar, Back/Next): 🔥 Warm-up · 🪜 Do This Now · 🔍 Deep-Dives · ✨ Cool Tricks · 🎓 Graduation. Each compartment is its own hidden pane (the nav is load-bearing — you can't just scroll past). Stage 1 (warm-up) is **live**; stages 2–5 are honest shells (one sample card + "coming next"). Scoped under `#view-start .sh-*`; inner switcher `shGo`/`shMarkDone` separate from the top-level `show()`. Next checkpoints fill the shells with real content.
+
+- **E·1 Knowledge pre-test** ✅ — live as Stage 1 (warm-up): bookmark, extensions, history, cache. `know`/`teach` reveal + try-it tips.
+- **E·2 Guided step-by-step** 🔄 SHELL — do-this-now prompts; learn by performing, not reading.
+- **E·3 Feature deep-dives** 🔄 SHELL — each simple feature: what it is + how it affects YOU.
 - **E·4 "Did You Know / Fun Fact" engine** — occasional popup with a brief, jaw-dropping fact about PCs, features, AI, etc. (reusable popup system).
 - **E·5 Cool-tricks library** — shortcuts and clever moves that make them feel powerful.
 - **E·6 Mastery / graduation** — progress tracking → "you're ready to Build a Stack."
