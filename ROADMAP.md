@@ -56,7 +56,9 @@ anyone attempts to build a stack.
 - **E·3 Feature deep-dives** ✅ — live as Stage 3: 6 expandable cards (clipboard, files & folders, the address bar, downloads, notifications, accounts & passwords), each "what it is" + a "how it affects YOU" call-out. Free-browse (open in any order), tracks explored N/N (first-open only, no double-count), completes → overall tracker. Data-driven `DIVES` array + renderer.
 - **E·4 "Did You Know / Fun Fact" engine** — occasional popup with a brief, jaw-dropping fact about PCs, features, AI, etc. (reusable popup system).
 - **E·5 Cool-tricks library** ✅ — live as Stage 4: 8 tap-to-reveal trick cards (undo, Alt+Tab app-switch, Win+L lock, Win+D desktop, Win+. emoji, Ctrl+A select-all, Ctrl+S save, right-click menu), each with the combo + a "why it's great" payoff. Reuses the `DIVES` card with a pink (acc3) accent. Data-driven `TRICKS` array; tracks explored → overall tracker.
-- **E·6 Mastery / graduation** — progress tracking → "you're ready to Build a Stack."
+- **E·6 Mastery / graduation** ✅ — live as Stage 5: a recap **checklist** of the four learning stages (live ✓/○ synced to `shDone`) + a dynamic panel ("N of 4 cleared" → "🎉 ready to Build a Stack"). Graduation is **auto-earned** when the four learning stages are done (no busywork); the panel hands off to 📖 Learn / 🔧 Build. `renderGrad()` + `GRAD_STAGES`, pre-rendered at load.
+
+> **PHASE E SHELL → FULLY BUILT.** All five Start Here stages are now real (no remaining shells). Each is a data-driven array + renderer (`PRETEST`/`STEPS`/`DIVES`/`TRICKS` + `GRAD_STAGES`), scoped under `#view-start .sh-*`, feeding one overall N/5 tracker. Remaining E polish is optional: **E·4 "Did You Know" popup engine** (reusable, deferred) and progress **persistence** (localStorage) so it survives a refresh.
 
 ### Phase F — "PHONE SAVVY" section
 Technological differences between phone and PC; what's possible on each; how to

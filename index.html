@@ -356,6 +356,16 @@
   #view-start .sh-tricks .sh-dive.open .sh-dvchev{color:var(--acc3)}
   #view-start .sh-tricks .sh-dv-you{border-left-color:var(--acc3)}
   #view-start .sh-tricks .sh-dv-you b{color:var(--acc3)}
+  /* Graduation recap checklist (E·6) */
+  #view-start .sh-grow{display:flex;align-items:center;gap:12px;background:var(--glass);border:1px solid var(--border);border-radius:13px;padding:11px 14px;margin-bottom:9px;transition:border-color .3s,opacity .3s}
+  #view-start .sh-grow.done{border-color:var(--ok)}
+  #view-start .sh-grow:not(.done){opacity:.65}
+  #view-start .sh-gck{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#06101d;flex:none}
+  #view-start .sh-grow.done .sh-gck{background:var(--ok);border-color:var(--ok)}
+  #view-start .sh-gi{font-size:20px;flex:none}
+  #view-start .sh-gtxt{display:flex;flex-direction:column;line-height:1.32}
+  #view-start .sh-gtxt b{font-size:14.5px;color:#eaf1ff}
+  #view-start .sh-gtxt span{font-size:12.5px;color:var(--muted)}
   @media (max-width:640px){ #view-start .sh-nav{gap:7px} #view-start .sh-itab{padding:8px 11px;font-size:12.4px} }
   /* ===== Keyboard tab (scoped from sandbox) ===== */
 
@@ -461,12 +471,10 @@
 
     <!-- Stage 5 · Graduation (shell) -->
     <section class="sh-pane hide" id="shp-grad">
-      <div class="sh-phead"><h3>🎓 Graduation <span class="sh-stagetag">Phase E·6 — shell</span></h3>
-        <p>Track progress across all the stages. When you’ve cleared them, you’re <b>ready to Build a Stack</b> — the hand-off into the Learn &amp; Build tabs.</p></div>
-      <div class="sh-summary">
-        <h3 id="sh-gradh">🎓 Keep going — finish the stages above.</h3>
-        <p id="sh-gradp">As you complete each stage, its tab gets a green ✓ and the bar at the top fills. When all five are done, this becomes your “you’re ready to Build a Stack” moment.</p>
-      </div>
+      <div class="sh-phead"><h3>🎓 Graduation</h3>
+        <p>Here’s everything you’ve picked up. Clear all four stages and you’re <b>ready to Build a Stack</b> — the hand-off into the Learn &amp; Build tabs.</p></div>
+      <div id="grad-checklist"></div>
+      <div id="grad-panel" class="sh-summary"></div>
       <div class="sh-pnav"><button class="sh-pnbtn" data-next="shp-tricks">← Back</button><button class="sh-pnbtn primary" onclick="show('learn');window.scrollTo(0,0);">Build a Stack →</button></div>
     </section>
   </div>
@@ -1653,22 +1661,41 @@ const TRICKS=[
 /* ===== Start Here — stage sub-tabs (Phase E) ===== */
 var SH_PANES=['shp-warmup','shp-steps','shp-features','shp-tricks','shp-grad'];
 var shDone={};
+var GRAD_STAGES=[
+  {id:'shp-warmup',icon:'🔥',name:'Warm-up',got:'the everyday words — bookmarks, extensions, history, cache'},
+  {id:'shp-steps',icon:'🪜',name:'Do This Now',got:'7 hands-on moves you did yourself'},
+  {id:'shp-features',icon:'🔍',name:'Feature deep-dives',got:'how 6 core features actually affect you'},
+  {id:'shp-tricks',icon:'✨',name:'Cool tricks',got:'8 power-user shortcuts'},
+];
 function shGo(id){
   SH_PANES.forEach(function(p){var el=document.getElementById(p);if(el)el.classList.toggle('hide',p!==id);});
   var tabs=document.querySelectorAll('#view-start .sh-itab');
   for(var i=0;i<tabs.length;i++){tabs[i].classList.toggle('on',tabs[i].getAttribute('data-pane')===id);}
+  if(id==='shp-grad') renderGrad();
   var v=document.getElementById('view-start');if(v)v.scrollIntoView({block:'start',behavior:'smooth'});
 }
 function shMarkDone(id){
   if(shDone[id])return;shDone[id]=true;
-  var tab=document.querySelector('#view-start .sh-itab[data-pane="'+id+'"]');if(tab)tab.classList.add('done');
+  // graduation is earned automatically once the four learning stages are done
+  if(GRAD_STAGES.every(function(s){return shDone[s.id];})) shDone['shp-grad']=true;
+  SH_PANES.forEach(function(p){var t=document.querySelector('#view-start .sh-itab[data-pane="'+p+'"]');if(t)t.classList.toggle('done',!!shDone[p]);});
   var n=0;for(var k in shDone){if(shDone.hasOwnProperty(k))n++;}
   var nEl=document.getElementById('sh-ovrn');if(nEl)nEl.textContent=n;
   var f=document.getElementById('sh-ovrfill');if(f)f.style.width=Math.round(n/SH_PANES.length*100)+'%';
-  if(n===SH_PANES.length){
-    var gh=document.getElementById('sh-gradh'),gp=document.getElementById('sh-gradp');
-    if(gh)gh.textContent='🎉 You’re ready to Build a Stack.';
-    if(gp)gp.innerHTML='Every stage complete. The everyday stuff is out of the way — now you’ll see how the bigger pieces connect.';
+  renderGrad();
+}
+function renderGrad(){
+  var host=document.getElementById('grad-checklist'); if(!host) return;
+  var doneN=0;
+  host.innerHTML=GRAD_STAGES.map(function(s){
+    var d=!!shDone[s.id]; if(d)doneN++;
+    return '<div class="sh-grow'+(d?' done':'')+'"><span class="sh-gck">'+(d?'✓':'')+'</span><span class="sh-gi">'+s.icon+'</span><span class="sh-gtxt"><b>'+s.name+'</b><span>'+s.got+'</span></span></div>';
+  }).join('');
+  var panel=document.getElementById('grad-panel'); if(!panel) return;
+  if(doneN===GRAD_STAGES.length){
+    panel.innerHTML='<h3>🎉 You’re ready to Build a Stack.</h3><p>All four stages cleared. The everyday stuff is second nature now — time to see how the bigger pieces connect. Jump into <b>📖 Learn</b>, then try a <b>🔧 Build</b> challenge.</p>';
+  } else {
+    panel.innerHTML='<h3>🎓 '+doneN+' of '+GRAD_STAGES.length+' stages cleared.</h3><p>Finish the rest whenever you like — there’s no rush. You can also dive straight into <b>📖 Learn</b> any time.</p>';
   }
 }
 (function(){
@@ -1676,6 +1703,7 @@ function shMarkDone(id){
   for(var i=0;i<tabs.length;i++){(function(t){t.addEventListener('click',function(){shGo(t.getAttribute('data-pane'));});})(tabs[i]);}
   var nexts=document.querySelectorAll('#view-start [data-next]');
   for(var j=0;j<nexts.length;j++){(function(b){b.addEventListener('click',function(){shGo(b.getAttribute('data-next'));});})(nexts[j]);}
+  renderGrad();
 })();
 
 /* ===== tabs (crossfade, N tabs) ===== */
