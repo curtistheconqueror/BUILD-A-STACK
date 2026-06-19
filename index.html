@@ -896,6 +896,28 @@ const GLOSSARY = [
      '<li><b>With MCP:</b> build the connector once, and any MCP-aware AI can use it — like going from custom cables to one universal port.</li>'+
      '</ul></div>'},
 
+  {sec:'Fundamentals — the building blocks', t:'JSON & YAML', tw:'{ } vs indent', h:'two ways to write the same data — one for machines, one for humans',
+   d:'Both are plain-text formats for the SAME thing: structured data — key/value pairs, lists, and nested objects. JSON (JavaScript Object Notation) wraps everything in braces { }, brackets [ ], "double quotes" and commas — compact, strict, and the language almost every API and program speaks. YAML (“YAML Ain’t Markup Language”) holds the exact same data but strips the punctuation: nesting is shown by indentation, list items start with a dash, and strings usually need no quotes. Same information, two styles — JSON is built for machines exchanging data, YAML for humans reading and editing config.',
+   s:'You see both all over your setup. JSON is the body of nearly every webhook and API response, and your bots read market-state.json / market-events.json as their feed. YAML is what configuration uses — your Stack Map Kit reads docker-compose.yml, and GitHub Actions and Kubernetes are pure YAML. Rule of thumb on your stack: programs talking to programs = JSON; you hand-editing settings = YAML.',
+   p:'Same split in production everywhere: APIs and message buses move JSON (fast, unambiguous, universal); humans configure infrastructure in YAML (Docker Compose, Kubernetes/Helm, CI/CD pipelines). Handy fact — YAML is a superset of JSON, so any valid JSON is already valid YAML, and tools convert freely between the two.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🧩 Same data, two styles</div>'+
+     '<p><b>JSON</b> — braces, quotes, commas:</p>'+
+     '<pre style="background:rgba(8,12,22,.55);border:1px solid rgba(130,150,190,.25);border-radius:8px;padding:10px;overflow:auto;font-size:12px;line-height:1.5;color:#cdd8ef"><code>{\n  "service": "api",\n  "port": 8080,\n  "tags": ["live", "prod"]\n}</code></pre>'+
+     '<p><b>YAML</b> — indentation, dashes, no quotes:</p>'+
+     '<pre style="background:rgba(8,12,22,.55);border:1px solid rgba(130,150,190,.25);border-radius:8px;padding:10px;overflow:auto;font-size:12px;line-height:1.5;color:#cdd8ef"><code>service: api\nport: 8080\ntags:\n  - live\n  - prod</code></pre>'+
+     '<p>Identical data — YAML just removes the punctuation and uses layout instead.</p></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">✏️ YAML’s perks &amp; traps</div><ul>'+
+     '<li><b>Comments:</b> YAML allows <code># like this</code>; JSON has none at all — a big reason config files use YAML.</li>'+
+     '<li><b>Indentation IS the syntax:</b> use <b>spaces, never tabs</b> — a wrong indent silently changes meaning or breaks the file. This is the #1 YAML mistake.</li>'+
+     '<li><b>The “Norway problem”:</b> the bare word <code>no</code> can be read as <code>false</code> (also <code>yes/on/off</code>) — so quote anything ambiguous, e.g. <code>country: "NO"</code>.</li>'+
+     '<li><b>Superset of JSON:</b> paste valid JSON into a YAML file and it still parses.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#ffb454"><div class="ech">⚖️ Which to use (and the cousins)</div><ul>'+
+     '<li><b>JSON</b> when machines exchange data — API payloads, webhooks, your bot feed files.</li>'+
+     '<li><b>YAML</b> when a human writes config — <code>docker-compose.yml</code>, GitHub Actions, Kubernetes, app settings.</li>'+
+     '<li><b>Other formats you’ll meet:</b> <code>XML</code> (older, verbose, tag-based) and <code>TOML</code> (clean key=value config, common in Rust/Python tooling) — but JSON and YAML cover the vast majority of what you’ll touch.</li>'+
+     '</ul></div>'},
+
   {sec:'Intermediate — how the pieces really talk', t:'IPC (file feed)', tw:'JSON files', h:'two programs talk by sharing a file',
    d:'Inter-process communication is how separate programs hand data to each other. The simplest form: one writes a file, the other reads it — no network, no protocol, just the filesystem as a shared mailbox.',
    s:'This is your last hop. market-sink writes market-state.json / market-events.json, and the Tradenificent and Paperclip runtimes READ those files. The WebSocket only carries engine→sink — the bots actually get their data as files.',
