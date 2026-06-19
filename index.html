@@ -699,7 +699,7 @@ const GLOSSARY = [
    x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">🧩 Anatomy of an API call</div>'+
      '<p>Every call has the same shape — you send a request, you get a response:</p><ul>'+
      '<li>an <b>endpoint</b> (the URL, e.g. <code>/chart/quote</code>) + a <b>method</b> (GET/POST) + an optional <b>body</b> (data you send).</li>'+
-     '<li>back comes a <b>status code</b> (did it work?) and a <b>payload</b> — almost always <b>JSON</b>.</li>'+
+     '<li>back comes a <b>status code</b> (did it work?) and a <b>payload</b> — almost always <b>JSON</b> (its indentation-based cousin <b>YAML</b> carries the same data, but is used for config files).</li>'+
      '<li>An API is really just a <b>menu</b>: a fixed list of requests the program agrees to answer.</li>'+
      '</ul></div>'+
      '<div class="excat" style="--cc:#51e08a"><div class="ech">🔤 The four verbs you will use</div><ul>'+
@@ -1207,6 +1207,7 @@ const GLOSSARY = [
 const TERMS = {
   javascript:{title:'JavaScript',text:'The programming language of the web. It runs in every browser to make pages interactive — and, through Node.js, it also runs as servers, scripts, and tools.'},
   json:{title:'JSON',text:'A simple text format for data, written as { key: value } pairs. It is how programs and APIs hand structured data to each other.'},
+  yaml:{title:'YAML',text:'YAML (“YAML Ain’t Markup Language”) is a human-friendly text format for data and configuration — the same key/value, list, and nested structure as JSON, but written with indentation instead of braces, quotes, and commas. Where JSON wraps everything in { }, [ ], "quotes" and commas, YAML strips nearly all of that: nesting is shown by indentation, list items start with a dash (- item), and strings usually need no quotes — so most people find it far easier to read and hand-edit. You meet it constantly in CONFIG files: Docker Compose, GitHub Actions, Kubernetes, CI/CD pipelines, and app settings — the files end in .yml or .yaml. Two advantages over JSON: it allows # comments (JSON has none), and it is a superset of JSON, so any JSON is already valid YAML. The catch: indentation is significant — you must use SPACES, never tabs, and a wrong indent silently changes the meaning or breaks the file. Watch the value quirks too (the bare word no can be read as false — the famous “Norway problem”), so quote anything ambiguous. Rule of thumb: JSON when machines talk to machines (APIs); YAML when a human writes config.'},
   html:{title:'HTML',text:'The markup that defines a web page’s structure — headings, paragraphs, buttons. This whole tool is a single HTML file.'},
   css:{title:'CSS',text:'The styling language that controls how a page looks — colors, spacing, layout, animation. HTML is the structure; CSS is the paint.'},
   runtime:{title:'Runtime',text:'The program that actually executes your code. Node.js is a runtime for JavaScript — it turns your .js files into running programs.'},
