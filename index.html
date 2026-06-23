@@ -414,9 +414,174 @@
   <h1>BUILD-A-STACK</h1>
   <div class="sub">Learn how real systems connect — bridges, ports, sockets, gateways — then wire one yourself. Built off the Tradenificent Stack Map.</div>
 </header>
-<div class="tabs"><button id="tab-start" class="on">🚀 Start Here</button><button id="tab-learn">📖 Learn</button><button id="tab-build">🔧 Build</button><button id="tab-pcmac">💻 PC vs Mac</button><button id="tab-keyboard">⌨️ Keyboard</button></div>
+<div class="tabs"><button id="tab-start" class="on">🧭 Choose Your Path</button><button id="tab-learn">📖 Learn</button><button id="tab-build">🔧 Build</button><button id="tab-pcmac">💻 PC vs Mac</button><button id="tab-keyboard">⌨️ Keyboard</button></div>
 <div class="wrap">
   <div id="view-start" class="view">
+    <style>
+      #cp-landing{position:relative;overflow:hidden;padding:6px 0 4px}
+      .cp-blob{position:absolute;border-radius:50%;filter:blur(60px);z-index:0;pointer-events:none}
+      .cp-h2{font-size:25px;font-weight:800;margin:2px 0 2px;position:relative;z-index:1}
+      .cp-sub{color:var(--muted);font-size:15px;margin:0 0 18px;position:relative;z-index:1}
+      .cp-card{position:relative;overflow:hidden;display:flex;align-items:flex-start;gap:15px;background:var(--glass);backdrop-filter:blur(16px) saturate(1.3);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin-bottom:14px;z-index:1;transition:transform .25s cubic-bezier(.2,.8,.2,1),border-color .25s,box-shadow .25s}
+      .cp-card.ready{cursor:pointer}
+      .cp-card.ready:hover{transform:translateY(-3px);border-color:var(--acc);box-shadow:0 16px 40px rgba(0,0,0,.5),0 0 30px -8px var(--acc)}
+      .cp-card.locked{opacity:.82}
+      .cp-gloss{position:absolute;top:0;left:0;right:0;height:46%;background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,0));pointer-events:none}
+      .cp-lvl{flex:0 0 54px;text-align:center;position:relative;z-index:1}
+      .cp-num{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:700;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.16);color:var(--ink);margin:0 auto 7px}
+      .cp-dots{display:flex;gap:4px;justify-content:center}
+      .cp-d{display:inline-block;width:6px;height:6px;border-radius:50%;background:rgba(180,200,235,.22)}
+      .cp-d.on{background:var(--acc)}
+      .cp-body{flex:1;min-width:0;position:relative;z-index:1}
+      .cp-trow{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+      .cp-title{font-size:17px;font-weight:700;color:var(--ink)}
+      .cp-desc{margin:5px 0 0;color:var(--muted);font-size:14px;line-height:1.55}
+      .cp-pill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:#cdd9e8;background:rgba(255,255,255,.07);padding:3px 10px;border-radius:8px;margin-top:9px}
+      .cp-badge{font-size:12px;padding:3px 11px;border-radius:8px;white-space:nowrap}
+      .cp-badge.ok{background:rgba(81,224,138,.18);color:#9ff0bf}
+      .cp-badge.soon{background:rgba(255,255,255,.08);color:var(--muted)}
+      .cp-ic{align-self:center;position:relative;z-index:1}
+      .cp-back{background:none;border:1px solid var(--border);color:var(--muted);border-radius:9px;padding:7px 13px;font-size:13.5px;cursor:pointer;margin-bottom:14px;transition:.2s}
+      .cp-back:hover{border-color:var(--acc);color:var(--ink)}
+    </style>
+    <!-- LEVEL 1: goal chooser (Computer Savvy vs AI) -->
+    <div id="cp-goal" class="cp-landing">
+      <div class="cp-blob" style="width:240px;height:240px;background:#35d0e0;opacity:.5;top:-50px;left:-40px"></div>
+      <div class="cp-blob" style="width:220px;height:220px;background:#3f7fe6;opacity:.5;bottom:-60px;right:-30px"></div>
+      <h2 class="cp-h2">Choose your path</h2>
+      <p class="cp-sub">First — what do you want to get out of this? You can switch anytime.</p>
+
+      <div class="cp-card ready" onclick="cpPath('computer')">
+        <div class="cp-gloss"></div>
+        <div class="cp-lvl"><div class="cp-num" style="font-size:23px">🖥️</div></div>
+        <div class="cp-body">
+          <div class="cp-trow"><span class="cp-title" style="font-size:19px">Get Computer Savvy</span><span class="cp-badge ok">✓ Tier 1 ready</span></div>
+          <p class="cp-desc">Become confident with computers — files, browsers, settings, and how it all connects. No AI required.</p>
+          <span class="cp-pill">→ 4 levels · start from zero</span>
+        </div>
+        <div class="cp-ic" style="font-size:22px;color:var(--acc)">›</div>
+      </div>
+
+      <div class="cp-card ready" onclick="cpPath('ai')">
+        <div class="cp-gloss"></div>
+        <div class="cp-lvl"><div class="cp-num" style="font-size:23px">🤖</div></div>
+        <div class="cp-body">
+          <div class="cp-trow"><span class="cp-title" style="font-size:19px">Learn AI</span><span class="cp-badge soon">Preview</span></div>
+          <p class="cp-desc">Use AI day-to-day, then go deeper into agentic workflows — automating real tasks end to end.</p>
+          <span class="cp-pill">→ 4 levels · ends in agentic workflows</span>
+        </div>
+        <div class="cp-ic" style="font-size:22px;color:var(--acc2)">›</div>
+      </div>
+    </div>
+
+    <!-- LEVEL 2a: Computer Savvy tier ladder -->
+    <div id="cp-computer" class="cp-landing hide">
+      <div class="cp-blob" style="width:240px;height:240px;background:#35d0e0;opacity:.5;top:-50px;left:-40px"></div>
+      <div class="cp-blob" style="width:220px;height:220px;background:#3f7fe6;opacity:.5;bottom:-60px;right:-30px"></div>
+      <button class="cp-back" onclick="cpGoal()">← Switch path</button>
+      <h2 class="cp-h2">🖥️ Computer Savvy</h2>
+      <p class="cp-sub">Pick your level — you can start anywhere.</p>
+
+      <div class="cp-card ready" onclick="cpEnter()">
+        <div class="cp-gloss"></div>
+        <div class="cp-lvl"><div class="cp-num">1</div><div class="cp-dots"><i class="cp-d on"></i><i class="cp-d"></i><i class="cp-d"></i><i class="cp-d"></i></div></div>
+        <div class="cp-body">
+          <div class="cp-trow"><span class="cp-title">Just learning</span><span class="cp-badge ok">✓ 5 lessons ready</span></div>
+          <p class="cp-desc">You can check email and browse a little — and you're ready to learn the rest from the ground up.</p>
+          <span class="cp-pill">→ The fundamentals, start to finish</span>
+        </div>
+        <div class="cp-ic" style="font-size:22px;color:var(--acc)">›</div>
+      </div>
+
+      <div class="cp-card locked">
+        <div class="cp-gloss"></div>
+        <div class="cp-lvl"><div class="cp-num">2</div><div class="cp-dots"><i class="cp-d on"></i><i class="cp-d on"></i><i class="cp-d"></i><i class="cp-d"></i></div></div>
+        <div class="cp-body">
+          <div class="cp-trow"><span class="cp-title">Getting comfortable</span><span class="cp-badge soon">Coming soon</span></div>
+          <p class="cp-desc">You get around for everyday things, but want to fill the gaps and feel in control.</p>
+          <span class="cp-pill">→ Confidence and the why behind it</span>
+        </div>
+        <div class="cp-ic" style="font-size:18px">🔒</div>
+      </div>
+
+      <div class="cp-card locked">
+        <div class="cp-gloss"></div>
+        <div class="cp-lvl"><div class="cp-num">3</div><div class="cp-dots"><i class="cp-d on"></i><i class="cp-d on"></i><i class="cp-d on"></i><i class="cp-d"></i></div></div>
+        <div class="cp-body">
+          <div class="cp-trow"><span class="cp-title">Tech savvy</span><span class="cp-badge soon">Coming soon</span></div>
+          <p class="cp-desc">You're confident with your devices and want to see how the pieces actually fit together.</p>
+          <span class="cp-pill">→ How real systems connect</span>
+        </div>
+        <div class="cp-ic" style="font-size:18px">🔒</div>
+      </div>
+
+      <div class="cp-card locked">
+        <div class="cp-gloss"></div>
+        <div class="cp-lvl"><div class="cp-num">4</div><div class="cp-dots"><i class="cp-d on"></i><i class="cp-d on"></i><i class="cp-d on"></i><i class="cp-d on"></i></div></div>
+        <div class="cp-body">
+          <div class="cp-trow"><span class="cp-title">Ready to build</span><span class="cp-badge soon">Coming soon</span></div>
+          <p class="cp-desc">You know your way around — now you want to design and build a real stack.</p>
+          <span class="cp-pill">→ Build, analyze, your stack</span>
+        </div>
+        <div class="cp-ic" style="font-size:18px">🔒</div>
+      </div>
+    </div>
+
+    <!-- LEVEL 2b: AI tier ladder (content TBD — structure preview) -->
+    <div id="cp-ai" class="cp-landing hide">
+      <div class="cp-blob" style="width:240px;height:240px;background:#7b5cff;opacity:.5;top:-50px;left:-40px"></div>
+      <div class="cp-blob" style="width:220px;height:220px;background:#35d0e0;opacity:.45;bottom:-60px;right:-30px"></div>
+      <button class="cp-back" onclick="cpGoal()">← Switch path</button>
+      <h2 class="cp-h2">🤖 Learn AI</h2>
+      <p class="cp-sub">Pick your level — start with the basics, finish with agentic workflows.</p>
+
+      <div class="cp-card locked">
+        <div class="cp-gloss"></div>
+        <div class="cp-lvl"><div class="cp-num">1</div><div class="cp-dots"><i class="cp-d on"></i><i class="cp-d"></i><i class="cp-d"></i><i class="cp-d"></i></div></div>
+        <div class="cp-body">
+          <div class="cp-trow"><span class="cp-title">AI Basics</span><span class="cp-badge soon">Coming soon</span></div>
+          <p class="cp-desc">What AI actually is, how to talk to a chatbot, and your first genuinely useful prompt.</p>
+          <span class="cp-pill">→ Start here with AI</span>
+        </div>
+        <div class="cp-ic" style="font-size:18px">🔒</div>
+      </div>
+
+      <div class="cp-card locked">
+        <div class="cp-gloss"></div>
+        <div class="cp-lvl"><div class="cp-num">2</div><div class="cp-dots"><i class="cp-d on"></i><i class="cp-d on"></i><i class="cp-d"></i><i class="cp-d"></i></div></div>
+        <div class="cp-body">
+          <div class="cp-trow"><span class="cp-title">Everyday AI</span><span class="cp-badge soon">Coming soon</span></div>
+          <p class="cp-desc">Writing, summarizing, explaining, planning — real daily wins you'll actually use.</p>
+          <span class="cp-pill">→ AI for everyday tasks</span>
+        </div>
+        <div class="cp-ic" style="font-size:18px">🔒</div>
+      </div>
+
+      <div class="cp-card locked">
+        <div class="cp-gloss"></div>
+        <div class="cp-lvl"><div class="cp-num">3</div><div class="cp-dots"><i class="cp-d on"></i><i class="cp-d on"></i><i class="cp-d on"></i><i class="cp-d"></i></div></div>
+        <div class="cp-body">
+          <div class="cp-trow"><span class="cp-title">Prompting &amp; Power Use</span><span class="cp-badge soon">Coming soon</span></div>
+          <p class="cp-desc">Prompt like a pro, understand AI's limits (and hallucination), use it for research and productivity.</p>
+          <span class="cp-pill">→ Get real leverage from it</span>
+        </div>
+        <div class="cp-ic" style="font-size:18px">🔒</div>
+      </div>
+
+      <div class="cp-card locked">
+        <div class="cp-gloss"></div>
+        <div class="cp-lvl"><div class="cp-num">4</div><div class="cp-dots"><i class="cp-d on"></i><i class="cp-d on"></i><i class="cp-d on"></i><i class="cp-d on"></i></div></div>
+        <div class="cp-body">
+          <div class="cp-trow"><span class="cp-title">Agentic Workflows</span><span class="cp-badge soon">Subdomain · soon</span></div>
+          <p class="cp-desc">The deep end: agents that do multi-step work, connecting tools to automate real tasks end to end.</p>
+          <span class="cp-pill">→ A deeper subdomain of AI</span>
+        </div>
+        <div class="cp-ic" style="font-size:18px">🔒</div>
+      </div>
+    </div>
+
+    <div id="cp-journey" class="hide">
+      <button class="cp-back" onclick="cpExit()">← Back to levels</button>
     <div class="sh-hero">
       <h2>👋 New to all this? You’re in exactly the right place.</h2>
       <p>No experience needed. We start from the <i>very</i> beginning — yes, like turning on your computer — and build up one small step at a time, until how a whole software “stack” fits together actually makes sense.</p>
@@ -481,6 +646,7 @@
       <div class="sh-resetwrap"><button class="sh-reset" onclick="shResetProgress()">↺ reset my progress</button></div>
       <div class="sh-pnav"><button class="sh-pnbtn" data-next="shp-tricks">← Back</button><button class="sh-pnbtn primary" onclick="show('learn');window.scrollTo(0,0);">Build a Stack →</button></div>
     </section>
+    </div>
   </div>
   <div id="view-learn" class="view hide">
     <div class="prog"><span>explored <span class="pct" id="pc">0</span>/<span id="tot">0</span></span><span class="pbar"><i id="fill"></i></span></div>
@@ -1757,6 +1923,12 @@ function show(which){TABS.forEach(function(t){var on=t[0]===which;document.getEl
   // Learn starts hidden now, so its scroll-reveal observer never fires — reveal its rows on open.
   if(which==='learn'){var _lr=document.querySelectorAll('#view-learn .row');for(var _i=0;_i<_lr.length;_i++)_lr[_i].classList.add('in');}}
 TABS.forEach(function(t){document.getElementById(t[1]).addEventListener('click',function(){show(t[0]);});});
+/* ===== Choose Your Path landing (CP1) ===== */
+function cpShow(id){['cp-goal','cp-computer','cp-ai','cp-journey'].forEach(function(s){var el=document.getElementById(s);if(el)el.classList.toggle('hide',s!==id);});window.scrollTo(0,0);}
+function cpGoal(){cpShow('cp-goal');}                       // back to the two-path chooser
+function cpPath(which){cpShow(which==='ai'?'cp-ai':'cp-computer');}  // open a path's tier ladder
+function cpEnter(){cpShow('cp-journey');}                   // Computer Savvy Tier 1 -> 5-stage journey
+function cpExit(){cpShow('cp-computer');}                   // journey back -> Computer Savvy levels
 
 /* ===== Keyboard tab logic (scoped IIFE from sandbox) ===== */
 ;(function(){

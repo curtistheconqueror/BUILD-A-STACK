@@ -3,3 +3,4 @@ Thumbs.db
 *.tmp
 *.log
 node_modules/
+sandbox.html
