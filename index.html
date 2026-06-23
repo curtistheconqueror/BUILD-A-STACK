@@ -1084,6 +1084,51 @@ const GLOSSARY = [
      '<li><b>Other formats you’ll meet:</b> <code>XML</code> (older, verbose, tag-based) and <code>TOML</code> (clean key=value config, common in Rust/Python tooling) — but JSON and YAML cover the vast majority of what you’ll touch.</li>'+
      '</ul></div>'},
 
+  {t:'Modem', tw:'internet in', h:'how most homes plug into the internet',
+   d:'A modem connects your home to your internet provider (ISP) over a wired line — cable, fiber, or DSL — and translates that signal into data your devices can use, and back again. It is the on-ramp: the point where the public internet actually enters your house. One important nuance — it is the MOST common way online, not the only one: a phone hotspot or a 5G/LTE home gateway brings internet in over the cellular network instead, with no traditional modem at all.',
+   s:'Everything on your Stack Map ultimately rides on this one box. If the modem drops, THE CUBE loses internet, TradingView can’t reach the exchanges, the webhook tunnel dies, and every bot goes blind at once — so it is the single most upstream point of failure in the whole stack.',
+   p:'In a data center there is no consumer modem — buildings connect straight to the internet backbone through carrier-grade fiber and routers. "Modem" is really a home/small-office word; at scale the same job is done by ISP edge equipment you never see.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">📚 Modem vs router — the #1 confusion</div>'+
+     '<p>People say "modem" for the whole box, but they are two different jobs (often bundled into one unit):</p><ul>'+
+     '<li><b>Modem</b> = brings the internet <b>in</b> from your ISP (one wire from the wall).</li>'+
+     '<li><b>Router</b> = <b>shares</b> that one connection out to all your devices and creates your Wi-Fi.</li>'+
+     '<li>Many ISPs hand you a single "gateway" that is both — which is exactly why the two words get mixed up.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🛜 Other ways online (no modem needed)</div><ul>'+
+     '<li><b>Phone hotspot</b> — your phone shares its cellular data over Wi-Fi.</li>'+
+     '<li><b>5G / LTE home internet</b> — a gateway that uses the cell network instead of a wire.</li>'+
+     '<li><b>Satellite</b> — Starlink and similar, for places with no cable or fiber.</li>'+
+     '<li>Tech note: these still have a tiny <b>cellular modem</b> inside — it is just not the standalone box people picture.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">🛠️ Why it matters to you</div><ul>'+
+     '<li><b>Internet down?</b> The modem is the first thing to check — unplug it for 30 seconds, plug it back in (the classic fix that genuinely works).</li>'+
+     '<li>The lights tell the story: a steady "online"/"internet" light = good; blinking or red = it lost the ISP signal.</li>'+
+     '<li>It is the boundary of your control — past the modem is the ISP’s problem, not yours.</li>'+
+     '</ul></div>'},
+  {t:'Server', tw:'serves clients', h:'a computer whose job is to serve things to other computers',
+   d:'A server provides something — web pages, files, data, email — to other computers ("clients") that ask for it. The key idea: "server" is a JOB, not always a physical box. It can be a humming machine in a data center, or just a piece of software running in the cloud. When your phone loads a website, it is a client asking a server to send the page back.',
+   s:'Every box on your Stack Map IS a server: market-state, the bridges, the dashboard, Paperclip. Each one is a program sitting on a port, waiting to answer requests. And "the cloud" everyone talks about is literally just servers someone else runs and rents out.',
+   p:'In production, servers rarely run as loose programs — they run in containers (Docker) across many machines, with load balancers spreading the requests and orchestration (Kubernetes) restarting them automatically. One logical "server" might really be dozens of copies.',
+   x:'<div class="excat" style="--cc:#35d0e0"><div class="ech">📚 Client ↔ server — the relationship</div>'+
+     '<p>Almost everything online is this back-and-forth:</p><ul>'+
+     '<li>The <b>client</b> asks (your browser, a phone app, a bot).</li>'+
+     '<li>The <b>server</b> answers (sends the page, the data, the file).</li>'+
+     '<li>One server handles <b>many</b> clients at once — that is the whole reason it stays "always on."</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#51e08a"><div class="ech">🗂️ Types of server (named for the job)</div><ul>'+
+     '<li><b>Web server</b> — serves websites and pages (e.g. nginx).</li>'+
+     '<li><b>Database server</b> — stores and hands back data (Postgres, MySQL).</li>'+
+     '<li><b>File server</b> — stores and shares files.</li>'+
+     '<li><b>Mail server</b> — sends and receives email.</li>'+
+     '<li><b>App / API server</b> — runs the logic behind an app (your bridges are these).</li>'+
+     '<li><b>Game server</b> — keeps a multiplayer world in sync.</li>'+
+     '</ul></div>'+
+     '<div class="excat" style="--cc:#b78cff"><div class="ech">☁️ Physical vs virtual — the part people miss</div><ul>'+
+     '<li><b>Physical</b> — a real machine in a data center (or a PC under a desk, like THE CUBE running your whole stack).</li>'+
+     '<li><b>Virtual / cloud</b> — rented compute on someone else’s hardware (AWS, Google Cloud…); you never touch the box.</li>'+
+     '<li>One physical machine can run <b>many</b> virtual servers at the same time.</li>'+
+     '<li>Bottom line: if it is "always on and answering requests," it is a server — box or not.</li>'+
+     '</ul></div>'},
   {sec:'Intermediate — how the pieces really talk', t:'IPC (file feed)', tw:'JSON files', h:'two programs talk by sharing a file',
    d:'Inter-process communication is how separate programs hand data to each other. The simplest form: one writes a file, the other reads it — no network, no protocol, just the filesystem as a shared mailbox.',
    s:'This is your last hop. market-sink writes market-state.json / market-events.json, and the Tradenificent and Paperclip runtimes READ those files. The WebSocket only carries engine→sink — the bots actually get their data as files.',
