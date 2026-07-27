@@ -15,6 +15,25 @@ Open **`index.html`** in any modern browser (Chrome recommended). No build, no s
 - **📖 Learn** — a glossary of the fundamentals. Each card is collapsible: *What it is · In your stack · Pragmatic vs production.*
 - **🔧 Build** — drag-and-connect challenges. Drag the pieces into the slots where they belong; a piece that doesn't fit bounces back with a buzz; complete the branch and the data flow lights up.
 
+## Pay Clock
+
+`pay-clock.html` is a separate single-file widget in the same spirit — open it directly, no server, works offline.
+
+Clock in and your earnings climb in real time at your hourly rate. Toggle whether the number steps every **second**, **minute**, or **hour**; the elapsed timer always runs live. Set a target for the day and it stops itself when you hit it.
+
+- **Overtime at 1.5×**, switching *mid-shift* — cross the threshold at hour 39 and the rest of that same shift bills at the OT rate, split correctly rather than rounded into one bucket. Two rules to choose from: **40 h per week** (resets each week — how US payroll normally works) or **80 h cumulative per pay period**.
+- **Pay-period aware** — knows the current period, the payday, and how long is left in both; rolls itself over to a fresh period on schedule and starts the counters again. Anchored to one start date and repeated from there, so it never needs reconfiguring.
+- **Survives everything** — every figure derives from wall-clock timestamps, not from counting ticks, so refreshing, backgrounding the tab, or sleeping the machine mid-shift all recover the correct amount.
+- Editable shift log, CSV export, and settings for rate, thresholds, week start, period length, and payday offset.
+
+Figures are **gross**, before taxes and deductions. Data is stored only in your own browser.
+
+```
+npm test     # 62 assertions against the pay engine — no dependencies
+```
+
+The tests extract the engine straight out of `pay-clock.html`, so what's verified is exactly what ships.
+
 ## Roadmap
 
 - **Phase A — Learn (glossary)**

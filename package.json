@@ -1,0 +1,7 @@
+{
+  "name": "build-a-stack",
+  "private": true,
+  "scripts": {
+    "test": "node tests/pay-engine.test.mjs"
+  }
+}

@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Pay Clock · live earnings tracker</title>
+<style>
+  :root{--bg0:#05080f;--bg1:#0a1020;--ink:#eaf1ff;--muted:#8ea0c4;--acc:#35d0e0;--acc2:#b78cff;--acc3:#ff6fb5;
+    --ok:#51e08a;--bad:#ff5d6c;--warn:#ffb454;--glass:rgba(22,30,50,.55);--border:rgba(130,155,200,.22);}
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%;color:var(--ink);font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg0);overflow-x:hidden;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+  .bg{position:fixed;inset:0;z-index:-3;background:
+    radial-gradient(900px 640px at 14% 8%,rgba(53,208,224,.16),transparent 60%),
+    radial-gradient(840px 600px at 88% 92%,rgba(183,140,255,.18),transparent 58%),
+    radial-gradient(700px 560px at 70% 12%,rgba(255,111,181,.10),transparent 60%),
+    linear-gradient(180deg,var(--bg0),var(--bg1));animation:drift 30s ease-in-out infinite alternate}
+  @keyframes drift{0%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(-2%,2%,0) scale(1.05)}100%{transform:translate3d(2%,-1.5%,0) scale(1.04)}}
+  .grid{position:fixed;inset:-2px;z-index:-2;opacity:.45;pointer-events:none;
+    background-image:linear-gradient(rgba(120,160,220,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(120,160,220,.06) 1px,transparent 1px);
+    background-size:46px 46px;-webkit-mask-image:radial-gradient(80% 70% at 50% 30%,#000,transparent);mask-image:radial-gradient(80% 70% at 50% 30%,#000,transparent);animation:gridmove 40s linear infinite}
+  @keyframes gridmove{to{background-position:460px 460px}}
+
+  .wrap{max-width:780px;margin:0 auto;padding:26px 20px 90px}
+  header{margin-bottom:18px}
+  h1{margin:0;font-size:27px;letter-spacing:4px;font-weight:800;
+    background:linear-gradient(90deg,#35d0e0,#b78cff,#ff6fb5,#35d0e0);background-size:300% 100%;
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:sheen 8s linear infinite}
+  @keyframes sheen{to{background-position:300% 0}}
+  .sub{color:var(--muted);font-size:14px;margin-top:5px}
+
+  .card{background:var(--glass);backdrop-filter:blur(16px) saturate(1.3);border:1px solid var(--border);
+    border-left:3px solid var(--ca,var(--acc));border-radius:16px;padding:18px 20px;margin-bottom:16px}
+  .card h2{margin:0 0 14px;font-size:11.6px;letter-spacing:2.6px;text-transform:uppercase;color:var(--ca,var(--acc2));font-weight:800;display:flex;align-items:center;gap:10px}
+  .card h2::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--ca,var(--acc2)),transparent);opacity:.45}
+
+  /* ---- hero ---- */
+  #hero{--ca:var(--acc);text-align:center;padding:26px 20px 22px;position:relative;overflow:hidden}
+  #hero.ot{--ca:var(--warn);border-color:rgba(255,180,84,.4);box-shadow:0 0 34px -12px var(--warn)}
+  #hero.run::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;
+    background:linear-gradient(90deg,transparent,var(--ca),transparent);animation:scan 2.6s linear infinite}
+  @keyframes scan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+  .status{font-size:11.4px;letter-spacing:2.6px;text-transform:uppercase;font-weight:800;color:var(--muted)}
+  .status.on{color:var(--ok)}
+  .status .blip{display:inline-block;width:8px;height:8px;border-radius:50%;background:currentColor;margin-right:7px;vertical-align:1px}
+  .status.on .blip{animation:pulse 1.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(81,224,138,.7)}50%{opacity:.55;box-shadow:0 0 0 7px rgba(81,224,138,0)}}
+  .money{font-size:clamp(42px,12.5vw,68px);font-weight:800;line-height:1.05;margin:12px 0 2px;
+    font-variant-numeric:tabular-nums;letter-spacing:-1px;
+    background:linear-gradient(90deg,var(--acc),var(--acc2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+    text-shadow:0 0 40px rgba(53,208,224,.18)}
+  #hero.ot .money{background:linear-gradient(90deg,var(--warn),var(--acc3));-webkit-background-clip:text;background-clip:text}
+  .money.bump{animation:bump .16s ease}
+  @keyframes bump{50%{transform:scale(1.018)}}
+  .liveline{color:var(--muted);font-size:13.4px;font-variant-numeric:tabular-nums;min-height:19px}
+  .liveline b{color:var(--ink);font-weight:700}
+  .timer{font-size:31px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:2px;margin:14px 0 4px}
+  .timerlbl{color:var(--muted);font-size:11.4px;letter-spacing:2.4px;text-transform:uppercase}
+
+  .seg{display:inline-flex;gap:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:18px 0 4px;background:rgba(10,16,32,.5)}
+  .seg button{cursor:pointer;background:transparent;color:var(--muted);border:0;padding:9px 20px;font-size:13.2px;font-weight:800;letter-spacing:1.6px;transition:.2s;font-family:inherit}
+  .seg button.on{color:#05080f;background:linear-gradient(180deg,var(--acc),#1fb4c6)}
+  .seghint{color:var(--muted);font-size:12.4px;margin-top:8px}
+
+  .actions{display:flex;gap:10px;justify-content:center;margin-top:18px;flex-wrap:wrap}
+  button.btn{cursor:pointer;font-family:inherit;border-radius:12px;padding:13px 30px;font-size:15.4px;font-weight:800;letter-spacing:.6px;
+    border:1px solid var(--border);background:var(--glass);color:var(--ink);transition:.22s}
+  button.btn:hover{transform:translateY(-2px)}
+  button.btn.go{border-color:var(--ok);background:linear-gradient(180deg,rgba(81,224,138,.22),rgba(81,224,138,.06));box-shadow:0 0 24px -8px var(--ok)}
+  button.btn.stop{border-color:var(--bad);background:linear-gradient(180deg,rgba(255,93,108,.22),rgba(255,93,108,.06));box-shadow:0 0 24px -8px var(--bad)}
+  button.mini{cursor:pointer;font-family:inherit;background:rgba(130,155,200,.1);color:var(--muted);border:1px solid var(--border);
+    border-radius:9px;padding:6px 12px;font-size:12.4px;font-weight:700;transition:.2s}
+  button.mini:hover{color:var(--ink);border-color:var(--acc)}
+  button.mini.danger:hover{color:var(--bad);border-color:var(--bad)}
+
+  .planrow{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:16px;
+    border-top:1px solid var(--border);padding-top:16px;color:var(--muted);font-size:13.6px}
+  input[type=number],input[type=text],input[type=date],input[type=datetime-local],select{
+    font-family:inherit;background:rgba(10,16,32,.65);color:var(--ink);border:1px solid var(--border);
+    border-radius:9px;padding:8px 10px;font-size:13.6px;font-variant-numeric:tabular-nums}
+  input:focus,select:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 2px rgba(53,208,224,.16)}
+  input[type=number]{width:80px}
+  .swrap{display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
+  .swrap input{accent-color:var(--acc);width:16px;height:16px;cursor:pointer}
+  .eta{color:var(--acc);font-weight:700}
+
+  /* ---- period ---- */
+  #period{--ca:var(--acc2)}
+  .prange{font-size:19.5px;font-weight:800;letter-spacing:.3px}
+  .pmeta{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:14px}
+  .pm{background:rgba(10,16,32,.45);border:1px solid var(--border);border-radius:12px;padding:11px 13px}
+  .pm .k{color:var(--muted);font-size:10.8px;letter-spacing:2px;text-transform:uppercase;font-weight:800}
+  .pm .v{font-size:16px;font-weight:800;margin-top:5px;font-variant-numeric:tabular-nums}
+
+  /* ---- totals ---- */
+  #totals{--ca:var(--acc3)}
+  .tgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+  .tile{background:rgba(10,16,32,.45);border:1px solid var(--border);border-radius:13px;padding:14px}
+  .tile .k{color:var(--muted);font-size:10.8px;letter-spacing:2px;text-transform:uppercase;font-weight:800}
+  .tile .big{font-size:25px;font-weight:800;margin:7px 0 3px;font-variant-numeric:tabular-nums}
+  .tile .det{color:var(--muted);font-size:12.7px;font-variant-numeric:tabular-nums;line-height:1.65}
+  .tile .det .ot{color:var(--warn);font-weight:700}
+
+  .otbar{margin-top:16px}
+  .otbar .lbl{display:flex;justify-content:space-between;font-size:12.7px;color:var(--muted);margin-bottom:7px;font-variant-numeric:tabular-nums}
+  .bar{height:9px;border-radius:9px;background:rgba(130,155,200,.14);overflow:hidden;display:flex}
+  .bar i{display:block;height:100%;transition:width .4s ease}
+  .bar i.reg{background:linear-gradient(90deg,var(--acc),var(--acc2))}
+  .bar i.otf{background:linear-gradient(90deg,var(--warn),var(--acc3))}
+  .badge{display:inline-block;padding:4px 11px;border-radius:999px;font-size:10.8px;font-weight:800;letter-spacing:1.8px;text-transform:uppercase;
+    border:1px solid var(--warn);color:var(--warn);background:rgba(255,180,84,.12)}
+
+  /* ---- log / settings ---- */
+  #log,#cfg{--ca:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:13.2px;font-variant-numeric:tabular-nums}
+  th{text-align:left;color:var(--muted);font-size:10.6px;letter-spacing:1.7px;text-transform:uppercase;padding:0 8px 9px 0;font-weight:800;white-space:nowrap}
+  td{padding:9px 8px 9px 0;border-top:1px solid var(--border);vertical-align:middle;white-space:nowrap}
+  td.num{text-align:right;white-space:nowrap}
+  tr.otrow td.num.g{color:var(--warn)}
+  tr.live td{background:rgba(81,224,138,.06)}
+  .running{color:var(--ok);font-weight:800;font-size:11.4px;letter-spacing:1.4px;text-transform:uppercase}
+  .running::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;
+    margin-right:6px;animation:pulse 1.4s ease-in-out infinite}
+  .empty{color:var(--muted);font-size:13.4px;padding:6px 0}
+  .cfgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:13px}
+  .f{display:flex;flex-direction:column;gap:6px}
+  .f label{color:var(--muted);font-size:10.8px;letter-spacing:1.7px;text-transform:uppercase;font-weight:800}
+  .f .note{color:var(--muted);font-size:12px;line-height:1.5}
+  details summary{cursor:pointer;list-style:none;color:var(--muted);font-size:11.6px;letter-spacing:2.6px;text-transform:uppercase;font-weight:800}
+  details summary::-webkit-details-marker{display:none}
+  details summary::before{content:"▸ ";color:var(--acc)}
+  details[open] summary::before{content:"▾ "}
+  .foot{color:var(--muted);font-size:12.3px;text-align:center;margin-top:26px;line-height:1.7}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);background:rgba(10,16,32,.95);border:1px solid var(--acc);
+    color:var(--ink);padding:11px 20px;border-radius:12px;font-size:13.6px;font-weight:600;opacity:0;pointer-events:none;transition:.3s;z-index:20;
+    box-shadow:0 10px 40px rgba(0,0,0,.6);max-width:88vw;text-align:center}
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+  @media(max-width:560px){.wrap{padding:18px 14px 80px}.card{padding:15px 14px}.timer{font-size:26px}th,td{font-size:12.3px}}
+</style>
+</head>
+<body>
+<div class="bg"></div><div class="grid"></div>
+
+<div class="wrap">
+  <header>
+    <h1>PAY CLOCK</h1>
+    <div class="sub">Clock in and watch it earn — second by second, straight time into overtime.</div>
+  </header>
+
+  <!-- ================= HERO ================= -->
+  <section class="card" id="hero">
+    <div class="status" id="status"><span class="blip"></span><span id="statusTxt">Clocked out</span></div>
+    <div class="money" id="money">$0.00</div>
+    <div class="liveline" id="liveline"></div>
+    <div class="timer" id="timer">00:00:00</div>
+    <div class="timerlbl">on the clock</div>
+
+    <div class="seg" id="seg">
+      <button data-u="sec">SEC</button><button data-u="min">MIN</button><button data-u="hr">HR</button>
+    </div>
+    <div class="seghint" id="seghint"></div>
+
+    <div class="actions">
+      <button class="btn go" id="punch">▶ Clock In</button>
+    </div>
+
+    <div class="planrow">
+      <label class="swrap"><input type="checkbox" id="planOn"> Auto-stop after</label>
+      <input type="number" id="planHrs" min="0.25" max="24" step="0.25" value="8"> <span>hours today</span>
+      <span class="eta" id="planEta"></span>
+    </div>
+  </section>
+
+  <!-- ================= PERIOD ================= -->
+  <section class="card" id="period">
+    <h2>Pay period</h2>
+    <div class="prange" id="prange">—</div>
+    <div class="pmeta">
+      <div class="pm"><div class="k">Payday</div><div class="v" id="payday">—</div></div>
+      <div class="pm"><div class="k">Period ends in</div><div class="v" id="pleft">—</div></div>
+      <div class="pm"><div class="k">Paid in</div><div class="v" id="payin">—</div></div>
+    </div>
+  </section>
+
+  <!-- ================= TOTALS ================= -->
+  <section class="card" id="totals">
+    <h2>Earnings <span id="otBadge"></span></h2>
+    <div class="tgrid">
+      <div class="tile"><div class="k">Today</div><div class="big" id="dGross">$0.00</div>
+        <div class="det" id="dDet">0.00 h</div></div>
+      <div class="tile"><div class="k" id="wkKey">This week</div><div class="big" id="wGross">$0.00</div>
+        <div class="det" id="wDet">0.00 h</div></div>
+      <div class="tile"><div class="k">Period to date</div><div class="big" id="pGross">$0.00</div>
+        <div class="det" id="pDet">0.00 h</div></div>
+    </div>
+    <div class="otbar">
+      <div class="lbl"><span id="otLbl">Toward overtime</span><span id="otNum"></span></div>
+      <div class="bar"><i class="reg" id="barReg"></i><i class="otf" id="barOt"></i></div>
+    </div>
+  </section>
+
+  <!-- ================= LOG ================= -->
+  <section class="card" id="log">
+    <h2>Shift log — this period</h2>
+    <div id="logBody"></div>
+    <div class="actions" style="justify-content:flex-start;margin-top:15px">
+      <button class="mini" id="addShift">+ Add shift manually</button>
+      <button class="mini" id="exportCsv">⇩ Export CSV</button>
+      <button class="mini danger" id="clearPeriod">Clear this period</button>
+    </div>
+  </section>
+
+  <!-- ================= SETTINGS ================= -->
+  <section class="card" id="cfg">
+    <details>
+      <summary>Settings</summary>
+      <div class="cfgrid" style="margin-top:16px">
+        <div class="f"><label>Base rate ($/hr)</label><input type="number" id="cRate" min="0" step="0.01"></div>
+        <div class="f"><label>OT multiplier</label><input type="number" id="cMult" min="1" step="0.05"></div>
+        <div class="f"><label>Overtime rule</label>
+          <select id="cMode">
+            <option value="weekly">Weekly — 40 h, resets each week</option>
+            <option value="period">Pay period — 80 h cumulative</option>
+          </select></div>
+        <div class="f"><label>Week starts on</label>
+          <select id="cWeekStart">
+            <option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option>
+            <option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option>
+            <option value="6">Saturday</option>
+          </select></div>
+        <div class="f"><label>Weekly OT threshold (h)</label><input type="number" id="cWeekThr" min="0" step="0.5"></div>
+        <div class="f"><label>Period OT threshold (h)</label><input type="number" id="cPeriodThr" min="0" step="0.5"></div>
+        <div class="f"><label>Period start anchor</label><input type="date" id="cAnchor"></div>
+        <div class="f"><label>Period length (days)</label><input type="number" id="cLen" min="1" step="1"></div>
+        <div class="f"><label>Payday = period end + (days)</label><input type="number" id="cPayOff" min="0" step="1"></div>
+        <div class="f"><label>Sound</label>
+          <select id="cSound"><option value="1">On</option><option value="0">Off</option></select></div>
+      </div>
+      <div class="f" style="margin-top:14px">
+        <div class="note">The anchor is any date a period started on — periods repeat from it forever, so this never needs touching again.
+        Figures are <b>gross</b> (before taxes and deductions). Everything is stored only in this browser.</div>
+      </div>
+      <div class="actions" style="justify-content:flex-start;margin-top:14px">
+        <button class="mini danger" id="wipe">Erase all data</button>
+      </div>
+    </details>
+  </section>
+
+  <div class="foot">Single file · no server · works offline · data lives in this browser only.</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ==ENGINE-START==  pure pay math — no DOM in here (extracted verbatim by tests) */
+var HOUR_MS = 3600000, DAY_MS = 86400000;
+
+var DEFAULTS = {
+  rate: 38.00,
+  otMultiplier: 1.5,
+  otMode: 'weekly',          // 'weekly' = 40 h per week | 'period' = 80 h per pay period
+  weeklyThreshold: 40,
+  periodThreshold: 80,
+  weekStartDay: 0,           // 0 = Sunday
+  periodAnchor: '2026-07-26',// a Sunday; periods repeat from here forever
+  periodLengthDays: 14,
+  payDateOffsetDays: 13      // last day of period + 13 = payday (Aug 8 -> Fri Aug 21)
+};
+
+function ymd(s){ var p = String(s).split('-').map(Number); return new Date(p[0], p[1]-1, p[2]); }
+function midnight(t){ var d = new Date(t); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function addDays(t, n){ var d = new Date(t); return new Date(d.getFullYear(), d.getMonth(), d.getDate()+n); }
+// Calendar-day difference. Rounded, so a DST shift inside the span can't drop or add a day.
+function daysBetween(a, b){ return Math.round((midnight(b) - midnight(a)) / DAY_MS); }
+
+/* Which pay period contains t, and everything that follows from that. */
+function periodInfo(t, cfg){
+  var anchor = ymd(cfg.periodAnchor), L = cfg.periodLengthDays;
+  var index = Math.floor(daysBetween(anchor, t) / L);
+  var start = addDays(anchor, index * L);
+  var lastDay = addDays(start, L - 1);                 // the final calendar day, inclusive
+  var endExclusive = addDays(start, L);                // midnight that opens the next period
+  return { index: index, start: start, lastDay: lastDay, endExclusive: endExclusive,
+           payDate: addDays(lastDay, cfg.payDateOffsetDays),
+           startMs: +start, endMs: +endExclusive };
+}
+
+/* Which work week contains t. Indexed off the anchor's week so the key is stable. */
+function weekInfo(t, cfg){
+  var d = midnight(t);
+  var start = addDays(d, -(((d.getDay() - cfg.weekStartDay) % 7) + 7) % 7);
+  var a = ymd(cfg.periodAnchor);
+  var anchorWeek = addDays(a, -(((a.getDay() - cfg.weekStartDay) % 7) + 7) % 7);
+  return { index: Math.round(daysBetween(anchorWeek, start) / 7), start: start,
+           endExclusive: addDays(start, 7), startMs: +start, endMs: +(addDays(start, 7)) };
+}
+
+/* Chop a shift at every local midnight. Week and period boundaries are always midnights,
+   so this alone guarantees no chunk ever straddles a day, week, or period line. */
+function splitSession(startMs, endMs, cfg){
+  var parts = [], cur = startMs, guard = 0;
+  while (cur < endMs && guard++ < 40000){
+    var stop = Math.min(endMs, +addDays(cur, 1)); // addDays normalises to midnight of the next day
+    if (stop <= cur) break;
+    var w = weekInfo(cur, cfg), p = periodInfo(cur, cfg);
+    parts.push({ start: cur, end: stop, dayMs: +midnight(cur),
+                 weekKey: 'w' + w.index, periodKey: 'p' + p.index,
+                 weekIndex: w.index, periodIndex: p.index });
+    cur = stop;
+  }
+  return parts;
+}
+
+function otThresholdOf(cfg){ return cfg.otMode === 'weekly' ? cfg.weeklyThreshold : cfg.periodThreshold; }
+
+/* Walk every shift in chronological order, filling each OT bucket as it goes. A shift that
+   crosses the threshold mid-way is split: hours below it bill straight, the rest bill at OT. */
+function buildLedger(sessions, cfg){
+  var threshold = otThresholdOf(cfg), otRate = cfg.rate * cfg.otMultiplier;
+  var bucket = {}, parts = [];
+  var sorted = sessions.filter(function(s){ return s.end > s.start; })
+                       .slice().sort(function(a,b){ return a.start - b.start; });
+  for (var i = 0; i < sorted.length; i++){
+    var s = sorted[i], chunks = splitSession(s.start, s.end, cfg);
+    for (var j = 0; j < chunks.length; j++){
+      var c = chunks[j], hours = (c.end - c.start) / HOUR_MS;
+      var key = cfg.otMode === 'weekly' ? c.weekKey : c.periodKey;
+      var before = bucket[key] || 0;
+      var reg = Math.max(0, Math.min(threshold - before, hours));
+      var ot = hours - reg;
+      bucket[key] = before + hours;
+      parts.push({ start: c.start, end: c.end, dayMs: c.dayMs, weekKey: c.weekKey, periodKey: c.periodKey,
+                   sessionId: s.id, hours: hours, regHours: reg, otHours: ot,
+                   gross: reg * cfg.rate + ot * otRate });
+    }
+  }
+  return { parts: parts, bucket: bucket, threshold: threshold, otRate: otRate };
+}
+
+/* Sum the ledger over a time window. Parts never straddle a day, and every window we ask
+   about starts and ends on a midnight, so a whole-part test is exact. */
+function sumRange(parts, fromMs, toMs){
+  var t = { hours: 0, regHours: 0, otHours: 0, gross: 0 };
+  for (var i = 0; i < parts.length; i++){
+    var p = parts[i];
+    if (p.start >= fromMs && p.end <= toMs){
+      t.hours += p.hours; t.regHours += p.regHours; t.otHours += p.otHours; t.gross += p.gross;
+    }
+  }
+  return t;
+}
+
+function sumSession(parts, id){
+  var t = { hours: 0, regHours: 0, otHours: 0, gross: 0 };
+  for (var i = 0; i < parts.length; i++){
+    var p = parts[i];
+    if (p.sessionId === id){ t.hours += p.hours; t.regHours += p.regHours; t.otHours += p.otHours; t.gross += p.gross; }
+  }
+  return t;
+}
+
+/* Hours already banked in the OT bucket that `t` falls into — i.e. how close to OT you are. */
+function bucketHoursAt(ledger, t, cfg){
+  var key = cfg.otMode === 'weekly' ? 'w' + weekInfo(t, cfg).index : 'p' + periodInfo(t, cfg).index;
+  return ledger.bucket[key] || 0;
+}
+
+/* Exact instant the running shift reaches the day's planned hours (null if no target). */
+function plannedStopAt(activeStart, plannedHours, completed, cfg){
+  if (!activeStart || !plannedHours || plannedHours <= 0) return null;
+  var dayStart = +midnight(activeStart), dayEnd = dayStart + DAY_MS;
+  var banked = sumRange(buildLedger(completed, cfg).parts, dayStart, dayEnd).hours;
+  var need = plannedHours - banked;
+  return need <= 0 ? activeStart : activeStart + need * HOUR_MS;
+}
+
+/* Money earned by a shift running start -> now, as of the last tick of `unit`.
+   'sec' steps every second, 'min' every minute, 'hr' every hour — that's the toggle. */
+function quantize(ms, unit){
+  var step = unit === 'hr' ? HOUR_MS : unit === 'min' ? 60000 : 1000;
+  return Math.floor(ms / step) * step;
+}
+/* ==ENGINE-END== */
+
+/* ============================ state ============================ */
+var KEY = 'payclock.v1';
+var state = load();
+
+function load(){
+  var base = { cfg: Object.assign({}, DEFAULTS), sessions: [], activeStart: null,
+               unit: 'sec', planOn: false, plannedHours: 8, sound: true };
+  try {
+    var raw = localStorage.getItem(KEY);
+    if (raw){
+      var s = JSON.parse(raw);
+      base = Object.assign(base, s);
+      base.cfg = Object.assign({}, DEFAULTS, s.cfg || {});
+      base.sessions = (s.sessions || []).filter(function(x){ return x && x.end > x.start; });
+    }
+  } catch(e){ /* corrupt storage — fall back to defaults rather than dying */ }
+  return base;
+}
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
+function uid(){ return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+/* ============================ format ============================ */
+function money(n, dp){
+  return '$' + n.toLocaleString(undefined, { minimumFractionDigits: dp == null ? 2 : dp,
+                                             maximumFractionDigits: dp == null ? 2 : dp });
+}
+function hhmmss(ms){
+  var t = Math.max(0, Math.floor(ms / 1000));
+  var h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60;
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+function hrs(n){ return n.toFixed(2) + ' h'; }
+var DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fdate(d){ return DOW[d.getDay()] + ' ' + MON[d.getMonth()] + ' ' + d.getDate(); }
+function fdateY(d){ return fdate(d) + ', ' + d.getFullYear(); }
+function ftime(ms){
+  var d = new Date(ms), h = d.getHours(), m = d.getMinutes();
+  var ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
+  return h + ':' + String(m).padStart(2, '0') + ' ' + ap;
+}
+function countdown(ms){
+  if (ms <= 0) return 'now';
+  var d = Math.floor(ms / DAY_MS), h = Math.floor(ms % DAY_MS / HOUR_MS), m = Math.floor(ms % HOUR_MS / 60000);
+  if (d > 0) return d + 'd ' + h + 'h';
+  if (h > 0) return h + 'h ' + m + 'm';
+  return m + 'm';
+}
+function localInput(ms){
+  var d = new Date(ms);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
+    + 'T' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+
+/* ============================ sound ============================ */
+var AC = null;
+function beep(freq, dur, type){
+  if (!state.sound) return;
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    var o = AC.createOscillator(), g = AC.createGain();
+    o.type = type || 'sine'; o.frequency.value = freq;
+    g.gain.setValueAtTime(.0001, AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(.16, AC.currentTime + .02);
+    g.gain.exponentialRampToValueAtTime(.0001, AC.currentTime + dur);
+    o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime + dur + .02);
+  } catch(e){}
+}
+function chime(up){ beep(up ? 660 : 440, .13); setTimeout(function(){ beep(up ? 990 : 330, .18); }, 110); }
+
+var toastT;
+function toast(msg){
+  var el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(function(){ el.classList.remove('show'); }, 3200);
+}
+
+/* ============================ actions ============================ */
+function clockIn(){
+  if (state.activeStart) return;
+  state.activeStart = Date.now();
+  save(); chime(true); render();
+  toast('Clocked in at ' + ftime(state.activeStart));
+}
+function clockOut(atMs, silent){
+  if (!state.activeStart) return;
+  var end = atMs || Date.now();
+  if (end > state.activeStart){
+    state.sessions.push({ id: uid(), start: state.activeStart, end: end, note: '' });
+  }
+  var began = state.activeStart;
+  state.activeStart = null;
+  save(); chime(false); render();
+  if (!silent) toast('Clocked out — ' + hhmmss(end - began) + ' on the clock');
+}
+
+var lastOtState = false;
+function checkOt(inOt){
+  if (inOt && !lastOtState){ beep(880, .1); setTimeout(function(){ beep(1320, .22); }, 120);
+    toast('⚡ Overtime — now earning ' + money(state.cfg.rate * state.cfg.otMultiplier) + '/hr'); }
+  lastOtState = inOt;
+}
+
+/* ============================ render ============================ */
+var lastMoney = '';
+function render(){
+  var cfg = state.cfg, now = Date.now();
+  var active = state.activeStart;
+
+  // auto-stop fires before anything is drawn, so the frozen numbers are the honest ones
+  if (active && state.planOn){
+    var stopAt = plannedStopAt(active, state.plannedHours, state.sessions, cfg);
+    if (stopAt && now >= stopAt){
+      clockOut(stopAt, true);
+      toast('🛑 Auto-stopped — hit your ' + state.plannedHours + " h target for today");
+      return;
+    }
+  }
+
+  var all = state.sessions.slice();
+  if (active) all.push({ id: '__active', start: active, end: now });
+  var ledger = buildLedger(all, cfg);
+
+  var period = periodInfo(now, cfg), week = weekInfo(now, cfg);
+  var dayStart = +midnight(now), dayEnd = dayStart + DAY_MS;
+  var day = sumRange(ledger.parts, dayStart, dayEnd);
+  var wk = sumRange(ledger.parts, week.startMs, week.endMs);
+  var per = sumRange(ledger.parts, period.startMs, period.endMs);
+
+  var bucketH = bucketHoursAt(ledger, now, cfg);
+  var inOt = active && bucketH >= ledger.threshold;
+  var rateNow = inOt ? ledger.otRate : cfg.rate;
+
+  /* ---- hero ---- */
+  var hero = document.getElementById('hero');
+  hero.classList.toggle('run', !!active);
+  hero.classList.toggle('ot', !!inOt);
+  var st = document.getElementById('status');
+  st.classList.toggle('on', !!active);
+  document.getElementById('statusTxt').textContent =
+    active ? (inOt ? 'On the clock · overtime' : 'On the clock') : 'Clocked out';
+
+  var elapsed = active ? now - active : 0;
+  var shift = active ? sumSession(ledger.parts, '__active') : { gross: 0, hours: 0, otHours: 0 };
+
+  // the toggle: recompute the shift as of the last tick of the chosen unit
+  var shownGross = shift.gross, dp = 2;
+  if (active){
+    var qEnd = active + quantize(elapsed, state.unit);
+    var q = buildLedger(state.sessions.concat([{ id: '__q', start: active, end: Math.max(active, qEnd) }]), cfg);
+    shownGross = sumSession(q.parts, '__q').gross;
+    dp = state.unit === 'sec' ? 4 : 2;
+  }
+  var mEl = document.getElementById('money');
+  var txt = money(shownGross, dp);
+  if (txt !== lastMoney){
+    mEl.textContent = txt; lastMoney = txt;
+    mEl.classList.remove('bump'); void mEl.offsetWidth; mEl.classList.add('bump');
+  }
+
+  var perUnit = state.unit === 'hr' ? rateNow : state.unit === 'min' ? rateNow / 60 : rateNow / 3600;
+  var unitName = state.unit === 'hr' ? 'hour' : state.unit === 'min' ? 'minute' : 'second';
+  document.getElementById('liveline').innerHTML = active
+    ? 'earning <b>' + money(perUnit, state.unit === 'sec' ? 4 : state.unit === 'min' ? 4 : 2) + '</b> / ' + unitName
+      + ' &nbsp;·&nbsp; live <b>' + money(shift.gross, 4) + '</b>'
+    : 'ready at <b>' + money(cfg.rate) + '</b> / hr';
+  document.getElementById('seghint').textContent =
+    state.unit === 'sec' ? 'stepping every second' :
+    state.unit === 'min' ? 'stepping every minute' : 'stepping every hour';
+
+  document.getElementById('timer').textContent = hhmmss(elapsed);
+  var punch = document.getElementById('punch');
+  punch.textContent = active ? '■ Clock Out' : '▶ Clock In';
+  punch.className = 'btn ' + (active ? 'stop' : 'go');
+
+  var eta = document.getElementById('planEta');
+  if (active && state.planOn){
+    var s2 = plannedStopAt(active, state.plannedHours, state.sessions, cfg);
+    eta.textContent = s2 ? '→ stops ' + ftime(s2) + ' (' + countdown(s2 - now) + ')' : '';
+  } else eta.textContent = '';
+
+  checkOt(!!inOt);
+
+  /* ---- period ---- */
+  document.getElementById('prange').textContent =
+    fdate(period.start) + ' → ' + fdateY(period.lastDay);
+  document.getElementById('payday').textContent = fdateY(period.payDate);
+  document.getElementById('pleft').textContent = countdown(period.endMs - now);
+  document.getElementById('payin').textContent = countdown(+addDays(period.payDate, 0) - now);
+
+  /* ---- totals ---- */
+  function det(t){
+    return hrs(t.hours) + (t.otHours > 0.0001
+      ? ' &nbsp;·&nbsp; <span class="ot">' + t.otHours.toFixed(2) + ' h OT</span>' : '')
+      + '<br>' + t.regHours.toFixed(2) + ' h reg @ ' + money(cfg.rate)
+      + (t.otHours > 0.0001 ? '<br>' + t.otHours.toFixed(2) + ' h OT @ ' + money(ledger.otRate) : '');
+  }
+  document.getElementById('dGross').textContent = money(day.gross);
+  document.getElementById('dDet').innerHTML = det(day);
+  document.getElementById('wGross').textContent = money(wk.gross);
+  document.getElementById('wDet').innerHTML = det(wk);
+  document.getElementById('pGross').textContent = money(per.gross);
+  document.getElementById('pDet').innerHTML = det(per);
+  document.getElementById('wkKey').textContent = 'Week of ' + fdate(week.start);
+  document.getElementById('otBadge').innerHTML = inOt ? '<span class="badge">OT · 1.5×</span>' : '';
+
+  var thr = ledger.threshold, pctReg = Math.min(bucketH, thr) / thr * 100;
+  var over = Math.max(0, bucketH - thr);
+  document.getElementById('barReg').style.width = pctReg + '%';
+  document.getElementById('barOt').style.width = Math.min(100 - pctReg, over / thr * 100) + '%';
+  document.getElementById('otLbl').textContent =
+    cfg.otMode === 'weekly' ? 'This week toward ' + thr + ' h' : 'This period toward ' + thr + ' h';
+  document.getElementById('otNum').textContent = over > 0
+    ? bucketH.toFixed(2) + ' h · ' + over.toFixed(2) + ' h in OT'
+    : bucketH.toFixed(2) + ' / ' + thr + ' h · ' + (thr - bucketH).toFixed(2) + ' h to OT';
+
+  renderLog(ledger, period, active, now);
+}
+
+function renderLog(ledger, period, active, now){
+  var rows = state.sessions.filter(function(s){ return s.end > period.startMs && s.start < period.endMs; });
+  // Show the shift in progress too, so the log's total always agrees with the period tile.
+  if (active && active < period.endMs) rows.push({ id: '__active', start: active, end: now, live: true });
+  rows.sort(function(a, b){ return b.start - a.start; });
+
+  var box = document.getElementById('logBody');
+  if (!rows.length){ box.innerHTML = '<div class="empty">No shifts logged this period yet.</div>'; return; }
+  var html = '<div style="overflow-x:auto"><table><thead><tr><th>Day</th><th>In</th><th>Out</th>'
+           + '<th class="num">Hours</th><th class="num">OT</th><th class="num">Gross</th><th></th></tr></thead><tbody>';
+  var tot = { hours: 0, otHours: 0, gross: 0 };
+  rows.forEach(function(s){
+    var t = sumSession(ledger.parts, s.id);
+    tot.hours += t.hours; tot.otHours += t.otHours; tot.gross += t.gross;
+    html += '<tr class="' + (t.otHours > 0.0001 ? 'otrow ' : '') + (s.live ? 'live' : '') + '">'
+      + '<td>' + fdate(new Date(s.start)) + '</td><td>' + ftime(s.start) + '</td>'
+      + '<td>' + (s.live ? '<span class="running">running</span>' : ftime(s.end)) + '</td>'
+      + '<td class="num">' + t.hours.toFixed(2) + '</td>'
+      + '<td class="num g">' + (t.otHours > 0.0001 ? t.otHours.toFixed(2) : '—') + '</td>'
+      + '<td class="num">' + money(t.gross) + '</td>'
+      + '<td class="num">' + (s.live ? ''
+          : '<button class="mini" data-edit="' + s.id + '">edit</button> '
+            + '<button class="mini danger" data-del="' + s.id + '">✕</button>') + '</td></tr>';
+  });
+  html += '</tbody><tfoot><tr><td colspan="3"><b>Period total</b></td>'
+       + '<td class="num"><b>' + tot.hours.toFixed(2) + '</b></td>'
+       + '<td class="num g"><b>' + (tot.otHours > 0.0001 ? tot.otHours.toFixed(2) : '—') + '</b></td>'
+       + '<td class="num"><b>' + money(tot.gross) + '</b></td><td></td></tr></tfoot></table></div>';
+  box.innerHTML = html;
+}
+
+/* ============================ shift editing ============================ */
+function editShift(id){
+  var s = state.sessions.find(function(x){ return x.id === id; });
+  if (!s) return;
+  var inS = prompt('Clock-in  (YYYY-MM-DDTHH:MM)', localInput(s.start));
+  if (inS === null) return;
+  var outS = prompt('Clock-out (YYYY-MM-DDTHH:MM)', localInput(s.end));
+  if (outS === null) return;
+  var a = new Date(inS).getTime(), b = new Date(outS).getTime();
+  if (isNaN(a) || isNaN(b)){ toast('Could not read those times — nothing changed.'); return; }
+  if (b <= a){ toast('Clock-out has to be after clock-in — nothing changed.'); return; }
+  s.start = a; s.end = b; save(); render(); toast('Shift updated.');
+}
+function addShift(){
+  var base = localInput(Date.now());
+  var inS = prompt('Clock-in  (YYYY-MM-DDTHH:MM)', base.slice(0, 11) + '09:00');
+  if (inS === null) return;
+  var outS = prompt('Clock-out (YYYY-MM-DDTHH:MM)', base.slice(0, 11) + '17:00');
+  if (outS === null) return;
+  var a = new Date(inS).getTime(), b = new Date(outS).getTime();
+  if (isNaN(a) || isNaN(b) || b <= a){ toast('Need a valid range with clock-out after clock-in.'); return; }
+  state.sessions.push({ id: uid(), start: a, end: b, note: '' });
+  save(); render(); toast('Shift added.');
+}
+function exportCsv(){
+  var cfg = state.cfg, ledger = buildLedger(state.sessions, cfg);
+  var lines = ['period_start,period_end,pay_date,day,clock_in,clock_out,hours,regular_hours,ot_hours,gross'];
+  state.sessions.slice().sort(function(a, b){ return a.start - b.start; }).forEach(function(s){
+    var t = sumSession(ledger.parts, s.id), p = periodInfo(s.start, cfg);
+    lines.push([p.start.toDateString(), p.lastDay.toDateString(), p.payDate.toDateString(),
+                new Date(s.start).toDateString(), new Date(s.start).toLocaleString(), new Date(s.end).toLocaleString(),
+                t.hours.toFixed(4), t.regHours.toFixed(4), t.otHours.toFixed(4), t.gross.toFixed(2)]
+               .map(function(v){ return '"' + String(v).replace(/"/g, '""') + '"'; }).join(','));
+  });
+  var url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
+  var a = document.createElement('a');
+  a.href = url; a.download = 'pay-clock.csv'; a.click();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  toast('CSV exported.');
+}
+
+/* ============================ wiring ============================ */
+document.getElementById('punch').onclick = function(){ state.activeStart ? clockOut() : clockIn(); };
+
+document.getElementById('seg').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  state.unit = b.dataset.u; lastMoney = ''; save(); syncControls(); render();
+});
+
+document.getElementById('planOn').onchange = function(e){ state.planOn = e.target.checked; save(); render(); };
+document.getElementById('planHrs').onchange = function(e){
+  var v = parseFloat(e.target.value);
+  state.plannedHours = isFinite(v) && v > 0 ? v : 8;
+  e.target.value = state.plannedHours; save(); render();
+};
+
+document.getElementById('logBody').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.edit) editShift(b.dataset.edit);
+  if (b.dataset.del && confirm('Delete this shift?')){
+    state.sessions = state.sessions.filter(function(s){ return s.id !== b.dataset.del; });
+    save(); render(); toast('Shift deleted.');
+  }
+});
+document.getElementById('addShift').onclick = addShift;
+document.getElementById('exportCsv').onclick = exportCsv;
+document.getElementById('clearPeriod').onclick = function(){
+  var p = periodInfo(Date.now(), state.cfg);
+  if (!confirm('Delete every shift in this pay period? This cannot be undone.')) return;
+  state.sessions = state.sessions.filter(function(s){ return !(s.end > p.startMs && s.start < p.endMs); });
+  save(); render(); toast('Period cleared.');
+};
+document.getElementById('wipe').onclick = function(){
+  if (!confirm('Erase all shifts and settings on this device?')) return;
+  localStorage.removeItem(KEY); state = load(); syncControls(); render(); toast('All data erased.');
+};
+
+var CFG_FIELDS = [
+  ['cRate', 'rate', 'float'], ['cMult', 'otMultiplier', 'float'], ['cMode', 'otMode', 'str'],
+  ['cWeekStart', 'weekStartDay', 'int'], ['cWeekThr', 'weeklyThreshold', 'float'],
+  ['cPeriodThr', 'periodThreshold', 'float'], ['cAnchor', 'periodAnchor', 'str'],
+  ['cLen', 'periodLengthDays', 'int'], ['cPayOff', 'payDateOffsetDays', 'int']
+];
+CFG_FIELDS.forEach(function(f){
+  document.getElementById(f[0]).onchange = function(e){
+    var v = e.target.value;
+    if (f[2] === 'float'){ var n = parseFloat(v); if (!isFinite(n)){ syncControls(); return; } v = n; }
+    if (f[2] === 'int'){ var i = parseInt(v, 10); if (!isFinite(i)){ syncControls(); return; } v = i; }
+    if (f[1] === 'periodAnchor' && !/^\d{4}-\d{2}-\d{2}$/.test(v)){ syncControls(); return; }
+    if (f[1] === 'periodLengthDays' && v < 1){ syncControls(); return; }
+    state.cfg[f[1]] = v; save(); lastMoney = ''; render();
+  };
+});
+document.getElementById('cSound').onchange = function(e){ state.sound = e.target.value === '1'; save(); };
+
+function syncControls(){
+  CFG_FIELDS.forEach(function(f){ document.getElementById(f[0]).value = state.cfg[f[1]]; });
+  document.getElementById('cSound').value = state.sound ? '1' : '0';
+  document.getElementById('planOn').checked = !!state.planOn;
+  document.getElementById('planHrs').value = state.plannedHours;
+  [].forEach.call(document.querySelectorAll('#seg button'), function(b){
+    b.classList.toggle('on', b.dataset.u === state.unit);
+  });
+}
+
+/* Repaint fast enough that per-second stepping looks alive. Every figure is derived from
+   Date.now(), never accumulated tick-by-tick — so backgrounding the tab, sleeping the
+   machine, or refreshing mid-shift all recover the correct amount. */
+syncControls();
+render();
+setInterval(render, 120);
+document.addEventListener('visibilitychange', function(){ if (!document.hidden) render(); });
+window.addEventListener('focus', render);
+/* Two tabs open on the same browser: adopt whatever the other one just wrote instead of
+   letting this tab's stale copy win. Every mutation saves immediately, so there is never
+   unsaved work here to lose. */
+window.addEventListener('storage', function(e){
+  if (e.key && e.key !== KEY) return;
+  state = load(); lastMoney = ''; syncControls(); render();
+});
+</script>
+</body>
+</html>
