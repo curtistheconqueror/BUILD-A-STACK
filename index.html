@@ -385,7 +385,15 @@
         <div class="note">The anchor is any date a period started on — periods repeat from it forever, so this never needs touching again.
         Figures are <b>gross</b> (before taxes and deductions). Everything is stored only in this browser.</div>
       </div>
-      <div class="actions" style="justify-content:flex-start;margin-top:14px">
+      <div class="f" style="margin-top:16px">
+        <label>Back up &amp; move your data</label>
+        <div class="note">Your rate, schedule and every shift live in this browser only. Save a backup
+        to keep a copy, or to carry everything to another device or another copy of this app.</div>
+      </div>
+      <div class="actions" style="justify-content:flex-start;margin-top:12px">
+        <button class="mini" id="backup">⇩ Save a backup</button>
+        <button class="mini" id="restore">⇧ Restore from backup</button>
+        <input type="file" id="restoreFile" accept="application/json,.json" class="hide">
         <button class="mini danger" id="wipe">Erase all data</button>
       </div>
     </details>
@@ -1028,6 +1036,54 @@ function exportCsv(){
   }
 }
 
+/* ==================== backup & restore ====================
+   Storage is per browser, so a backup is how settings and shifts move between
+   devices, or between a hosted copy and a downloaded one. */
+function download(name, text, type){
+  try {
+    var url = URL.createObjectURL(new Blob([text], { type: type }));
+    var a = document.createElement('a');
+    a.href = url; a.download = name; a.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+    return true;
+  } catch(e){ return false; }
+}
+
+function backup(){
+  var payload = JSON.stringify({
+    app: 'pay-clock', version: 1, savedAt: new Date().toISOString(),
+    cfg: state.cfg, sessions: state.sessions, configured: state.configured,
+    unit: state.unit, planOn: state.planOn, plannedHours: state.plannedHours, sound: state.sound
+  }, null, 2);
+  var name = 'pay-clock-backup-' + dateInput(new Date()) + '.json';
+  if (download(name, payload, 'application/json')) toast('Backup saved — ' + state.sessions.length + ' shifts.');
+  else {
+    var w = window.open('', '_blank');
+    if (w){ w.document.write('<pre>' + payload.replace(/</g, '&lt;') + '</pre>'); w.document.close();
+            toast('Download blocked here — copy the text from the new tab and save it.'); }
+    else toast('Could not save a backup here. Try the downloaded copy of the app.');
+  }
+}
+
+function restoreFrom(text){
+  var d;
+  try { d = JSON.parse(text); } catch(e){ toast('That file is not a Pay Clock backup.'); return; }
+  if (!d || d.app !== 'pay-clock' || !Array.isArray(d.sessions)){ toast('That file is not a Pay Clock backup.'); return; }
+  var clean = d.sessions.filter(function(s){
+    return s && typeof s.start === 'number' && typeof s.end === 'number' && s.end > s.start;
+  });
+  state.cfg = Object.assign({}, DEFAULTS, d.cfg || {});
+  state.sessions = clean;
+  state.configured = d.configured !== false;
+  state.unit = d.unit || 'sec';
+  state.planOn = !!d.planOn;
+  state.plannedHours = d.plannedHours || 8;
+  state.sound = d.sound !== false;
+  state.activeStart = null;              // never restore a running clock from a file
+  save(); syncControls(); applyStage(); lastMoney = ''; render();
+  toast('Restored ' + clean.length + ' shifts at ' + money(state.cfg.rate) + '/hr.');
+}
+
 /* ============================ wiring ============================ */
 document.getElementById('punch').onclick = function(){ state.activeStart ? clockOut() : clockIn(); };
 
@@ -1121,6 +1177,18 @@ CFG_FIELDS.forEach(function(f){
   };
 });
 document.getElementById('cSound').onchange = function(e){ state.sound = e.target.value === '1'; save(); };
+
+document.getElementById('backup').onclick = backup;
+document.getElementById('restore').onclick = function(){ document.getElementById('restoreFile').click(); };
+document.getElementById('restoreFile').onchange = function(e){
+  var f = e.target.files && e.target.files[0];
+  if (!f) return;
+  var r = new FileReader();
+  r.onload = function(){ restoreFrom(String(r.result)); };
+  r.onerror = function(){ toast('Could not read that file.'); };
+  r.readAsText(f);
+  e.target.value = '';                   // let the same file be picked again
+};
 
 function syncControls(){
   CFG_FIELDS.forEach(function(f){ document.getElementById(f[0]).value = state.cfg[f[1]]; });
