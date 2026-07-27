@@ -198,6 +198,14 @@
     box-shadow:0 10px 40px rgba(0,0,0,.6);max-width:88vw;text-align:center}
   .toast.show{opacity:1;transform:translate(-50%,0)}
   @media(max-width:560px){.wrap{padding:18px 14px 80px}.card{padding:15px 14px}.timer{font-size:26px}th,td{font-size:12.3px}}
+  /* Touch devices: every control needs a finger-sized target, not a cursor-sized one. */
+  @media(pointer:coarse){
+    button.mini{min-height:44px;padding:10px 15px;font-size:13.4px}
+    .seg button{min-height:44px;padding:0 22px}
+    .emode button,.schoice button{min-height:44px}
+    input[type=number],input[type=text],input[type=date],input[type=time],select{min-height:44px}
+    .swrap input{width:22px;height:22px}
+  }
 </style>
 </head>
 <body>
@@ -774,26 +782,29 @@ function renderProgress(ledger, period, now){
   // Progress toward the period's 80-hour mark.
   var thr = cfg.periodThreshold, h = cume.hours;
   var over = Math.max(0, h - thr), pctReg = Math.min(h, thr) / thr * 100;
+  var left = Math.max(0, thr - h);          // never render a negative countdown
+  var past = h >= thr;                      // at the line counts as past
+  var worthNaming = over >= 0.005;          // ...but don't claim "0.00 h so far"
   document.getElementById('p80Reg').style.width = pctReg + '%';
   document.getElementById('p80Ot').style.width = Math.min(100 - pctReg, over / thr * 100) + '%';
   document.getElementById('p80Lbl').textContent = 'Cumulative hours toward ' + thr + ' h';
   document.getElementById('p80Num').textContent = h.toFixed(2) + ' / ' + thr + ' h';
-  document.getElementById('p80Badge').innerHTML = over > 0 && cfg.otMode === 'period'
+  document.getElementById('p80Badge').innerHTML = past && cfg.otMode === 'period'
     ? '<span class="badge">past ' + thr + ' h</span>' : '';
 
   var note = document.getElementById('p80Note'), otRate = money(ledger.otRate);
   if (cfg.otMode === 'period'){
-    note.className = 'p80note' + (over > 0 ? ' hot' : '');
-    note.innerHTML = over > 0
-      ? '⚡ You passed ' + thr + ' h. <b>Every hour for the rest of this period bills at ' + otRate + '.</b> '
-        + over.toFixed(2) + ' h so far.'
-      : '<b>' + (thr - h).toFixed(2) + ' h</b> until every remaining hour this period bills at <b>' + otRate + '</b>.';
+    note.className = 'p80note' + (past ? ' hot' : '');
+    note.innerHTML = past
+      ? '⚡ You are past ' + thr + ' h. <b>Every hour for the rest of this period bills at ' + otRate + '.</b>'
+        + (worthNaming ? ' ' + over.toFixed(2) + ' h so far.' : '')
+      : '<b>' + left.toFixed(2) + ' h</b> until every remaining hour this period bills at <b>' + otRate + '</b>.';
   } else {
     // Weekly rule is active, so this bar is a milestone, not what drives the rate.
     note.className = 'p80note';
-    note.innerHTML = over > 0
+    note.innerHTML = past
       ? 'Past ' + thr + ' h for the period. Your overtime is set to the <b>40 h weekly</b> rule, so it is figured per week — switch to the ' + thr + ' h rule in Settings to bill every hour past here at ' + otRate + '.'
-      : '<b>' + (thr - h).toFixed(2) + ' h</b> to ' + thr + ' h for the period. Overtime is currently set to the <b>40 h weekly</b> rule, so it resets each week — switch in Settings to bill every hour past ' + thr + ' h at ' + otRate + '.';
+      : '<b>' + left.toFixed(2) + ' h</b> to ' + thr + ' h for the period. Overtime is currently set to the <b>40 h weekly</b> rule, so it resets each week — switch in Settings to bill every hour past ' + thr + ' h at ' + otRate + '.';
   }
 }
 
