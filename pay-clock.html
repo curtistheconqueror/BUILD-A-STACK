@@ -8,6 +8,7 @@
   :root{--bg0:#05080f;--bg1:#0a1020;--ink:#eaf1ff;--muted:#8ea0c4;--acc:#35d0e0;--acc2:#b78cff;--acc3:#ff6fb5;
     --ok:#51e08a;--bad:#ff5d6c;--warn:#ffb454;--glass:rgba(22,30,50,.55);--border:rgba(130,155,200,.22);}
   *{box-sizing:border-box}
+  .hide{display:none !important}
   html,body{margin:0;min-height:100%;color:var(--ink);font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg0);overflow-x:hidden;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
   .bg{position:fixed;inset:0;z-index:-3;background:
     radial-gradient(900px 640px at 14% 8%,rgba(53,208,224,.16),transparent 60%),
@@ -71,6 +72,29 @@
     border-radius:9px;padding:6px 12px;font-size:12.4px;font-weight:700;transition:.2s}
   button.mini:hover{color:var(--ink);border-color:var(--acc)}
   button.mini.danger:hover{color:var(--bad);border-color:var(--bad)}
+  button.btn.add{border-color:var(--ok);background:linear-gradient(180deg,rgba(81,224,138,.22),rgba(81,224,138,.06));
+    box-shadow:0 0 24px -8px var(--ok);padding:11px 24px;font-size:14.6px}
+  button.btn.ghost{padding:11px 22px;font-size:14.6px;color:var(--muted)}
+  button.btn.ghost:hover{color:var(--ink)}
+  :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+  /* ---- add / edit shift ---- */
+  .editor{margin-top:16px;border:1px solid var(--acc);border-radius:14px;padding:16px;
+    background:linear-gradient(180deg,rgba(53,208,224,.07),rgba(10,16,32,.5));animation:drop .28s cubic-bezier(.2,.8,.2,1) both}
+  @keyframes drop{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+  .etitle{font-size:15.6px;font-weight:800;margin-bottom:13px}
+  .emode{display:inline-flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:15px;background:rgba(10,16,32,.5)}
+  .emode button{cursor:pointer;font-family:inherit;background:transparent;color:var(--muted);border:0;padding:8px 15px;font-size:13px;font-weight:700;transition:.2s}
+  .emode button.on{color:#05080f;background:linear-gradient(180deg,var(--acc),#1fb4c6)}
+  .egrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:13px}
+  .epreview{margin-top:13px;color:var(--muted);font-size:13.2px;line-height:1.6}
+  .epreview b{color:var(--ink)}
+  .epreview .pay{color:var(--ok);font-weight:800}
+  .eerr{margin-top:11px;color:var(--bad);font-size:13.2px;font-weight:600}
+  .eactions{display:flex;gap:10px;margin-top:15px;flex-wrap:wrap}
+  .confirm{margin-top:13px;padding:12px 14px;border:1px solid var(--bad);border-radius:12px;
+    background:rgba(255,93,108,.08);font-size:13.6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  tr.pending td{background:rgba(255,93,108,.09)}
 
   .planrow{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:16px;
     border-top:1px solid var(--border);padding-top:16px;color:var(--muted);font-size:13.6px}
@@ -202,10 +226,36 @@
   <section class="card" id="log">
     <h2>Shift log — this period</h2>
     <div id="logBody"></div>
-    <div class="actions" style="justify-content:flex-start;margin-top:15px">
-      <button class="mini" id="addShift">+ Add shift manually</button>
+
+    <div class="editor hide" id="editor">
+      <div class="etitle" id="eTitle">Add a shift</div>
+      <div class="emode" id="eMode">
+        <button data-m="hours" class="on">Just hours</button><button data-m="times">Start &amp; end times</button>
+      </div>
+      <div class="egrid">
+        <div class="f"><label for="eDate">Date worked</label><input type="date" id="eDate"></div>
+        <div class="f" id="fHours"><label for="eHours">Hours worked</label>
+          <input type="number" id="eHours" min="0.25" max="24" step="0.25" value="8"></div>
+        <div class="f hide" id="fIn"><label for="eIn">Clocked in</label><input type="time" id="eIn" value="08:00"></div>
+        <div class="f hide" id="fOut"><label for="eOut">Clocked out</label><input type="time" id="eOut" value="16:00"></div>
+      </div>
+      <div class="epreview" id="ePreview"></div>
+      <div class="eerr hide" id="eErr"></div>
+      <div class="eactions">
+        <button class="btn go" id="eSave">Save shift</button>
+        <button class="btn ghost" id="eCancel">Cancel</button>
+      </div>
+    </div>
+
+    <div class="actions" style="justify-content:flex-start;margin-top:15px" id="logActions">
+      <button class="btn add" id="addShift">+ Add a shift</button>
       <button class="mini" id="exportCsv">⇩ Export CSV</button>
       <button class="mini danger" id="clearPeriod">Clear this period</button>
+    </div>
+    <div class="confirm hide" id="clearConfirm">
+      Delete every shift in this pay period? This can't be undone.
+      <button class="mini danger" id="clearYes">Yes, delete them</button>
+      <button class="mini" id="clearNo">Keep them</button>
     </div>
   </section>
 
@@ -429,11 +479,6 @@ function countdown(ms){
   if (h > 0) return h + 'h ' + m + 'm';
   return m + 'm';
 }
-function localInput(ms){
-  var d = new Date(ms);
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0')
-    + 'T' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
-}
 
 /* ============================ sound ============================ */
 var AC = null;
@@ -614,15 +659,19 @@ function renderLog(ledger, period, active, now){
   rows.forEach(function(s){
     var t = sumSession(ledger.parts, s.id);
     tot.hours += t.hours; tot.otHours += t.otHours; tot.gross += t.gross;
-    html += '<tr class="' + (t.otHours > 0.0001 ? 'otrow ' : '') + (s.live ? 'live' : '') + '">'
+    var asking = pendingDelete === s.id;
+    html += '<tr class="' + (t.otHours > 0.0001 ? 'otrow ' : '') + (s.live ? 'live' : '') + (asking ? ' pending' : '') + '">'
       + '<td>' + fdate(new Date(s.start)) + '</td><td>' + ftime(s.start) + '</td>'
       + '<td>' + (s.live ? '<span class="running">running</span>' : ftime(s.end)) + '</td>'
       + '<td class="num">' + t.hours.toFixed(2) + '</td>'
       + '<td class="num g">' + (t.otHours > 0.0001 ? t.otHours.toFixed(2) : '—') + '</td>'
       + '<td class="num">' + money(t.gross) + '</td>'
       + '<td class="num">' + (s.live ? ''
-          : '<button class="mini" data-edit="' + s.id + '">edit</button> '
-            + '<button class="mini danger" data-del="' + s.id + '">✕</button>') + '</td></tr>';
+          : asking
+            ? 'Delete? <button class="mini danger" data-del-yes="' + s.id + '">yes</button> '
+              + '<button class="mini" data-del-no="1">no</button>'
+            : '<button class="mini" data-edit="' + s.id + '">edit</button> '
+              + '<button class="mini danger" data-del="' + s.id + '">✕</button>') + '</td></tr>';
   });
   html += '</tbody><tfoot><tr><td colspan="3"><b>Period total</b></td>'
        + '<td class="num"><b>' + tot.hours.toFixed(2) + '</b></td>'
@@ -631,29 +680,116 @@ function renderLog(ledger, period, active, now){
   box.innerHTML = html;
 }
 
-/* ============================ shift editing ============================ */
-function editShift(id){
-  var s = state.sessions.find(function(x){ return x.id === id; });
-  if (!s) return;
-  var inS = prompt('Clock-in  (YYYY-MM-DDTHH:MM)', localInput(s.start));
-  if (inS === null) return;
-  var outS = prompt('Clock-out (YYYY-MM-DDTHH:MM)', localInput(s.end));
-  if (outS === null) return;
-  var a = new Date(inS).getTime(), b = new Date(outS).getTime();
-  if (isNaN(a) || isNaN(b)){ toast('Could not read those times — nothing changed.'); return; }
-  if (b <= a){ toast('Clock-out has to be after clock-in — nothing changed.'); return; }
-  s.start = a; s.end = b; save(); render(); toast('Shift updated.');
+/* ==================== add / edit a shift (in-page, no popups) ====================
+   Browser prompt()/confirm() are silently ignored on sandboxed hosted pages, so all
+   entry and confirmation happens in the page itself. */
+var editing = null;        // id of the shift being edited, or null when adding
+var editMode = 'hours';    // 'hours' = date + duration | 'times' = clock-in / clock-out
+var pendingDelete = null;
+
+var el = function(id){ return document.getElementById(id); };
+function show(id, on){ el(id).classList.toggle('hide', !on); }
+
+function dateValue(ms){
+  var d = new Date(ms);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
-function addShift(){
-  var base = localInput(Date.now());
-  var inS = prompt('Clock-in  (YYYY-MM-DDTHH:MM)', base.slice(0, 11) + '09:00');
-  if (inS === null) return;
-  var outS = prompt('Clock-out (YYYY-MM-DDTHH:MM)', base.slice(0, 11) + '17:00');
-  if (outS === null) return;
-  var a = new Date(inS).getTime(), b = new Date(outS).getTime();
-  if (isNaN(a) || isNaN(b) || b <= a){ toast('Need a valid range with clock-out after clock-in.'); return; }
-  state.sessions.push({ id: uid(), start: a, end: b, note: '' });
-  save(); render(); toast('Shift added.');
+function timeValue(ms){
+  var d = new Date(ms);
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+/* Build a local timestamp from a date input and a time input — never Date.parse, which
+   reads a bare "YYYY-MM-DD" as UTC and can land the shift on the wrong day. */
+function stamp(dateStr, timeStr){
+  var d = String(dateStr).split('-').map(Number), t = String(timeStr).split(':').map(Number);
+  if (d.length !== 3 || t.length < 2 || d.concat(t).some(isNaN)) return NaN;
+  return +new Date(d[0], d[1] - 1, d[2], t[0], t[1], 0, 0);
+}
+
+function openEditor(id){
+  editing = id || null;
+  var s = id ? state.sessions.find(function(x){ return x.id === id; }) : null;
+  el('eTitle').textContent = s ? 'Edit this shift' : 'Add a shift';
+  el('eSave').textContent = s ? 'Save changes' : 'Add shift';
+  el('eDate').value = dateValue(s ? s.start : Date.now());
+  if (s){
+    setMode('times');
+    el('eIn').value = timeValue(s.start);
+    el('eOut').value = timeValue(s.end);
+    el('eHours').value = ((s.end - s.start) / HOUR_MS).toFixed(2);
+  } else {
+    setMode('hours');
+    el('eHours').value = 8;
+    el('eIn').value = '08:00'; el('eOut').value = '16:00';
+  }
+  show('editor', true); show('logActions', false); show('clearConfirm', false);
+  previewShift();
+  el(editMode === 'hours' ? 'eHours' : 'eIn').focus();
+}
+function closeEditor(){
+  editing = null;
+  show('editor', false); show('logActions', true); show('eErr', false);
+}
+function setMode(m){
+  editMode = m;
+  [].forEach.call(document.querySelectorAll('#eMode button'), function(b){
+    b.classList.toggle('on', b.dataset.m === m);
+  });
+  show('fHours', m === 'hours'); show('fIn', m === 'times'); show('fOut', m === 'times');
+}
+
+/* Turn whatever the form currently holds into {start,end}, or an {error}. */
+function readEditor(){
+  var date = el('eDate').value;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: 'Pick the date you worked.' };
+
+  if (editMode === 'hours'){
+    var h = parseFloat(el('eHours').value);
+    if (!isFinite(h) || h <= 0) return { error: 'Enter how many hours you worked.' };
+    if (h > 24) return { error: "That's more than 24 hours — split it across two days." };
+    var start = stamp(date, el('eIn').value || '08:00');
+    if (isNaN(start)) return { error: 'Could not read that date.' };
+    return { start: start, end: start + Math.round(h * HOUR_MS), assumed: true };
+  }
+
+  var a = stamp(date, el('eIn').value), b = stamp(date, el('eOut').value);
+  if (isNaN(a) || isNaN(b)) return { error: 'Fill in both the clock-in and clock-out time.' };
+  if (b === a) return { error: 'Clock-out matches clock-in — that is no time at all.' };
+  // Out earlier than in means the shift ran past midnight.
+  var overnight = b < a;
+  if (overnight) b += DAY_MS;
+  return { start: a, end: b, overnight: overnight };
+}
+
+function previewShift(){
+  var r = readEditor(), p = el('ePreview');
+  if (r.error){ p.innerHTML = '<span style="opacity:.6">' + r.error + '</span>'; return; }
+  // Price it exactly as saving would, so the preview is the real number.
+  var others = state.sessions.filter(function(s){ return s.id !== editing; });
+  if (state.activeStart) others.push({ id: '__a', start: state.activeStart, end: Date.now() });
+  var t = sumSession(buildLedger(others.concat([{ id: '__p', start: r.start, end: r.end }]), state.cfg).parts, '__p');
+  p.innerHTML = '<b>' + fdate(new Date(r.start)) + '</b> · ' + ftime(r.start) + ' → ' + ftime(r.end)
+    + (r.overnight ? ' <b>(next morning)</b>' : '')
+    + ' &nbsp;·&nbsp; <b>' + t.hours.toFixed(2) + ' h</b>'
+    + (t.otHours > 0.0001 ? ' <span style="color:var(--warn);font-weight:700">incl. ' + t.otHours.toFixed(2) + ' h OT</span>' : '')
+    + ' &nbsp;·&nbsp; <span class="pay">' + money(t.gross) + '</span>'
+    + (r.assumed ? '<br><span style="opacity:.65">Recorded starting ' + ftime(r.start)
+        + '. Switch to “Start &amp; end times” if that matters.</span>' : '');
+}
+
+function saveEditor(){
+  var r = readEditor();
+  if (r.error){ el('eErr').textContent = r.error; show('eErr', true); return; }
+  show('eErr', false);
+  if (editing){
+    var s = state.sessions.find(function(x){ return x.id === editing; });
+    if (s){ s.start = r.start; s.end = r.end; }
+    toast('Shift updated.');
+  } else {
+    state.sessions.push({ id: uid(), start: r.start, end: r.end, note: '' });
+    toast('Added ' + ((r.end - r.start) / HOUR_MS).toFixed(2) + ' h on ' + fdate(new Date(r.start)) + '.');
+  }
+  save(); closeEditor(); render();
 }
 function exportCsv(){
   var cfg = state.cfg, ledger = buildLedger(state.sessions, cfg);
@@ -697,22 +833,47 @@ document.getElementById('planHrs').onchange = function(e){
 
 document.getElementById('logBody').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
-  if (b.dataset.edit) editShift(b.dataset.edit);
-  if (b.dataset.del && confirm('Delete this shift?')){
-    state.sessions = state.sessions.filter(function(s){ return s.id !== b.dataset.del; });
-    save(); render(); toast('Shift deleted.');
+  if (b.dataset.edit) openEditor(b.dataset.edit);
+  if (b.dataset.del){ pendingDelete = b.dataset.del; render(); }        // row asks to confirm
+  if (b.dataset.delYes){
+    state.sessions = state.sessions.filter(function(s){ return s.id !== b.dataset.delYes; });
+    pendingDelete = null; save(); render(); toast('Shift deleted.');
   }
+  if (b.dataset.delNo){ pendingDelete = null; render(); }
 });
-document.getElementById('addShift').onclick = addShift;
+document.getElementById('addShift').onclick = function(){ openEditor(null); };
+document.getElementById('eCancel').onclick = closeEditor;
+document.getElementById('eSave').onclick = saveEditor;
+document.getElementById('eMode').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  setMode(b.dataset.m); previewShift();
+});
+['eDate', 'eHours', 'eIn', 'eOut'].forEach(function(id){
+  var n = document.getElementById(id);
+  n.addEventListener('input', previewShift);
+  n.addEventListener('keydown', function(e){
+    if (e.key === 'Enter'){ e.preventDefault(); saveEditor(); }
+    if (e.key === 'Escape') closeEditor();
+  });
+});
+
 document.getElementById('exportCsv').onclick = exportCsv;
-document.getElementById('clearPeriod').onclick = function(){
+document.getElementById('clearPeriod').onclick = function(){ show('clearConfirm', true); show('logActions', false); };
+document.getElementById('clearNo').onclick = function(){ show('clearConfirm', false); show('logActions', true); };
+document.getElementById('clearYes').onclick = function(){
   var p = periodInfo(Date.now(), state.cfg);
-  if (!confirm('Delete every shift in this pay period? This cannot be undone.')) return;
   state.sessions = state.sessions.filter(function(s){ return !(s.end > p.startMs && s.start < p.endMs); });
+  show('clearConfirm', false); show('logActions', true);
   save(); render(); toast('Period cleared.');
 };
 document.getElementById('wipe').onclick = function(){
-  if (!confirm('Erase all shifts and settings on this device?')) return;
+  var b = document.getElementById('wipe');
+  if (b.dataset.armed !== '1'){                       // click once to arm, again to confirm
+    b.dataset.armed = '1'; b.textContent = 'Tap again to erase everything';
+    setTimeout(function(){ b.dataset.armed = ''; b.textContent = 'Erase all data'; }, 5000);
+    return;
+  }
+  b.dataset.armed = ''; b.textContent = 'Erase all data';
   localStorage.removeItem(KEY); state = load(); syncControls(); render(); toast('All data erased.');
 };
 
