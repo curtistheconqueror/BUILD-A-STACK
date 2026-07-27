@@ -13,11 +13,12 @@
  */
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
-const out = process.argv[2] ? join(process.cwd(), process.argv[2]) : join(here, 'dist');
+// resolve, not join — an absolute outDir must not be appended to the cwd
+const out = process.argv[2] ? resolve(process.cwd(), process.argv[2]) : join(here, 'dist');
 
 const HEAD = `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#05080f" />
