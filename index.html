@@ -80,6 +80,9 @@
   @keyframes bump{50%{transform:scale(1.018)}}
   .liveline{color:var(--muted);font-size:13.4px;font-variant-numeric:tabular-nums;min-height:19px}
   .liveline b{color:var(--ink);font-weight:700}
+  .permoney{font-size:clamp(28px,8vw,42px);font-weight:800;line-height:1.1;margin:10px 0 2px;
+    font-variant-numeric:tabular-nums;color:var(--acc);letter-spacing:-0.5px}
+  .permoneyLbl{color:var(--muted);font-size:11.4px;letter-spacing:2.4px;text-transform:uppercase;margin-bottom:10px}
   .timer{font-size:31px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:2px;margin:14px 0 4px}
   .timerlbl{color:var(--muted);font-size:11.4px;letter-spacing:2.4px;text-transform:uppercase}
 
@@ -299,6 +302,8 @@
     <div class="status" id="status"><span class="blip"></span><span id="statusTxt">Clocked out</span></div>
     <div class="money" id="money">$0.00</div>
     <div class="liveline" id="liveline"></div>
+    <div class="permoney" id="permoney">$0.00</div>
+    <div class="permoneyLbl">pay period total</div>
     <div class="timer" id="timer">00:00:00</div>
     <div class="timerlbl">on the clock</div>
 
@@ -736,9 +741,8 @@ function render(){
   var shift = active ? sumSession(ledger.parts, '__active') : { gross: 0, hours: 0, otHours: 0 };
 
   // the toggle: recompute the shift as of the last tick of the chosen unit
-  var shownGross = shift.gross, dp = 2;
+  var shownGross = shift.gross, dp = 2, qEnd = active ? active + quantize(elapsed, state.unit) : now;
   if (active){
-    var qEnd = active + quantize(elapsed, state.unit);
     var q = buildLedger(state.sessions.concat([{ id: '__q', start: active, end: Math.max(active, qEnd) }]), cfg);
     shownGross = sumSession(q.parts, '__q').gross;
     dp = state.unit === 'sec' ? 4 : 2;
@@ -749,6 +753,15 @@ function render(){
     mEl.textContent = txt; lastMoney = txt;
     mEl.classList.remove('bump'); void mEl.offsetWidth; mEl.classList.add('bump');
   }
+
+  /* Pay-period total under the session clock — same quantized stepping so the two
+     numbers always agree on what "now" means. */
+  var perShown = per.gross;
+  if (active){
+    var perQ = buildLedger(state.sessions.concat([{ id: '__pq', start: active, end: Math.max(active, qEnd) }]), cfg);
+    perShown = sumRange(perQ.parts, period.startMs, period.endMs).gross;
+  }
+  document.getElementById('permoney').textContent = money(perShown, dp);
 
   var perUnit = state.unit === 'hr' ? rateNow : state.unit === 'min' ? rateNow / 60 : rateNow / 3600;
   var unitName = state.unit === 'hr' ? 'hour' : state.unit === 'min' ? 'minute' : 'second';
