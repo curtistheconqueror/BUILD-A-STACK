@@ -4,22 +4,34 @@
  *
  *   node tests/pay-engine.test.mjs
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
+// index.html when the widget is the whole site; pay-clock.html when it sits alongside
+// other pages. Pick by which file actually carries the engine, not by name — a repo can
+// have an unrelated index.html.
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const html = readFileSync(join(root, 'pay-clock.html'), 'utf8');
+const MARKERS = /\/\* ==ENGINE-START==[\s\S]*?\*\/([\s\S]*?)\/\* ==ENGINE-END== \*\//;
 
-const m = html.match(/\/\* ==ENGINE-START==[\s\S]*?\*\/([\s\S]*?)\/\* ==ENGINE-END== \*\//);
-if (!m) { console.error('FATAL: engine markers not found in pay-clock.html'); process.exit(1); }
+let m = null, widget = null;
+for (const name of ['pay-clock.html', 'index.html']) {
+  const path = join(root, name);
+  if (!existsSync(path)) continue;
+  const found = readFileSync(path, 'utf8').match(MARKERS);
+  if (found) { m = found; widget = name; break; }
+}
+if (!m) { console.error('FATAL: no file with engine markers found'); process.exit(1); }
+console.log(`engine source: ${widget}`);
 
 const E = new Function(m[1] + `
   return { DEFAULTS, periodInfo, weekInfo, splitSession, buildLedger,
            sumRange, sumSession, bucketHoursAt, plannedStopAt, quantize, HOUR_MS };
 `)();
 
-const cfg = { ...E.DEFAULTS };
+// The shipped defaults carry no wage or pay schedule — those come from first-run setup —
+// so the suite supplies the numbers it asserts against.
+const cfg = { ...E.DEFAULTS, rate: 38, periodAnchor: '2026-07-26' };
 let pass = 0, fail = 0;
 
 function ok(name, cond, extra = '') {

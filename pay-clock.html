@@ -78,6 +78,21 @@
   button.btn.ghost:hover{color:var(--ink)}
   :focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 
+  /* ---- first run ---- */
+  #setup{--ca:var(--ok)}
+  .slead{color:var(--muted);font-size:14px;line-height:1.65;margin:0 0 18px}
+  .sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:15px}
+  .prefixed{display:flex;align-items:center;gap:0}
+  .prefixed span{padding:8px 2px 8px 11px;background:rgba(10,16,32,.65);border:1px solid var(--border);
+    border-right:0;border-radius:9px 0 0 9px;color:var(--muted);font-size:13.6px}
+  .prefixed input{border-radius:0 9px 9px 0;width:100%}
+  .schoice{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px}
+  .schoice button{cursor:pointer;font-family:inherit;text-align:left;padding:12px 14px;border-radius:12px;
+    border:1px solid var(--border);background:rgba(10,16,32,.45);color:var(--ink);transition:.2s;display:block}
+  .schoice button b{display:block;font-size:14px;font-weight:800;margin-bottom:4px}
+  .schoice button span{display:block;color:var(--muted);font-size:12.4px;line-height:1.5}
+  .schoice button.on{border-color:var(--ok);background:linear-gradient(180deg,rgba(81,224,138,.16),rgba(81,224,138,.04))}
+
   /* ---- add / edit shift ---- */
   .editor{margin-top:16px;border:1px solid var(--acc);border-radius:14px;padding:16px;
     background:linear-gradient(180deg,rgba(53,208,224,.07),rgba(10,16,32,.5));animation:drop .28s cubic-bezier(.2,.8,.2,1) both}
@@ -133,6 +148,30 @@
   .badge{display:inline-block;padding:4px 11px;border-radius:999px;font-size:10.8px;font-weight:800;letter-spacing:1.8px;text-transform:uppercase;
     border:1px solid var(--warn);color:var(--warn);background:rgba(255,180,84,.12)}
 
+  /* ---- period progress ---- */
+  #progress{--ca:var(--ok)}
+  .cume{text-align:center;padding:6px 0 18px}
+  .cumelbl{color:var(--muted);font-size:11px;letter-spacing:2.2px;text-transform:uppercase;font-weight:800}
+  .cumeval{font-size:clamp(34px,9.5vw,50px);font-weight:800;line-height:1.1;margin:9px 0 4px;
+    font-variant-numeric:tabular-nums;letter-spacing:-.5px;
+    background:linear-gradient(90deg,var(--ok),var(--acc));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .cumesub{color:var(--muted);font-size:13.6px;font-variant-numeric:tabular-nums}
+  .cumesub .ot{color:var(--warn);font-weight:700}
+  .weeks{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:11px;margin-bottom:6px}
+  .wk{background:rgba(10,16,32,.45);border:1px solid var(--border);border-radius:12px;padding:12px 13px}
+  .wk.now{border-color:var(--ok);background:linear-gradient(180deg,rgba(81,224,138,.10),rgba(10,16,32,.45))}
+  .wk .n{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .wk .n b{font-size:13px;font-weight:800}
+  .wk .n i{font-style:normal;color:var(--muted);font-size:10.6px;letter-spacing:1.4px;text-transform:uppercase;font-weight:800}
+  .wk .d{color:var(--muted);font-size:12.2px;margin-top:3px}
+  .wk .v{font-size:20px;font-weight:800;margin-top:8px;font-variant-numeric:tabular-nums}
+  .wk .h{color:var(--muted);font-size:12.4px;font-variant-numeric:tabular-nums;margin-top:2px}
+  .wk .h .ot{color:var(--warn);font-weight:700}
+  .p80note{margin-top:11px;font-size:13.2px;line-height:1.6;color:var(--muted)}
+  .p80note b{color:var(--ink)}
+  .p80note.hot{color:var(--warn)}
+  .p80note.hot b{color:var(--warn)}
+
   /* ---- log / settings ---- */
   #log,#cfg{--ca:var(--muted)}
   table{width:100%;border-collapse:collapse;font-size:13.2px;font-variant-numeric:tabular-nums}
@@ -169,6 +208,37 @@
     <h1>PAY CLOCK</h1>
     <div class="sub">Clock in and watch it earn — second by second, straight time into overtime.</div>
   </header>
+
+  <!-- ================= FIRST RUN ================= -->
+  <section class="card hide" id="setup">
+    <h2>Set up your clock</h2>
+    <p class="slead">Two minutes now and it runs itself from here. Everything stays in this browser — nothing is sent anywhere.</p>
+    <div class="sgrid">
+      <div class="f"><label for="sRate">What do you earn per hour?</label>
+        <div class="prefixed"><span>$</span><input type="number" id="sRate" min="0" step="0.01" placeholder="0.00" inputmode="decimal"></div></div>
+      <div class="f"><label for="sAnchor">When did your current pay period start?</label>
+        <input type="date" id="sAnchor"></div>
+      <div class="f"><label for="sLen">How long is a pay period?</label>
+        <select id="sLen"><option value="14">2 weeks</option><option value="7">1 week</option></select></div>
+      <div class="f"><label for="sPay">How long after it ends do you get paid?</label>
+        <select id="sPay">
+          <option value="6">The Friday right after</option>
+          <option value="13" selected>A week after it ends</option>
+          <option value="20">Two weeks after</option>
+          <option value="0">Same day it ends</option>
+        </select></div>
+    </div>
+    <div class="f" style="margin-top:15px">
+      <label>When does overtime start?</label>
+      <div class="schoice" id="sMode">
+        <button data-m="weekly" class="on"><b>After 40 hours a week</b><span>Resets every week. What US payroll normally does.</span></button>
+        <button data-m="period"><b>After 80 hours a pay period</b><span>One running total across the whole period.</span></button>
+      </div>
+    </div>
+    <div class="epreview" id="sPreview"></div>
+    <div class="eerr hide" id="sErr"></div>
+    <div class="eactions"><button class="btn go" id="sSave">Start tracking</button></div>
+  </section>
 
   <!-- ================= HERO ================= -->
   <section class="card" id="hero">
@@ -220,6 +290,22 @@
       <div class="lbl"><span id="otLbl">Toward overtime</span><span id="otNum"></span></div>
       <div class="bar"><i class="reg" id="barReg"></i><i class="otf" id="barOt"></i></div>
     </div>
+  </section>
+
+  <!-- ================= PERIOD PROGRESS ================= -->
+  <section class="card" id="progress">
+    <h2>Pay period progress <span id="p80Badge"></span></h2>
+    <div class="cume">
+      <div class="cumelbl">Earned this pay period so far</div>
+      <div class="cumeval" id="cumeGross">$0.00</div>
+      <div class="cumesub" id="cumeSub">0.00 h</div>
+    </div>
+    <div class="weeks" id="weeks"></div>
+    <div class="otbar">
+      <div class="lbl"><span id="p80Lbl">Toward 80 h</span><span id="p80Num"></span></div>
+      <div class="bar"><i class="reg" id="p80Reg"></i><i class="otf" id="p80Ot"></i></div>
+    </div>
+    <div class="p80note" id="p80Note"></div>
   </section>
 
   <!-- ================= LOG ================= -->
@@ -304,16 +390,18 @@
 /* ==ENGINE-START==  pure pay math — no DOM in here (extracted verbatim by tests) */
 var HOUR_MS = 3600000, DAY_MS = 86400000;
 
+/* Neutral placeholders only — no real wage or pay schedule ships in this file.
+   First run collects the real values and stores them in your browser alone. */
 var DEFAULTS = {
-  rate: 38.00,
+  rate: 0,
   otMultiplier: 1.5,
   otMode: 'weekly',          // 'weekly' = 40 h per week | 'period' = 80 h per pay period
   weeklyThreshold: 40,
   periodThreshold: 80,
   weekStartDay: 0,           // 0 = Sunday
-  periodAnchor: '2026-07-26',// a Sunday; periods repeat from here forever
+  periodAnchor: '2026-01-04',// any Sunday; setup replaces it with your real period start
   periodLengthDays: 14,
-  payDateOffsetDays: 13      // last day of period + 13 = payday (Aug 8 -> Fri Aug 21)
+  payDateOffsetDays: 13      // payday = last day of the period + this many days
 };
 
 function ymd(s){ var p = String(s).split('-').map(Number); return new Date(p[0], p[1]-1, p[2]); }
@@ -437,7 +525,7 @@ var state = load();
 
 function load(){
   var base = { cfg: Object.assign({}, DEFAULTS), sessions: [], activeStart: null,
-               unit: 'sec', planOn: false, plannedHours: 8, sound: true };
+               unit: 'sec', planOn: false, plannedHours: 8, sound: true, configured: false };
   try {
     var raw = localStorage.getItem(KEY);
     if (raw){
@@ -642,7 +730,63 @@ function render(){
     ? bucketH.toFixed(2) + ' h · ' + over.toFixed(2) + ' h in OT'
     : bucketH.toFixed(2) + ' / ' + thr + ' h · ' + (thr - bucketH).toFixed(2) + ' h to OT';
 
+  renderProgress(ledger, period, now);
   renderLog(ledger, period, active, now);
+}
+
+/* Pay-period progress: what each week contributed, and the running period total that
+   never resets mid-period — the number that keeps climbing until payday. */
+function renderProgress(ledger, period, now){
+  var cfg = state.cfg;
+  var cume = sumRange(ledger.parts, period.startMs, period.endMs);
+
+  document.getElementById('cumeGross').textContent = money(cume.gross);
+  document.getElementById('cumeSub').innerHTML = cume.hours.toFixed(2) + ' h'
+    + (cume.otHours > 0.0001 ? ' &nbsp;·&nbsp; <span class="ot">' + cume.otHours.toFixed(2) + ' h of it OT</span>' : '')
+    + ' &nbsp;·&nbsp; paid ' + fdate(period.payDate);
+
+  // One card per week inside the period. Each starts fresh; the total above does not.
+  var html = '', i = 0, cursor = period.startMs;
+  while (cursor < period.endMs && i < 12){
+    var w = weekInfo(cursor, cfg);
+    var from = Math.max(w.startMs, period.startMs), to = Math.min(w.endMs, period.endMs);
+    var t = sumRange(ledger.parts, from, to);
+    var current = now >= from && now < to;
+    i++;
+    html += '<div class="wk' + (current ? ' now' : '') + '">'
+      + '<div class="n"><b>Week ' + i + '</b>' + (current ? '<i>this week</i>' : '') + '</div>'
+      + '<div class="d">' + fdate(new Date(from)) + ' – ' + fdate(new Date(to - 1)) + '</div>'
+      + '<div class="v">' + money(t.gross) + '</div>'
+      + '<div class="h">' + t.hours.toFixed(2) + ' h'
+      + (t.otHours > 0.0001 ? ' · <span class="ot">' + t.otHours.toFixed(2) + ' h OT</span>' : '') + '</div></div>';
+    cursor = to;
+  }
+  document.getElementById('weeks').innerHTML = html;
+
+  // Progress toward the period's 80-hour mark.
+  var thr = cfg.periodThreshold, h = cume.hours;
+  var over = Math.max(0, h - thr), pctReg = Math.min(h, thr) / thr * 100;
+  document.getElementById('p80Reg').style.width = pctReg + '%';
+  document.getElementById('p80Ot').style.width = Math.min(100 - pctReg, over / thr * 100) + '%';
+  document.getElementById('p80Lbl').textContent = 'Cumulative hours toward ' + thr + ' h';
+  document.getElementById('p80Num').textContent = h.toFixed(2) + ' / ' + thr + ' h';
+  document.getElementById('p80Badge').innerHTML = over > 0 && cfg.otMode === 'period'
+    ? '<span class="badge">past ' + thr + ' h</span>' : '';
+
+  var note = document.getElementById('p80Note'), otRate = money(ledger.otRate);
+  if (cfg.otMode === 'period'){
+    note.className = 'p80note' + (over > 0 ? ' hot' : '');
+    note.innerHTML = over > 0
+      ? '⚡ You passed ' + thr + ' h. <b>Every hour for the rest of this period bills at ' + otRate + '.</b> '
+        + over.toFixed(2) + ' h so far.'
+      : '<b>' + (thr - h).toFixed(2) + ' h</b> until every remaining hour this period bills at <b>' + otRate + '</b>.';
+  } else {
+    // Weekly rule is active, so this bar is a milestone, not what drives the rate.
+    note.className = 'p80note';
+    note.innerHTML = over > 0
+      ? 'Past ' + thr + ' h for the period. Your overtime is set to the <b>40 h weekly</b> rule, so it is figured per week — switch to the ' + thr + ' h rule in Settings to bill every hour past here at ' + otRate + '.'
+      : '<b>' + (thr - h).toFixed(2) + ' h</b> to ' + thr + ' h for the period. Overtime is currently set to the <b>40 h weekly</b> rule, so it resets each week — switch in Settings to bill every hour past ' + thr + ' h at ' + otRate + '.';
+  }
 }
 
 function renderLog(ledger, period, active, now){
@@ -678,6 +822,64 @@ function renderLog(ledger, period, active, now){
        + '<td class="num g"><b>' + (tot.otHours > 0.0001 ? tot.otHours.toFixed(2) : '—') + '</b></td>'
        + '<td class="num"><b>' + money(tot.gross) + '</b></td><td></td></tr></tfoot></table></div>';
   box.innerHTML = html;
+}
+
+/* ============================ first run ============================
+   Nothing personal ships in this file, so the first launch collects the rate and
+   pay schedule. Stored in this browser only. */
+var setupMode = 'weekly';
+
+function mostRecentWeekStart(){
+  var d = midnight(Date.now());
+  return addDays(d, -(((d.getDay() - DEFAULTS.weekStartDay) % 7) + 7) % 7);
+}
+function dateInput(d){
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function readSetup(){
+  var rate = parseFloat(document.getElementById('sRate').value);
+  if (!isFinite(rate) || rate <= 0) return { error: 'Enter what you earn per hour.' };
+  if (rate > 10000) return { error: 'That rate looks off — check the number.' };
+  var anchor = document.getElementById('sAnchor').value;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(anchor)) return { error: 'Pick the date your current pay period started.' };
+  return {
+    rate: rate, periodAnchor: anchor,
+    periodLengthDays: parseInt(document.getElementById('sLen').value, 10),
+    payDateOffsetDays: parseInt(document.getElementById('sPay').value, 10),
+    otMode: setupMode
+  };
+}
+
+function previewSetup(){
+  var r = readSetup(), box = document.getElementById('sPreview');
+  if (r.error){ box.innerHTML = '<span style="opacity:.6">' + r.error + '</span>'; return; }
+  var cfg = Object.assign({}, DEFAULTS, r);
+  var p = periodInfo(Date.now(), cfg);
+  var thr = r.otMode === 'weekly' ? cfg.weeklyThreshold : cfg.periodThreshold;
+  box.innerHTML = 'Current period <b>' + fdate(p.start) + ' → ' + fdateY(p.lastDay) + '</b>'
+    + '<br>Payday <b>' + fdateY(p.payDate) + '</b>'
+    + '<br>Overtime past ' + thr + ' h at <span class="pay">' + money(r.rate * cfg.otMultiplier) + '</span>/hr';
+}
+
+function saveSetup(){
+  var r = readSetup();
+  if (r.error){ document.getElementById('sErr').textContent = r.error; show('sErr', true); return; }
+  Object.assign(state.cfg, r);
+  state.configured = true;
+  save(); syncControls(); applyStage(); render();
+  toast('All set — ' + money(state.cfg.rate) + '/hr. Clock in whenever you like.');
+}
+
+/* Show either the setup screen or the app, never both. */
+function applyStage(){
+  var first = !state.configured;
+  show('setup', first);
+  ['hero', 'period', 'totals', 'progress', 'log', 'cfg'].forEach(function(id){ show(id, !first); });
+  if (first){
+    document.getElementById('sAnchor').value = dateInput(mostRecentWeekStart());
+    previewSetup();
+  }
 }
 
 /* ==================== add / edit a shift (in-page, no popups) ====================
@@ -857,6 +1059,20 @@ document.getElementById('eMode').addEventListener('click', function(e){
   });
 });
 
+['sRate', 'sAnchor', 'sLen', 'sPay'].forEach(function(id){
+  var n = document.getElementById(id);
+  n.addEventListener('input', previewSetup);
+  n.addEventListener('change', previewSetup);
+  n.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); saveSetup(); } });
+});
+document.getElementById('sMode').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  setupMode = b.dataset.m;
+  [].forEach.call(document.querySelectorAll('#sMode button'), function(x){ x.classList.toggle('on', x === b); });
+  previewSetup();
+});
+document.getElementById('sSave').onclick = saveSetup;
+
 document.getElementById('exportCsv').onclick = exportCsv;
 document.getElementById('clearPeriod').onclick = function(){ show('clearConfirm', true); show('logActions', false); };
 document.getElementById('clearNo').onclick = function(){ show('clearConfirm', false); show('logActions', true); };
@@ -874,7 +1090,8 @@ document.getElementById('wipe').onclick = function(){
     return;
   }
   b.dataset.armed = ''; b.textContent = 'Erase all data';
-  localStorage.removeItem(KEY); state = load(); syncControls(); render(); toast('All data erased.');
+  localStorage.removeItem(KEY); state = load(); syncControls(); applyStage(); render();
+  toast('All data erased.');
 };
 
 var CFG_FIELDS = [
@@ -909,6 +1126,7 @@ function syncControls(){
    Date.now(), never accumulated tick-by-tick — so backgrounding the tab, sleeping the
    machine, or refreshing mid-shift all recover the correct amount. */
 syncControls();
+applyStage();
 render();
 setInterval(render, 120);
 document.addEventListener('visibilitychange', function(){ if (!document.hidden) render(); });
@@ -918,7 +1136,7 @@ window.addEventListener('focus', render);
    unsaved work here to lose. */
 window.addEventListener('storage', function(e){
   if (e.key && e.key !== KEY) return;
-  state = load(); lastMoney = ''; syncControls(); render();
+  state = load(); lastMoney = ''; syncControls(); applyStage(); render();
 });
 </script>
 </body>
