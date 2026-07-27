@@ -202,6 +202,10 @@
   details summary::-webkit-details-marker{display:none}
   details summary::before{content:"▸ ";color:var(--acc)}
   details[open] summary::before{content:"▾ "}
+  .warn{border:1px solid var(--warn);border-radius:14px;padding:14px 16px;margin-bottom:16px;
+    background:linear-gradient(180deg,rgba(255,180,84,.14),rgba(255,180,84,.04));font-size:13.8px;line-height:1.65}
+  .warn b{display:block;color:var(--warn);font-size:14.6px;margin-bottom:5px}
+  .warn span{color:var(--ink);opacity:.9}
   .foot{color:var(--muted);font-size:12.3px;text-align:center;margin-top:26px;line-height:1.7}
   .toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);background:rgba(10,16,32,.95);border:1px solid var(--acc);
     color:var(--ink);padding:11px 20px;border-radius:12px;font-size:13.6px;font-weight:600;opacity:0;pointer-events:none;transition:.3s;z-index:20;
@@ -222,6 +226,13 @@
 <div class="bg"></div><div class="grid"></div>
 
 <div class="wrap">
+  <div class="warn hide" id="noStore">
+    <b>⚠ This page can't save anything.</b>
+    <span>Your rate and hours will disappear the moment you close it — the browser is blocking storage here,
+    usually because the page is embedded in another site. Open the app at its own address, or use the
+    downloaded copy, and everything sticks.</span>
+  </div>
+
   <header>
     <h1>PAY CLOCK</h1>
     <div class="sub">Clock in and watch it earn — second by second, straight time into overtime.</div>
@@ -547,6 +558,20 @@ function quantize(ms, unit){
 
 /* ============================ state ============================ */
 var KEY = 'payclock.v1';
+
+/* Some contexts — an embedded frame, private browsing with storage disabled — block
+   localStorage outright. Failing quietly there means the user sets up their pay again
+   every single time and is never told why, so detect it once and say so plainly. */
+var STORAGE_OK = (function(){
+  try {
+    var probe = KEY + '.probe';
+    localStorage.setItem(probe, '1');
+    var round = localStorage.getItem(probe) === '1';
+    localStorage.removeItem(probe);
+    return round;
+  } catch(e){ return false; }
+})();
+
 var state = load();
 
 function load(){
@@ -1214,6 +1239,7 @@ function syncControls(){
 /* Repaint fast enough that per-second stepping looks alive. Every figure is derived from
    Date.now(), never accumulated tick-by-tick — so backgrounding the tab, sleeping the
    machine, or refreshing mid-shift all recover the correct amount. */
+show('noStore', !STORAGE_OK);
 syncControls();
 applyStage();
 render();
