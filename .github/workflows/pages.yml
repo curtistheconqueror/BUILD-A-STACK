@@ -1,0 +1,61 @@
+name: Deploy to GitHub Pages
+
+# Publishes two pages:
+#   /        Build-a-Stack
+#   /clock/  Pay Clock, installable to a phone home screen
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Never publish a broken pay engine.
+      - name: Test the pay engine
+        run: npm test
+
+      - name: Assemble the site
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          node pwa/build.mjs _site/clock
+          test -f _site/clock/index.html
+          test -f _site/clock/manifest.webmanifest
+          test -f _site/clock/sw.js
+          echo "built:"; find _site -type f | sort
+
+      # enablement turns Pages on for the repo, so no manual settings step.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
