@@ -13,6 +13,24 @@
 <meta name="apple-mobile-web-app-title" content="Pay Clock" />
 <title>Pay Clock · live earnings tracker</title>
 <style>
+  /* ---- widget mode ---- */
+  body.widget{overflow:hidden}
+  body.widget .wrap{padding:0;max-width:none}
+  body.widget .card{display:none}
+  body.widget #wcard{display:block;margin:0;border-radius:0;min-height:100vh;
+    display:flex;flex-direction:column;justify-content:center}
+  body.widget .foot,body.widget header{display:none}
+  #wcard{--ca:var(--acc)}
+  .wstat{display:flex;align-items:center;gap:8px;font-size:12px;letter-spacing:1.4px;
+    text-transform:uppercase;color:var(--muted);font-weight:800;margin-bottom:6px}
+  .wstat .blip{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+  body.live .wstat .blip{background:var(--ok);animation:pulse 1.4s ease-in-out infinite}
+  .wmoney{font-size:42px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.05}
+  .wsub{color:var(--muted);font-size:13px;margin-top:6px;font-variant-numeric:tabular-nums}
+  .wbtn{margin-top:14px;width:100%;min-height:52px;font-size:15px;font-weight:800;border-radius:12px}
+  .wexpand{position:fixed;top:10px;right:10px;z-index:5;background:rgba(10,16,32,.7);
+    border:1px solid var(--border);border-radius:10px;color:var(--muted);padding:6px 10px;
+    font-size:12px;font-weight:700;text-decoration:none}
   :root{--bg0:#05080f;--bg1:#0a1020;--ink:#eaf1ff;--muted:#8ea0c4;--acc:#35d0e0;--acc2:#b78cff;--acc3:#ff6fb5;
     --ok:#51e08a;--bad:#ff5d6c;--warn:#ffb454;--glass:rgba(22,30,50,.55);--border:rgba(130,155,200,.22);}
   *{box-sizing:border-box}
@@ -226,6 +244,15 @@
 <div class="bg"></div><div class="grid"></div>
 
 <div class="wrap">
+  <!-- ================= WIDGET MODE ================= -->
+  <section class="card hide" id="wcard">
+    <div class="wstat"><span class="blip"></span><span id="wstatus">Clocked out</span></div>
+    <div class="wmoney" id="wmoney">$0.00</div>
+    <div class="wsub" id="wsub">Today · 0.00 h</div>
+    <button class="btn go wbtn" id="wpunch">▶ Clock In</button>
+    <a class="wexpand" href="./" id="wexpand">Open full app ↗</a>
+  </section>
+
   <div class="warn hide" id="noStore">
     <b>⚠ This page can't save anything.</b>
     <span>Your rate and hours will disappear the moment you close it — the browser is blocking storage here,
@@ -1261,6 +1288,80 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(function(){});
   });
 }
+
+/* ============================ widget mode ============================ */
+(function(){
+  var isWidget = /[?&]widget=1/.test(location.search);
+  if (!isWidget) return;
+  document.body.classList.add('widget');
+  var wcard = document.getElementById('wcard');
+  var wstatus = document.getElementById('wstatus');
+  var wmoney = document.getElementById('wmoney');
+  var wsub = document.getElementById('wsub');
+  var wpunch = document.getElementById('wpunch');
+  var wexpand = document.getElementById('wexpand');
+
+  function widgetRender(){
+    if (!state.configured){
+      wstatus.textContent = 'Set up first';
+      wmoney.textContent = '—';
+      wsub.textContent = 'Open full app to configure';
+      wpunch.textContent = 'Open setup';
+      wpunch.onclick = function(){ location.href = './'; };
+      return;
+    }
+    var now = Date.now();
+    var active = state.activeStart;
+    var cfg = state.cfg;
+    var dayStart = midnight(now).getTime();
+    var dayEnd = dayStart + DAY_MS;
+    var today = state.sessions.filter(function(s){ return s.end > dayStart && s.start < dayEnd; });
+    if (active) today.push({ start: active, end: now });
+    var led = buildLedger(today, cfg);
+    var gross = led.totalGross, hrs = led.totalMs / HOUR_MS;
+    wmoney.textContent = money(gross);
+    wsub.textContent = 'Today · ' + hrs.toFixed(2) + ' h';
+    if (active){
+      document.body.classList.add('live');
+      wstatus.textContent = 'Clocked in';
+      wpunch.textContent = '⏹ Clock Out';
+      wpunch.className = 'btn danger wbtn';
+    } else {
+      document.body.classList.remove('live');
+      wstatus.textContent = 'Clocked out';
+      wpunch.textContent = '▶ Clock In';
+      wpunch.className = 'btn go wbtn';
+    }
+    wpunch.onclick = function(){
+      if (state.activeStart) clockOut(); else clockIn();
+      save(); widgetRender();
+      if (window.BroadcastChannel){
+        try { new BroadcastChannel('payclock').postMessage('x'); } catch(e){}
+      }
+    };
+  }
+
+  /* Keep the widget in sync if another window (full app) changes state. */
+  if (window.BroadcastChannel){
+    try {
+      var bc = new BroadcastChannel('payclock');
+      bc.onmessage = function(){ state = load(); widgetRender(); };
+    } catch(e){}
+  }
+  window.addEventListener('storage', function(e){
+    if (e.key && e.key !== KEY) return;
+    state = load(); widgetRender();
+  });
+
+  widgetRender();
+  setInterval(widgetRender, 1000);
+
+  /* Shortcut actions: clock in / clock out from the home-screen long-press menu. */
+  var action = (location.search.match(/[?&]action=(\w+)/) || [])[1];
+  if (action === 'clockin' && !state.activeStart) clockIn();
+  if (action === 'clockout' && state.activeStart) clockOut();
+  if (action){ save(); widgetRender(); }
+})();
 </script>
 </body>
 </html>
