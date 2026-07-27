@@ -16,10 +16,8 @@
   /* ---- widget mode ---- */
   body.widget{overflow:hidden}
   body.widget .wrap{padding:0;max-width:none}
-  body.widget .card{display:none}
-  body.widget #wcard{display:block;margin:0;border-radius:0;min-height:100vh;
+  body.widget #wcard{margin:0;border-radius:0;min-height:100vh;
     display:flex;flex-direction:column;justify-content:center}
-  body.widget .foot,body.widget header{display:none}
   #wcard{--ca:var(--acc)}
   .wstat{display:flex;align-items:center;gap:8px;font-size:12px;letter-spacing:1.4px;
     text-transform:uppercase;color:var(--muted);font-weight:800;margin-bottom:6px}
@@ -1301,6 +1299,11 @@ if ('serviceWorker' in navigator) {
   var wpunch = document.getElementById('wpunch');
   var wexpand = document.getElementById('wexpand');
 
+  /* Show the widget card, hide everything else. Done in JS because .hide is !important. */
+  wcard.classList.remove('hide');
+  var siblings = document.querySelectorAll('.wrap > *:not(#wcard)');
+  for (var i = 0; i < siblings.length; i++) siblings[i].style.display = 'none';
+
   function widgetRender(){
     if (!state.configured){
       wstatus.textContent = 'Set up first';
@@ -1318,7 +1321,8 @@ if ('serviceWorker' in navigator) {
     var today = state.sessions.filter(function(s){ return s.end > dayStart && s.start < dayEnd; });
     if (active) today.push({ start: active, end: now });
     var led = buildLedger(today, cfg);
-    var gross = led.totalGross, hrs = led.totalMs / HOUR_MS;
+    var tot = sumRange(led.parts, dayStart, dayEnd);
+    var gross = tot.gross, hrs = tot.hours;
     wmoney.textContent = money(gross);
     wsub.textContent = 'Today · ' + hrs.toFixed(2) + ' h';
     if (active){
