@@ -5,5 +5,8 @@
   "description": "A live earnings clock with overtime and pay-period tracking",
   "scripts": {
     "test": "node tests/pay-engine.test.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.0"
   }
 }
