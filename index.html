@@ -225,6 +225,9 @@
     background:linear-gradient(180deg,rgba(255,180,84,.14),rgba(255,180,84,.04));font-size:13.8px;line-height:1.65}
   .warn b{display:block;color:var(--warn);font-size:14.6px;margin-bottom:5px}
   .warn span{color:var(--ink);opacity:.9}
+  .stash{border:1px solid var(--warn);border-radius:12px;padding:13px 15px;font-size:13.4px;line-height:1.65;
+    background:rgba(255,180,84,.10)}
+  .stash b{color:var(--warn);display:block;margin-bottom:4px;font-size:14px}
   .foot{color:var(--muted);font-size:12.3px;text-align:center;margin-top:26px;line-height:1.7}
   .toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,20px);background:rgba(10,16,32,.95);border:1px solid var(--acc);
     color:var(--ink);padding:11px 20px;border-radius:12px;font-size:13.6px;font-weight:600;opacity:0;pointer-events:none;transition:.3s;z-index:20;
@@ -438,6 +441,10 @@
         <label>Back up &amp; move your data</label>
         <div class="note">Your rate, schedule and every shift live in this browser only. Save a backup
         to keep a copy, or to carry everything to another device or another copy of this app.</div>
+      </div>
+      <div class="confirm hide" id="cfgUndo" style="border-color:var(--warn);background:rgba(255,180,84,.10)">
+        <span id="cfgUndoTxt"></span>
+        <button class="mini" id="cfgUndoBtn">↩ Undo that change</button>
       </div>
       <div class="actions" style="justify-content:flex-start;margin-top:12px">
         <button class="mini" id="backup">⇩ Save a backup</button>
@@ -682,11 +689,14 @@ function clockIn(){
 function clockOut(atMs, silent){
   if (!state.activeStart) return;
   var end = atMs || Date.now();
+  // A stop time at or before the start would silently bin the whole shift. Bank what
+  // was actually worked instead.
+  if (end <= state.activeStart) end = Date.now();
   if (end > state.activeStart){
     state.sessions.push({ id: uid(), start: state.activeStart, end: end, note: '' });
   }
   var began = state.activeStart;
-  state.activeStart = null;
+  state.activeStart = null; tickWhileActive = 0;
   save(); chime(false); render();
   if (!silent) toast('Clocked out — ' + hhmmss(end - began) + ' on the clock');
 }
@@ -700,6 +710,9 @@ function checkOt(inOt){
 
 /* ============================ render ============================ */
 var lastMoney = '';
+/* The last instant we rendered while clocked in. An auto-stop may never finish a shift
+   before this, or time already worked would be thrown away. */
+var tickWhileActive = 0;
 function render(){
   var cfg = state.cfg, now = Date.now();
   var active = state.activeStart;
@@ -708,11 +721,20 @@ function render(){
   if (active && state.planOn){
     var stopAt = plannedStopAt(active, state.plannedHours, state.sessions, cfg);
     if (stopAt && now >= stopAt){
-      clockOut(stopAt, true);
-      toast('🛑 Auto-stopped — hit your ' + state.plannedHours + " h target for today");
+      /* Arming auto-stop, or lowering the target, mid-shift can put the calculated stop
+         time in the past. Ending there would delete work already done, so never finish a
+         shift earlier than the last moment we saw it running. */
+      var floor = tickWhileActive || active;
+      var end = Math.min(now, Math.max(stopAt, floor));
+      var late = stopAt < floor;
+      clockOut(end, true);
+      toast(late
+        ? '🛑 Stopped now — your ' + state.plannedHours + ' h target for today was already met. Nothing was lost.'
+        : '🛑 Auto-stopped — hit your ' + state.plannedHours + ' h target for today');
       return;
     }
   }
+  tickWhileActive = active ? now : 0;
 
   var all = state.sessions.slice();
   if (active) all.push({ id: '__active', start: active, end: now });
@@ -888,7 +910,17 @@ function renderLog(ledger, period, active, now){
   rows.sort(function(a, b){ return b.start - a.start; });
 
   var box = document.getElementById('logBody');
-  if (!rows.length){ box.innerHTML = '<div class="empty">No shifts logged this period yet.</div>'; return; }
+  if (!rows.length){
+    // An empty log with shifts still stored means the period window moved, not that
+    // anything was lost. Never let that read as "your work is gone".
+    var elsewhere = state.sessions.length;
+    box.innerHTML = elsewhere
+      ? '<div class="stash"><b>' + elsewhere + ' shift' + (elsewhere === 1 ? '' : 's')
+        + ' saved outside this pay period.</b> Nothing has been deleted — this period just does not '
+        + 'include them. Check the pay-period start date and length in Settings, or use Export CSV to see them all.</div>'
+      : '<div class="empty">No shifts logged this period yet.</div>';
+    return;
+  }
   var html = '<div style="overflow-x:auto"><table><thead><tr><th>Day</th><th>In</th><th>Out</th>'
            + '<th class="num">Hours</th><th class="num">OT</th><th class="num">Gross</th><th></th></tr></thead><tbody>';
   var tot = { hours: 0, otHours: 0, gross: 0 };
@@ -1240,17 +1272,66 @@ var CFG_FIELDS = [
   ['cPeriodThr', 'periodThreshold', 'float'], ['cAnchor', 'periodAnchor', 'str'],
   ['cLen', 'periodLengthDays', 'int'], ['cPayOff', 'payDateOffsetDays', 'int']
 ];
+/* Values that would make every figure read $0.00 while the shifts are still there.
+   A rate of zero is not a rate, and a period that excludes your work is not a period. */
+var CFG_BOUNDS = {
+  rate:              { min: 0.01, max: 10000,  why: 'An hourly rate has to be more than zero.' },
+  otMultiplier:      { min: 1,    max: 10,     why: 'Overtime pays at least the base rate.' },
+  weeklyThreshold:   { min: 1,    max: 168,    why: 'A weekly overtime threshold has to be at least 1 hour.' },
+  periodThreshold:   { min: 1,    max: 1000,   why: 'A period overtime threshold has to be at least 1 hour.' },
+  periodLengthDays:  { min: 1,    max: 366,    why: 'A pay period has to be at least one day long.' },
+  payDateOffsetDays: { min: 0,    max: 90,     why: 'Payday cannot fall before the period ends.' }
+};
+
+/* Snapshot of the settings before the most recent change, so any change can be taken back. */
+var cfgUndo = null;
+
 CFG_FIELDS.forEach(function(f){
   document.getElementById(f[0]).onchange = function(e){
-    var v = e.target.value;
+    var v = e.target.value, key = f[1];
     if (f[2] === 'float'){ var n = parseFloat(v); if (!isFinite(n)){ syncControls(); return; } v = n; }
     if (f[2] === 'int'){ var i = parseInt(v, 10); if (!isFinite(i)){ syncControls(); return; } v = i; }
-    if (f[1] === 'periodAnchor' && !/^\d{4}-\d{2}-\d{2}$/.test(v)){ syncControls(); return; }
-    if (f[1] === 'periodLengthDays' && v < 1){ syncControls(); return; }
-    state.cfg[f[1]] = v; save(); lastMoney = ''; render();
+    if (key === 'periodAnchor' && !/^\d{4}-\d{2}-\d{2}$/.test(v)){ syncControls(); return; }
+
+    var bound = CFG_BOUNDS[key];
+    if (bound && (v < bound.min || v > bound.max)){
+      syncControls(); toast(bound.why); return;      // refuse it, keep the old value
+    }
+    if (state.cfg[key] === v) return;
+
+    var was = Object.assign({}, state.cfg);
+    state.cfg[key] = v; save(); lastMoney = ''; render();
+    offerUndo(was, key);
   };
 });
+
+/* Structural settings silently re-bucket every shift you have logged. Say what happened
+   and give the change back with one tap, rather than leaving you to guess. */
+function offerUndo(was, key){
+  var structural = key === 'periodAnchor' || key === 'periodLengthDays' || key === 'weekStartDay';
+  var period = periodInfo(Date.now(), state.cfg);
+  var outside = state.sessions.filter(function(s){
+    return !(s.end > period.startMs && s.start < period.endMs);
+  }).length;
+  if (!structural && !(key === 'rate' && was.rate !== state.cfg.rate)) return;
+
+  cfgUndo = was;
+  var bar = document.getElementById('cfgUndo');
+  document.getElementById('cfgUndoTxt').textContent = structural && outside
+    ? outside + ' logged shift' + (outside === 1 ? '' : 's') + ' now fall outside this pay period. Nothing was deleted.'
+    : 'Settings changed. Every figure was recalculated.';
+  show('cfgUndo', true);
+  clearTimeout(offerUndo.t);
+  offerUndo.t = setTimeout(function(){ show('cfgUndo', false); }, 20000);
+}
 document.getElementById('cSound').onchange = function(e){ state.sound = e.target.value === '1'; save(); };
+
+document.getElementById('cfgUndoBtn').onclick = function(){
+  if (!cfgUndo) return;
+  state.cfg = cfgUndo; cfgUndo = null;
+  save(); syncControls(); show('cfgUndo', false); lastMoney = ''; render();
+  toast('Change undone.');
+};
 
 document.getElementById('backup').onclick = backup;
 document.getElementById('restore').onclick = function(){ document.getElementById('restoreFile').click(); };
@@ -1294,11 +1375,15 @@ window.addEventListener('storage', function(e){
 
 /* Offline support. Registration failing is not fatal — the app still runs, it just
    needs a connection to load next time. */
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function(){
-    navigator.serviceWorker.register('./sw.js').catch(function(){});
-  });
-}
+/* Reading navigator.serviceWorker THROWS in a sandboxed frame without allow-same-origin,
+   so the feature check is not enough on its own. */
+try {
+  if ('serviceWorker' in navigator && navigator.serviceWorker) {
+    window.addEventListener('load', function(){
+      try { navigator.serviceWorker.register('./sw.js').catch(function(){}); } catch(e){}
+    });
+  }
+} catch(e){}
 
 /* ============================ widget mode ============================ */
 (function(){
