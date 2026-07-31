@@ -1,7 +1,7 @@
 /* Offline cache for Pay Clock.
    Serve from cache immediately so it opens instantly with no signal, then refresh the
    cache in the background so the next launch has any update. */
-const CACHE = 'pay-clock-v10';
+const CACHE = 'pay-clock-v11';
 const ASSETS = ['./', './index.html', './manifest.webmanifest',
                 './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 
