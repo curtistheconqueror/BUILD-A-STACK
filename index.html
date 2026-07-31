@@ -522,6 +522,30 @@
       <span>Overtime I plan to work each week:</span>
       <input type="number" id="yCommit" min="0" max="80" step="0.5" value="0"> <span>h</span>
     </div>
+
+    <div class="planrow" style="margin-top:4px">
+      <button class="mini" id="yBaseBtn">✎ Started mid-year? Set your year-so-far</button>
+      <span class="eta" id="yBaseSummary"></span>
+    </div>
+    <div class="editor hide" id="yBase">
+      <div class="etitle">Your year before this app</div>
+      <div class="note" style="margin-bottom:12px">Copy the YTD line off your latest paystub. Earnings is
+      enough by itself; add hours and overtime if the stub shows them — that makes the overtime
+      tax-break cap accurate too.</div>
+      <div class="egrid">
+        <div class="f"><label for="yBaseGross">YTD earnings before tracking here</label>
+          <div class="prefixed"><span>$</span><input type="number" id="yBaseGross" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div></div>
+        <div class="f"><label for="yBaseHours">Hours so far (optional)</label>
+          <input type="number" id="yBaseHours" min="0" step="0.25" placeholder="unknown"></div>
+        <div class="f"><label for="yBaseOt">Of which overtime h (optional)</label>
+          <input type="number" id="yBaseOt" min="0" step="0.25" placeholder="unknown"></div>
+      </div>
+      <div class="eerr hide" id="yBaseErr"></div>
+      <div class="eactions">
+        <button class="btn go" id="yBaseSave">Save starting point</button>
+        <button class="btn ghost" id="yBaseCancel">Cancel</button>
+      </div>
+    </div>
   </section>
 
   <!-- ================= LOG ================= -->
@@ -540,6 +564,17 @@
           <input type="number" id="eHours" min="0.25" max="24" step="0.25" value="8"></div>
         <div class="f hide" id="fIn"><label for="eIn">Clocked in</label><input type="time" id="eIn" value="08:00"></div>
         <div class="f hide" id="fOut"><label for="eOut">Clocked out</label><input type="time" id="eOut" value="16:00"></div>
+        <div class="f"><label for="eKind">Shift type</label>
+          <select id="eKind">
+            <option value="regular">Regular</option>
+            <option value="night">Overnight (+$/h differential)</option>
+            <option value="holiday">Holiday (rate ×)</option>
+            <option value="pto">Sick / PTO / holiday off — paid, no OT credit</option>
+          </select></div>
+        <div class="f hide" id="fDiff"><label for="eDiff">Extra per hour</label>
+          <div class="prefixed"><span>$</span><input type="number" id="eDiff" min="0" step="0.05" value="2.00" inputmode="decimal"></div></div>
+        <div class="f hide" id="fMult"><label for="eMult">Multiplier</label>
+          <input type="number" id="eMult" min="1" max="3" step="0.05" value="1.5"></div>
       </div>
       <div class="epreview" id="ePreview"></div>
       <div class="eerr hide" id="eErr"></div>
@@ -586,6 +621,12 @@
         <div class="f"><label>Payday = period end + (days)</label><input type="number" id="cPayOff" min="0" step="1"></div>
         <div class="f"><label>Sound</label>
           <select id="cSound"><option value="1">On</option><option value="0">Off</option></select></div>
+        <div class="f"><label>Apply a raise — new rate ($/hr)</label>
+          <input type="number" id="rNew" min="0.01" step="0.01" placeholder="e.g. 40.00"></div>
+        <div class="f"><label>Raise takes effect on</label>
+          <input type="date" id="rDate"></div>
+        <div class="f" style="justify-content:flex-end">
+          <button class="mini" id="rApply">Apply raise — history keeps its old rate</button></div>
         <div class="f"><label>Year-to-date section</label>
           <select id="cYtd"><option value="1">Show</option><option value="0">Hide</option></select></div>
       </div>
@@ -622,6 +663,7 @@
         <div class="note">Your rate, schedule and every shift live in this browser only. Save a backup
         to keep a copy, or to carry everything to another device or another copy of this app.</div>
       </div>
+      <div class="note hide" id="rHist" style="margin-top:10px"></div>
       <div class="confirm hide" id="cfgUndo" style="border-color:var(--warn);background:rgba(255,180,84,.10)">
         <span id="cfgUndoTxt"></span>
         <button class="mini" id="cfgUndoBtn">↩ Undo that change</button>
@@ -706,6 +748,19 @@ function otThresholdOf(cfg){ return cfg.otMode === 'weekly' ? cfg.weeklyThreshol
 
 /* Walk every shift in chronological order, filling each OT bucket as it goes. A shift that
    crosses the threshold mid-way is split: hours below it bill straight, the rest bill at OT. */
+/* The hourly rate in force at a moment. cfg.rate is the CURRENT rate; a raise pushes the
+   old rate into cfg.rateHistory as {before:'YYYY-MM-DD', rate} — work before that date is
+   priced at the old rate, so applying a raise never re-prices what was already earned. */
+function rateAt(t, cfg){
+  var hist = cfg.rateHistory || [];
+  if (!hist.length) return cfg.rate;
+  var sorted = hist.slice().sort(function(a, b){ return +ymd(a.before) - +ymd(b.before); });
+  for (var i = 0; i < sorted.length; i++){
+    if (t < +ymd(sorted[i].before)) return sorted[i].rate;
+  }
+  return cfg.rate;
+}
+
 function buildLedger(sessions, cfg){
   var threshold = otThresholdOf(cfg), otRate = cfg.rate * cfg.otMultiplier;
   var bucket = {}, parts = [];
@@ -713,16 +768,26 @@ function buildLedger(sessions, cfg){
                        .slice().sort(function(a,b){ return a.start - b.start; });
   for (var i = 0; i < sorted.length; i++){
     var s = sorted[i], chunks = splitSession(s.start, s.end, cfg);
+    /* Per-shift pay adjustments:
+         adj.diff  extra dollars per hour (an overnight differential)
+         adj.mult  multiplier on the whole rate (holiday pay)
+         adj.noOt  paid straight and kept out of the overtime bucket (sick / PTO) */
+    var adj = s.adj || {};
     for (var j = 0; j < chunks.length; j++){
       var c = chunks[j], hours = (c.end - c.start) / HOUR_MS;
+      var base = (rateAt(c.start, cfg) + (adj.diff || 0)) * (adj.mult || 1);
       var key = cfg.otMode === 'weekly' ? c.weekKey : c.periodKey;
       var before = bucket[key] || 0;
-      var reg = Math.max(0, Math.min(threshold - before, hours));
-      var ot = hours - reg;
-      bucket[key] = before + hours;
+      var reg, ot;
+      if (adj.noOt){ reg = hours; ot = 0; }            // never accrues toward the threshold
+      else {
+        reg = Math.max(0, Math.min(threshold - before, hours));
+        ot = hours - reg;
+        bucket[key] = before + hours;
+      }
       parts.push({ start: c.start, end: c.end, dayMs: c.dayMs, weekKey: c.weekKey, periodKey: c.periodKey,
                    sessionId: s.id, hours: hours, regHours: reg, otHours: ot,
-                   gross: reg * cfg.rate + ot * otRate });
+                   gross: reg * base + ot * base * cfg.otMultiplier });
     }
   }
   return { parts: parts, bucket: bucket, threshold: threshold, otRate: otRate };
@@ -1063,7 +1128,7 @@ function render(){
   var netlineEl = document.getElementById('netline');
   mEl.classList.remove('inhole');
   var ytdT = ytdSums(ledger, now);
-  var premBefore = Math.max(0, otPremiumOf(ytdT) - otPremiumOf(per));
+  var premBefore = Math.max(0, otPremiumOf(ytdT) + ytdBasePremium() - otPremiumOf(per));
   if (netOn){
     var perView = currentNetView(per.gross, per.hours, null, per.otHours, premBefore);
     if (holeMode){
@@ -1177,14 +1242,23 @@ function renderYtd(ledger, now){
 
   var cfg = state.cfg, y = new Date(now).getFullYear();
   var t = ytdSums(ledger, now);
-  var prem = otPremiumOf(t);
+  var base = ytdBase();
+  var gross = t.gross + (base.gross || 0);
+  var otH = t.otHours + (base.ot || 0);
+  var prem = otPremiumOf(t) + ytdBasePremium();
   document.getElementById('ytdYear').textContent = y;
-  document.getElementById('yGross').textContent = money(t.gross);
-  document.getElementById('yDet').innerHTML = t.hours.toFixed(2) + ' h worked'
-    + '<br>' + t.regHours.toFixed(2) + ' h straight · ' + t.otHours.toFixed(2) + ' h OT';
-  document.getElementById('yOt').textContent = t.otHours.toFixed(2) + ' h';
-  document.getElementById('yOtDet').innerHTML = money(t.otHours * cfg.rate * (cfg.otMultiplier || 1.5)) + ' of OT pay'
-    + '<br>' + money(prem) + ' of it is premium';
+  document.getElementById('yGross').textContent = money(gross);
+  document.getElementById('yDet').innerHTML =
+    (base.hours != null ? (t.hours + base.hours).toFixed(2) + ' h worked'
+                        : t.hours.toFixed(2) + ' h tracked here')
+    + (base.gross ? '<br>incl. ' + money(base.gross) + ' carried in' : '')
+    + '<br>' + t.regHours.toFixed(2) + ' h straight · ' + t.otHours.toFixed(2) + ' h OT tracked';
+  document.getElementById('yOt').textContent = otH.toFixed(2) + ' h';
+  document.getElementById('yOtDet').innerHTML = money(otH * cfg.rate * (cfg.otMultiplier || 1.5)) + ' of OT pay'
+    + '<br>' + money(prem) + ' of it is premium'
+    + (base.ot ? '<br>incl. ' + base.ot.toFixed(2) + ' h carried in' : '');
+  document.getElementById('yBaseSummary').textContent =
+    base.gross ? 'carrying in ' + money(base.gross) : '';
 
   // ---- the $12,500 tax-free cap ----
   var cap = TAX2026.otCap[nc.filing] || TAX2026.otCap.single;
@@ -1192,10 +1266,11 @@ function renderYtd(ledger, now){
   show('yCapWrap', capOn);
   if (capOn){
     var used = Math.min(prem, cap), pct = Math.min(100, 100 * prem / cap);
+    void 0;
     document.getElementById('yCapReg').style.width = pct + '%';
     document.getElementById('yCapOver').style.width = prem > cap ? Math.min(100 - pct, 100 * (prem - cap) / cap) + '%' : '0%';
     document.getElementById('yCapNum').textContent = money(used) + ' / ' + money(cap, 0);
-    var annualTaxable = Math.max(0, t.gross * (365.25 / Math.max(1, dayOfYear(now))) - (TAX2026.fed[nc.filing] || TAX2026.fed.single).std);
+    var annualTaxable = Math.max(0, gross * (365.25 / Math.max(1, dayOfYear(now))) - (TAX2026.fed[nc.filing] || TAX2026.fed.single).std);
     var saving = bracketTax(annualTaxable, (TAX2026.fed[nc.filing] || TAX2026.fed.single).brackets)
                - bracketTax(Math.max(0, annualTaxable - used), (TAX2026.fed[nc.filing] || TAX2026.fed.single).brackets);
     document.getElementById('yCapNote').innerHTML = prem >= cap
@@ -1206,11 +1281,13 @@ function renderYtd(ledger, now){
 
   // ---- projection from the committed weekly OT ----
   var commit = Math.max(0, parseFloat(nc.otCommit) || 0);
-  document.getElementById('yCommit').value = commit;
+  var yc = document.getElementById('yCommit');
+  // Never overwrite the field mid-typing — render runs several times a second.
+  if (document.activeElement !== yc) yc.value = commit;
   var weeksLeft = Math.max(0, (+new Date(y + 1, 0, 1) - now) / (7 * DAY_MS));
   var weekBase = (cfg.weeklyThreshold || 40) * cfg.rate;
   var weekOt = commit * cfg.rate * (cfg.otMultiplier || 1.5);
-  var proj = t.gross + weeksLeft * (weekBase + weekOt);
+  var proj = gross + weeksLeft * (weekBase + weekOt);
   var projPrem = prem + weeksLeft * commit * cfg.rate * ((cfg.otMultiplier || 1.5) - 1);
   document.getElementById('yProj').textContent = money(proj);
   var capLine = '';
@@ -1228,6 +1305,37 @@ function renderYtd(ledger, now){
 function dayOfYear(now){
   var d = new Date(now);
   return Math.max(1, Math.round((d - new Date(d.getFullYear(), 0, 1)) / DAY_MS));
+}
+
+/* Carry-in for mid-year adoption: the YTD line off the last paystub before this app. */
+function ytdBase(){ return netCfg().ytdBase || { gross: 0, hours: null, ot: null }; }
+function ytdBasePremium(){
+  var b = ytdBase();
+  return (b.ot || 0) * state.cfg.rate * ((state.cfg.otMultiplier || 1.5) - 1);
+}
+
+function openYtdBase(){
+  var b = ytdBase();
+  el('yBaseGross').value = b.gross || '';
+  el('yBaseHours').value = b.hours == null ? '' : b.hours;
+  el('yBaseOt').value = b.ot == null ? '' : b.ot;
+  show('yBase', true);
+}
+function saveYtdBase(){
+  var g = parseFloat(el('yBaseGross').value);
+  if (el('yBaseGross').value !== '' && (!isFinite(g) || g < 0)){
+    el('yBaseErr').textContent = 'Earnings has to be a number.'; show('yBaseErr', true); return;
+  }
+  var h = parseFloat(el('yBaseHours').value), o = parseFloat(el('yBaseOt').value);
+  h = el('yBaseHours').value === '' || !isFinite(h) ? null : Math.max(0, h);
+  o = el('yBaseOt').value === '' || !isFinite(o) ? null : Math.max(0, o);
+  if (h != null && o != null && o > h){
+    el('yBaseErr').textContent = 'Overtime hours cannot exceed total hours.'; show('yBaseErr', true); return;
+  }
+  show('yBaseErr', false);
+  netCfg().ytdBase = { gross: isFinite(g) ? Math.max(0, g) : 0, hours: h, ot: o };
+  save(); show('yBase', false); render();
+  toast('Year-so-far saved — YTD now includes it.');
 }
 
 /* Pay-period progress: what each week contributed, and the running period total that
@@ -1330,7 +1438,9 @@ function renderLog(ledger, period, active, now){
     tot.hours += t.hours; tot.otHours += t.otHours; tot.gross += t.gross;
     var asking = pendingDelete === s.id;
     html += '<tr class="' + (t.otHours > 0.0001 ? 'otrow ' : '') + (s.live ? 'live' : '') + (asking ? ' pending' : '') + '">'
-      + '<td>' + fdate(new Date(s.start)) + '</td><td>' + ftime(s.start) + '</td>'
+      + '<td>' + fdate(new Date(s.start))
+      + (s.adj ? ' <span style="opacity:.65;font-size:10.5px">· ' + (s.adj.noOt ? 'PTO' : s.adj.mult ? '×' + s.adj.mult : '+$' + s.adj.diff + '/h') + '</span>' : '')
+      + '</td><td>' + ftime(s.start) + '</td>'
       + '<td>' + (s.live ? '<span class="running">running</span>' : ftime(s.end)) + '</td>'
       + '<td class="num">' + t.hours.toFixed(2) + '</td>'
       + '<td class="num g">' + (t.otHours > 0.0001 ? t.otHours.toFixed(2) : '—') + '</td>'
@@ -1733,12 +1843,35 @@ function stamp(dateStr, timeStr){
   return +new Date(d[0], d[1] - 1, d[2], t[0], t[1], 0, 0);
 }
 
+function kindOfAdj(adj){
+  if (!adj) return 'regular';
+  if (adj.noOt) return 'pto';
+  if (adj.mult && adj.mult !== 1) return 'holiday';
+  if (adj.diff) return 'night';
+  return 'regular';
+}
+function adjFromForm(){
+  var k = el('eKind').value;
+  if (k === 'night'){ var d = parseFloat(el('eDiff').value); return isFinite(d) && d > 0 ? { diff: d } : null; }
+  if (k === 'holiday'){ var m = parseFloat(el('eMult').value); return isFinite(m) && m > 1 ? { mult: m } : null; }
+  if (k === 'pto') return { noOt: true };
+  return null;
+}
+function syncKindFields(){
+  var k = el('eKind').value;
+  show('fDiff', k === 'night'); show('fMult', k === 'holiday');
+}
+
 function openEditor(id){
   editing = id || null;
   var s = id ? state.sessions.find(function(x){ return x.id === id; }) : null;
   el('eTitle').textContent = s ? 'Edit this shift' : 'Add a shift';
   el('eSave').textContent = s ? 'Save changes' : 'Add shift';
   el('eDate').value = dateValue(s ? s.start : Date.now());
+  el('eKind').value = kindOfAdj(s && s.adj);
+  if (s && s.adj && s.adj.diff) el('eDiff').value = s.adj.diff;
+  if (s && s.adj && s.adj.mult) el('eMult').value = s.adj.mult;
+  syncKindFields();
   if (s){
     setMode('times');
     el('eIn').value = timeValue(s.start);
@@ -1794,7 +1927,7 @@ function previewShift(){
   // Price it exactly as saving would, so the preview is the real number.
   var others = state.sessions.filter(function(s){ return s.id !== editing; });
   if (state.activeStart) others.push({ id: '__a', start: state.activeStart, end: Date.now() });
-  var t = sumSession(buildLedger(others.concat([{ id: '__p', start: r.start, end: r.end }]), state.cfg).parts, '__p');
+  var t = sumSession(buildLedger(others.concat([{ id: '__p', start: r.start, end: r.end, adj: adjFromForm() }]), state.cfg).parts, '__p');
   p.innerHTML = '<b>' + fdate(new Date(r.start)) + '</b> · ' + ftime(r.start) + ' → ' + ftime(r.end)
     + (r.overnight ? ' <b>(next morning)</b>' : '')
     + ' &nbsp;·&nbsp; <b>' + t.hours.toFixed(2) + ' h</b>'
@@ -1808,12 +1941,13 @@ function saveEditor(){
   var r = readEditor();
   if (r.error){ el('eErr').textContent = r.error; show('eErr', true); return; }
   show('eErr', false);
+  var adj = adjFromForm();
   if (editing){
     var s = state.sessions.find(function(x){ return x.id === editing; });
-    if (s){ s.start = r.start; s.end = r.end; }
+    if (s){ s.start = r.start; s.end = r.end; if (adj) s.adj = adj; else delete s.adj; }
     toast('Shift updated.');
   } else {
-    state.sessions.push({ id: uid(), start: r.start, end: r.end, note: '' });
+    state.sessions.push({ id: uid(), start: r.start, end: r.end, note: '', adj: adj || undefined });
     toast('Added ' + ((r.end - r.start) / HOUR_MS).toFixed(2) + ' h on ' + fdate(new Date(r.start)) + '.');
   }
   save(); closeEditor(); render();
@@ -1964,6 +2098,32 @@ document.getElementById('nItems').addEventListener('click', function(e){
   netCfg().items = netCfg().items.filter(function(x){ return x.id !== b.dataset.delItem; });
   save(); renderNetItems(); previewNet();
 });
+document.getElementById('yBaseBtn').onclick = openYtdBase;
+document.getElementById('yBaseCancel').onclick = function(){ show('yBase', false); };
+document.getElementById('yBaseSave').onclick = saveYtdBase;
+
+document.getElementById('rApply').onclick = function(){
+  var r = parseFloat(document.getElementById('rNew').value);
+  var d = document.getElementById('rDate').value;
+  if (!isFinite(r) || r <= 0){ toast('Enter the new hourly rate first.'); return; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)){ toast('Pick the date the raise takes effect.'); return; }
+  var cfg = state.cfg;
+  cfg.rateHistory = cfg.rateHistory || [];
+  // the CURRENT rate becomes history before the effective date; the new rate takes over
+  cfg.rateHistory.push({ before: d, rate: cfg.rate });
+  cfg.rate = r;
+  document.getElementById('rNew').value = ''; document.getElementById('rDate').value = '';
+  save(); syncControls(); lastMoney = ''; render();
+  toast('Raise applied — ' + money(r) + '/hr from ' + fdate(ymd(d)) + '. Earlier work keeps its old rate.');
+};
+document.getElementById('rHist').addEventListener('click', function(e){
+  var b = e.target.closest('button[data-rh]'); if (!b) return;
+  var i = parseInt(b.dataset.rh, 10);
+  state.cfg.rateHistory.splice(i, 1);
+  save(); syncControls(); lastMoney = ''; render();
+  toast('Rate boundary removed — that era now uses the current rate.');
+});
+
 document.getElementById('yCommit').onchange = function(e){
   netCfg().otCommit = Math.max(0, parseFloat(e.target.value) || 0);
   save(); render();
@@ -2018,6 +2178,8 @@ document.getElementById('eMode').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
   setMode(b.dataset.m); previewShift();
 });
+el('eKind').onchange = function(){ syncKindFields(); previewShift(); };
+['eDiff', 'eMult'].forEach(function(id){ document.getElementById(id).addEventListener('input', previewShift); });
 ['eDate', 'eHours', 'eIn', 'eOut'].forEach(function(id){
   var n = document.getElementById(id);
   n.addEventListener('input', previewShift);
@@ -2145,6 +2307,12 @@ function syncControls(){
   CFG_FIELDS.forEach(function(f){ document.getElementById(f[0]).value = state.cfg[f[1]]; });
   document.getElementById('cSound').value = state.sound ? '1' : '0';
   document.getElementById('cYtd').value = netCfg().ytdShow === false ? '0' : '1';
+  var rh = state.cfg.rateHistory || [], rhEl = document.getElementById('rHist');
+  show('rHist', rh.length > 0);
+  rhEl.innerHTML = rh.length ? 'Rate history: ' + rh.slice().sort(function(a,b){ return +ymd(a.before) - +ymd(b.before); })
+    .map(function(h, i){ return 'before ' + fdate(ymd(h.before)) + ' → ' + money(h.rate) + '/hr '
+      + '<button class="mini danger" data-rh="' + state.cfg.rateHistory.indexOf(h) + '">✕</button>'; })
+    .join(' &nbsp;·&nbsp; ') : '';
   document.getElementById('planOn').checked = !!state.planOn;
   document.getElementById('planHrs').value = state.plannedHours;
   [].forEach.call(document.querySelectorAll('#seg button'), function(b){
