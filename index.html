@@ -612,6 +612,10 @@
           <div class="prefixed"><span>$</span><input type="number" id="eDiff" min="0" step="0.05" value="2.00" inputmode="decimal"></div></div>
         <div class="f hide" id="fMult"><label for="eMult">Multiplier</label>
           <input type="number" id="eMult" min="1" max="3" step="0.05" value="1.5"></div>
+        <div class="f hide" id="fNoLunch">
+          <label>&nbsp;</label>
+          <label class="swrap"><input type="checkbox" id="eNoLunch"> Worked through lunch — keep it paid</label>
+        </div>
       </div>
       <div class="epreview" id="ePreview"></div>
       <div class="eerr hide" id="eErr"></div>
@@ -659,6 +663,14 @@
         <div class="f"><label>Payday = period end + (days)</label><input type="number" id="cPayOff" min="0" step="1"></div>
         <div class="f"><label>Sound</label>
           <select id="cSound"><option value="1">On</option><option value="0">Off</option></select></div>
+        <div class="f"><label>Unpaid lunch per shift</label>
+          <select id="cLunch">
+            <option value="0">None — all time paid</option>
+            <option value="30">30 minutes</option>
+            <option value="60">1 hour</option>
+          </select></div>
+        <div class="f"><label>Extra unpaid lunches to deduct</label>
+          <input type="number" id="cLunchExtra" min="0" step="1" value="0"></div>
         <div class="f"><label>Apply a raise — new rate ($/hr)</label>
           <input type="number" id="rNew" min="0.01" step="0.01" placeholder="e.g. 40.00"></div>
         <div class="f"><label>Raise takes effect on</label>
@@ -701,6 +713,10 @@
         <div class="note">Your rate, schedule and every shift live in this browser only. Save a backup
         to keep a copy, or to carry everything to another device or another copy of this app.</div>
       </div>
+      <div class="note" id="lunchNote" style="margin-top:10px">Lunch starts after 5 worked hours — 
+      the clock pauses for it mid-shift, shifts already logged are corrected automatically, and lunch
+      time never counts toward overtime. 'Extra' is only for lunches hiding in hours the log cannot
+      see, like a year-so-far carry-in — logged shifts are already handled.</div>
       <div class="note hide" id="rHist" style="margin-top:10px"></div>
       <div class="confirm hide" id="cfgUndo" style="border-color:var(--warn);background:rgba(255,180,84,.10)">
         <span id="cfgUndoTxt"></span>
@@ -799,13 +815,37 @@ function rateAt(t, cfg){
   return cfg.rate;
 }
 
+/* Unpaid lunch: after LUNCH_AFTER worked hours, cfg.lunchMins of the shift earn
+   nothing. Returns the shift's PAID spans; the lunch window is simply absent, so it
+   never reaches the ledger — no pay, no overtime credit, live counter pauses. */
+var LUNCH_AFTER = 5 * HOUR_MS;
+function paidSpans(s, cfg){
+  var mins = cfg.lunchMins || 0;
+  var adj = s.adj || {};
+  if (!mins || adj.noLunch || adj.noOt) return [{ start: s.start, end: s.end }];
+  var lStart = s.start + LUNCH_AFTER;
+  if (lStart >= s.end) return [{ start: s.start, end: s.end }];   // too short for a lunch
+  var lEnd = Math.min(s.end, lStart + mins * 60000);
+  var spans = [{ start: s.start, end: lStart }];
+  if (lEnd < s.end) spans.push({ start: lEnd, end: s.end });
+  return spans;
+}
+function lunchWindow(startMs, cfg){
+  if (!(cfg.lunchMins || 0)) return null;
+  return { start: startMs + LUNCH_AFTER, end: startMs + LUNCH_AFTER + cfg.lunchMins * 60000 };
+}
+
 function buildLedger(sessions, cfg){
   var threshold = otThresholdOf(cfg), otRate = cfg.rate * cfg.otMultiplier;
   var bucket = {}, parts = [];
   var sorted = sessions.filter(function(s){ return s.end > s.start; })
                        .slice().sort(function(a,b){ return a.start - b.start; });
   for (var i = 0; i < sorted.length; i++){
-    var s = sorted[i], chunks = splitSession(s.start, s.end, cfg);
+    var s = sorted[i];
+    var chunks = [];
+    paidSpans(s, cfg).forEach(function(sp){
+      chunks = chunks.concat(splitSession(sp.start, sp.end, cfg));
+    });
     /* Per-shift pay adjustments:
          adj.diff  extra dollars per hour (an overnight differential)
          adj.mult  multiplier on the whole rate (holiday pay)
@@ -865,7 +905,11 @@ function plannedStopAt(activeStart, plannedHours, completed, cfg){
   var dayStart = +midnight(activeStart), dayEnd = dayStart + DAY_MS;
   var banked = sumRange(buildLedger(completed, cfg).parts, dayStart, dayEnd).hours;
   var need = plannedHours - banked;
-  return need <= 0 ? activeStart : activeStart + need * HOUR_MS;
+  if (need <= 0) return activeStart;
+  var stop = activeStart + need * HOUR_MS;
+  // An unpaid lunch inside this shift adds its wall time to reaching the paid target.
+  if ((cfg.lunchMins || 0) && need * HOUR_MS > LUNCH_AFTER) stop += cfg.lunchMins * 60000;
+  return stop;
 }
 
 /* Money earned by a shift running start -> now, as of the last tick of `unit`.
@@ -1143,8 +1187,10 @@ function render(){
   hero.classList.toggle('ot', !!inOt);
   var st = document.getElementById('status');
   st.classList.toggle('on', !!active);
+  var lw = active ? lunchWindow(active, cfg) : null;
+  var onLunch = lw && now >= lw.start && now < lw.end && !((cfg.lunchMins||0) === 0);
   document.getElementById('statusTxt').textContent =
-    active ? (inOt ? 'On the clock · overtime' : 'On the clock') : 'Clocked out';
+    active ? (onLunch ? 'On lunch — unpaid' : (inOt ? 'On the clock · overtime' : 'On the clock')) : 'Clocked out';
 
   var elapsed = active ? now - active : 0;
   var shift = active ? sumSession(ledger.parts, '__active') : { gross: 0, hours: 0, otHours: 0 };
@@ -1209,6 +1255,10 @@ function render(){
     ? 'earning <b>' + money(perUnit, state.unit === 'sec' ? 4 : state.unit === 'min' ? 4 : 2) + '</b> / ' + unitName
       + ' &nbsp;·&nbsp; live <b>' + money(shift.gross, 4) + '</b>'
     : 'ready at <b>' + money(cfg.rate) + '</b> / hr';
+  if (onLunch){
+    document.getElementById('liveline').innerHTML =
+      'money paused for the ' + cfg.lunchMins + ' min unpaid lunch · resumes ' + ftime(lw.end);
+  }
   document.getElementById('seghint').textContent =
     state.unit === 'sec' ? 'stepping every second' :
     state.unit === 'min' ? 'stepping every minute' : 'stepping every hour';
@@ -1282,7 +1332,7 @@ function renderYtd(ledger, now){
   var cfg = state.cfg, y = new Date(now).getFullYear();
   var t = ytdSums(ledger, now);
   var base = ytdBase();
-  var gross = t.gross + (base.gross || 0);
+  var gross = t.gross + (base.gross || 0) - extraLunchMoney();
   var otH = t.otHours + (base.ot || 0);
   var prem = otPremiumOf(t) + ytdBasePremium();
   document.getElementById('ytdYear').textContent = y;
@@ -1381,6 +1431,12 @@ function renderColSums(ledger, period, now, active, netOn){
   pm.className = 'btn hpunch ' + (active ? 'stop' : 'go');
 }
 
+/* Lunches hiding in hours the log cannot see (bulk or carried-in time). Deducted at
+   the current straight rate, spread over the period rather than per day. */
+function extraLunchMoney(){
+  return (state.cfg.lunchExtra || 0) * ((state.cfg.lunchMins || 0) / 60) * state.cfg.rate;
+}
+
 /* Carry-in for mid-year adoption: the YTD line off the last paystub before this app. */
 function ytdBase(){ return netCfg().ytdBase || { gross: 0, hours: null, ot: null }; }
 function ytdBasePremium(){
@@ -1420,21 +1476,24 @@ function renderProgress(ledger, period, now){
 
   var pnc = netCfg(), pNetOn = pnc.enabled && pnc.configured;
   var lbl = document.querySelector('#progress .cumelbl');
+  var xLunch = extraLunchMoney();
   if (pNetOn){
-    var pv = currentNetView(cume.gross, cume.hours, null, cume.otHours, 0);
+    var pv = currentNetView(Math.max(0, cume.gross - xLunch), cume.hours, null, cume.otHours, 0);
     document.getElementById('cumeGross').textContent = money(pv.net);
     if (lbl) lbl.textContent = pnc.view === 'hole'
       ? (pv.net < 0 ? 'Still owed to deductions this period' : 'Truly yours this pay period')
       : 'Kept this pay period so far';
-    document.getElementById('cumeSub').innerHTML = 'gross ' + money(cume.gross)
+    document.getElementById('cumeSub').innerHTML = 'gross ' + money(cume.gross - xLunch)
+      + (xLunch ? ' <span class="ded">(−' + money(xLunch) + ' extra lunches)</span>' : '')
       + ' &nbsp;·&nbsp; <span class="ded">deductions ' + money(pv.deductions) + '</span>'
       + ' &nbsp;·&nbsp; ' + cume.hours.toFixed(2) + ' h'
       + (cume.otHours > 0.0001 ? ' <span class="ot">(' + cume.otHours.toFixed(2) + ' OT)</span>' : '')
       + ' &nbsp;·&nbsp; paid ' + fdate(period.payDate);
   } else {
     if (lbl) lbl.textContent = 'Earned this pay period so far';
-    document.getElementById('cumeGross').textContent = money(cume.gross);
+    document.getElementById('cumeGross').textContent = money(cume.gross - xLunch);
     document.getElementById('cumeSub').innerHTML = cume.hours.toFixed(2) + ' h'
+      + (xLunch ? ' &nbsp;·&nbsp; <span class="ded">−' + money(xLunch) + ' extra lunches</span>' : '')
       + (cume.otHours > 0.0001 ? ' &nbsp;·&nbsp; <span class="ot">' + cume.otHours.toFixed(2) + ' h of it OT</span>' : '')
       + ' &nbsp;·&nbsp; paid ' + fdate(period.payDate);
   }
@@ -1513,7 +1572,7 @@ function renderLog(ledger, period, active, now){
     var asking = pendingDelete === s.id;
     html += '<tr class="' + (t.otHours > 0.0001 ? 'otrow ' : '') + (s.live ? 'live' : '') + (asking ? ' pending' : '') + '">'
       + '<td>' + fdate(new Date(s.start))
-      + (s.adj ? ' <span style="opacity:.65;font-size:10.5px">· ' + (s.adj.noOt ? 'PTO' : s.adj.mult ? '×' + s.adj.mult : '+$' + s.adj.diff + '/h') + '</span>' : '')
+      + (s.adj ? ' <span style="opacity:.65;font-size:10.5px">· ' + (s.adj.noOt ? 'PTO' : s.adj.mult ? '×' + s.adj.mult : s.adj.diff ? '+$' + s.adj.diff + '/h' : 'no lunch') + '</span>' : '')
       + '</td><td>' + ftime(s.start) + '</td>'
       + '<td>' + (s.live ? '<span class="running">running</span>' : ftime(s.end)) + '</td>'
       + '<td class="num">' + t.hours.toFixed(2) + '</td>'
@@ -1950,11 +2009,12 @@ function kindOfAdj(adj){
   return 'regular';
 }
 function adjFromForm(){
-  var k = el('eKind').value;
-  if (k === 'night'){ var d = parseFloat(el('eDiff').value); return isFinite(d) && d > 0 ? { diff: d } : null; }
-  if (k === 'holiday'){ var m = parseFloat(el('eMult').value); return isFinite(m) && m > 1 ? { mult: m } : null; }
-  if (k === 'pto') return { noOt: true };
-  return null;
+  var k = el('eKind').value, adj = null;
+  if (k === 'night'){ var d = parseFloat(el('eDiff').value); if (isFinite(d) && d > 0) adj = { diff: d }; }
+  if (k === 'holiday'){ var m = parseFloat(el('eMult').value); if (isFinite(m) && m > 1) adj = { mult: m }; }
+  if (k === 'pto') adj = { noOt: true };
+  if (el('eNoLunch').checked && k !== 'pto'){ adj = adj || {}; adj.noLunch = true; }
+  return adj;
 }
 function syncKindFields(){
   var k = el('eKind').value;
@@ -1968,6 +2028,8 @@ function openEditor(id){
   el('eSave').textContent = s ? 'Save changes' : 'Add shift';
   el('eDate').value = dateValue(s ? s.start : Date.now());
   el('eKind').value = kindOfAdj(s && s.adj);
+  el('eNoLunch').checked = !!(s && s.adj && s.adj.noLunch);
+  show('fNoLunch', (state.cfg.lunchMins || 0) > 0);
   if (s && s.adj && s.adj.diff) el('eDiff').value = s.adj.diff;
   if (s && s.adj && s.adj.mult) el('eMult').value = s.adj.mult;
   syncKindFields();
@@ -2216,6 +2278,18 @@ document.getElementById('yBaseBtn').onclick = openYtdBase;
 document.getElementById('yBaseCancel').onclick = function(){ show('yBase', false); };
 document.getElementById('yBaseSave').onclick = saveYtdBase;
 
+document.getElementById('cLunch').onchange = function(e){
+  state.cfg.lunchMins = parseInt(e.target.value, 10) || 0;
+  save(); lastMoney = ''; render();
+  toast(state.cfg.lunchMins
+    ? state.cfg.lunchMins + ' min unpaid lunch on — every logged shift over 5 h just corrected itself.'
+    : 'Unpaid lunch off — all time paid again.');
+};
+document.getElementById('cLunchExtra').onchange = function(e){
+  state.cfg.lunchExtra = Math.max(0, parseInt(e.target.value, 10) || 0);
+  save(); lastMoney = ''; render();
+};
+
 document.getElementById('rApply').onclick = function(){
   var r = parseFloat(document.getElementById('rNew').value);
   var d = document.getElementById('rDate').value;
@@ -2293,6 +2367,7 @@ document.getElementById('eMode').addEventListener('click', function(e){
   setMode(b.dataset.m); previewShift();
 });
 el('eKind').onchange = function(){ syncKindFields(); previewShift(); };
+document.getElementById('eNoLunch').onchange = previewShift;
 ['eDiff', 'eMult'].forEach(function(id){ document.getElementById(id).addEventListener('input', previewShift); });
 ['eDate', 'eHours', 'eIn', 'eOut'].forEach(function(id){
   var n = document.getElementById(id);
@@ -2421,6 +2496,9 @@ function syncControls(){
   CFG_FIELDS.forEach(function(f){ document.getElementById(f[0]).value = state.cfg[f[1]]; });
   document.getElementById('cSound').value = state.sound ? '1' : '0';
   document.getElementById('cYtd').value = netCfg().ytdShow === false ? '0' : '1';
+  document.getElementById('cLunch').value = String(state.cfg.lunchMins || 0);
+  var xEl = document.getElementById('cLunchExtra');
+  if (document.activeElement !== xEl) xEl.value = state.cfg.lunchExtra || 0;
   var rh = state.cfg.rateHistory || [], rhEl = document.getElementById('rHist');
   show('rHist', rh.length > 0);
   rhEl.innerHTML = rh.length ? 'Rate history: ' + rh.slice().sort(function(a,b){ return +ymd(a.before) - +ymd(b.before); })
