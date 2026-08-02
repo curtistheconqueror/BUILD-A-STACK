@@ -34,6 +34,21 @@ npm test     # 62 assertions against the pay engine — no dependencies
 
 The tests extract the engine straight out of `pay-clock.html`, so what's verified is exactly what ships.
 
+## Horn Circuit
+
+`horn-circuit.html` is a standalone, interactive schematic of a bus horn circuit — same self-contained spirit (open it directly, works offline, HTML/SVG + Web Audio). It's built for phone and auto-fits up to iPad; you scroll top-to-bottom to follow the wiring rather than cramming it onto one screen.
+
+Press the **horn button** at the top and current lights up through the whole system, color-coded: battery feed, the small horn-button circuit, the ground return, and full horn power after the relay. Toggle it on and off to watch the current move through each stage.
+
+It traces the real setup in four stops:
+
+- **Steering wheel** — the horn button: plastic cover over a brass cap, held up by a return spring; press it and the cap meets the brass contact ring to close the switch.
+- **Steering column** — the rotating contact: a spring-loaded **brass roller wheel** rides on a brass plate that turns with the wheel, so the horn-button circuit bridges the top and bottom halves at any steering angle.
+- **Relay & power** — a small coil current pulls the armature shut and switches full battery power (via a fuse) through to the horns.
+- **Twin horns** — high note and low note, each with two wires, switched on the power side and permanently grounded to the frame plus a redundant ground wire; the frame carries the return back to the battery.
+
+A **turn-wheel** toggle spins the roller and plate so you can see the slip-ring contact hold while steering, and a **sound** toggle plays a two-note electric horn.
+
 ## Roadmap
 
 - **Phase A — Learn (glossary)**

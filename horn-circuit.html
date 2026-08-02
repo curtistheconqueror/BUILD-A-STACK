@@ -1,0 +1,629 @@
+<title>Bus Horn Circuit</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { background: #000 !important; }
+  body {
+    margin: 0;
+    color: #d7dae2;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  #app { min-height: 100vh; background: #000; }
+  main { max-width: 860px; margin: 0 auto; padding: 0 10px 48px; }
+
+  /* ---------- sticky control bar ---------- */
+  header.bar {
+    position: sticky; top: 0; z-index: 20;
+    background: rgba(0,0,0,.84);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    border-bottom: 1px solid #23242b;
+    padding: 10px 12px 12px;
+  }
+  .bar-inner { max-width: 860px; margin: 0 auto; }
+  .row1 { display: flex; align-items: center; justify-content: space-between; gap: 8px 10px; margin-bottom: 9px; flex-wrap: wrap; }
+  h1 {
+    margin: 0; font-size: clamp(13px, 3.6vw, 19px); font-weight: 800;
+    letter-spacing: .12em; color: #e6e8ee; white-space: nowrap; flex: 0 1 auto; min-width: 0;
+  }
+  .chips { display: flex; gap: 7px; flex: 0 0 auto; }
+  .chip {
+    font: 700 11.5px/1 system-ui, sans-serif; letter-spacing: .05em;
+    color: #aeb4c2; background: #14151a; border: 1px solid #34353e;
+    border-radius: 999px; padding: 8px 10px; cursor: pointer;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
+  }
+  .chip[aria-pressed="true"] { color: #ffe9a8; border-color: #8a6a22; background: #201a0c; }
+  #hornBtn {
+    display: block; width: 100%; padding: 13px 10px;
+    font: 800 clamp(15px, 4.2vw, 18px)/1.15 system-ui, sans-serif;
+    letter-spacing: .09em; text-align: center;
+    color: #ffb3b3; background: linear-gradient(180deg, #34090b, #55110f);
+    border: 1px solid #7a2020; border-radius: 14px; cursor: pointer;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+    transition: background .15s, color .15s, box-shadow .15s;
+  }
+  #hornBtn:focus-visible, .chip:focus-visible { outline: 2px solid #3fd2ff; outline-offset: 2px; }
+  .on #hornBtn {
+    color: #1c0d00; background: linear-gradient(180deg, #ffd24a, #ff8a3d);
+    border-color: #ffd24a; box-shadow: 0 0 26px rgba(255,150,50,.55);
+  }
+
+  /* ---------- legend ---------- */
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 6px 14px;
+    padding: 12px 4px 4px; font-size: 12px; color: #8b91a0;
+  }
+  .legend b { font-weight: 600; color: #aeb4c2; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
+
+  svg { display: block; width: 100%; height: auto; }
+  svg text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .hit { cursor: pointer; touch-action: manipulation; }
+
+  /* ---------- wires & current ---------- */
+  .wire { fill: none; stroke-width: 5; stroke-linejoin: round; stroke-linecap: round; }
+  .flow {
+    fill: none; stroke-width: 5; stroke-linejoin: round; stroke-linecap: round;
+    stroke-dasharray: 12 16; opacity: 0; transition: opacity .12s;
+  }
+  .fy { stroke: #ffd24a; color: #ffd24a; }
+  .fc { stroke: #3fd2ff; color: #3fd2ff; }
+  .fg { stroke: #54e07a; color: #54e07a; }
+  .fo { stroke: #ff8a3d; color: #ff8a3d; }
+  @keyframes flow { to { stroke-dashoffset: -56; } }
+  .on .a1, .live .a2 {
+    opacity: 1; animation: flow .95s linear infinite;
+    filter: drop-shadow(0 0 6px currentColor);
+  }
+  .on .a1 { transition-delay: .12s; }
+
+  /* ---------- horn button press ---------- */
+  #pressGrp { transition: transform .12s ease-in; }
+  .on #pressGrp { transform: translateY(34px); }
+  #springMain {
+    transform-box: fill-box; transform-origin: 50% 100%;
+    transition: transform .12s ease-in;
+  }
+  .on #springMain { transform: scaleY(.4); }
+  .ctrlDot { fill: #3fd2ff; opacity: 0; transition: opacity .1s; }
+  .on .ctrlDot { opacity: 1; filter: drop-shadow(0 0 8px #3fd2ff); }
+  #gapLbl { transition: opacity .1s; }
+  #contactLbl { opacity: 0; transition: opacity .1s; }
+  .on #gapLbl { opacity: 0; }
+  .on #contactLbl { opacity: 1; }
+
+  /* ---------- hint ---------- */
+  @keyframes pulse { 0%,100% { opacity: .85; } 50% { opacity: .25; } }
+  #hint { animation: pulse 1.9s ease-in-out infinite; }
+  .used #hint { display: none; }
+
+  /* ---------- relay ---------- */
+  #coilWind path { stroke: #7a6a3a; transition: stroke .15s; }
+  .on #coilWind path { stroke: #ffd24a; }
+  .on #coilWind { filter: drop-shadow(0 0 7px rgba(255,210,74,.6)); }
+  #blade { transform: rotate(14deg); transform-origin: 660px 2160px; transition: transform .07s ease-in; }
+  .live #blade { transform: rotate(0deg); }
+  #spark { opacity: 0; transform-box: fill-box; transform-origin: center; }
+  @keyframes sparkPop { 0% { opacity: 1; transform: scale(.5); } 60% { opacity: .9; transform: scale(1.8); } 100% { opacity: 0; transform: scale(2.4); } }
+  .live #spark { animation: sparkPop .5s ease-out both; }
+  #clickTxt { opacity: 0; transform-box: fill-box; transform-origin: center; }
+  @keyframes clickPop { 0% { opacity: 0; transform: scale(.6); } 20% { opacity: 1; transform: scale(1.15); } 75% { opacity: 1; } 100% { opacity: 0; transform: scale(1); } }
+  .live #clickTxt { animation: clickPop .9s ease-out both; }
+
+  /* ---------- grounds ---------- */
+  .gsym { color: #2c6e44; transition: color .15s; }
+  .on #gsShaft, .on #gsBatt { color: #54e07a; filter: drop-shadow(0 0 6px #54e07a); }
+  .ringTerm { transition: filter .15s; }
+  .live .ringTerm { filter: drop-shadow(0 0 6px #54e07a); }
+  #gndArrow { opacity: 0; transition: opacity .12s; }
+  .live #gndArrow { opacity: 1; filter: drop-shadow(0 0 6px #54e07a); }
+
+  /* ---------- horns ---------- */
+  .hornBody { transform-box: fill-box; transform-origin: center; }
+  @keyframes shake { 0%,100% { transform: translate(0,0); } 50% { transform: translate(1.6px,0); } }
+  .live .hornBody { filter: drop-shadow(0 0 14px rgba(255,200,80,.35)); animation: shake .07s linear infinite; }
+  .wv { fill: none; stroke: #ffe9a8; stroke-width: 4; stroke-linecap: round; opacity: 0; }
+  @keyframes wv { 0% { opacity: 0; } 20% { opacity: .95; } 70% { opacity: .25; } 100% { opacity: 0; } }
+  .live .wv1 { animation: wv 1.2s linear infinite; }
+  .live .wv2 { animation: wv 1.2s linear infinite .18s; }
+  .live .wv3 { animation: wv 1.2s linear infinite .36s; }
+
+  /* ---------- steering rotation demo ---------- */
+  @keyframes hatch { to { transform: translateX(-28px); } }
+  .spin #hatchGrp { animation: hatch .5s linear infinite; }
+  @keyframes rspin { to { transform: rotate(360deg); } }
+  .spin #rollerSpokes { animation: rspin .7s linear infinite; transform-origin: 334px 1412px; }
+  @keyframes steer { from { transform: rotate(-38deg); } to { transform: rotate(38deg); } }
+  .spin #wheelIcon { animation: steer 2.6s ease-in-out infinite alternate; transform-origin: 120px 1150px; }
+
+  /* ---------- how it works ---------- */
+  .card {
+    background: #101116; border: 1px solid #24252c; border-radius: 16px;
+    padding: 18px 20px 8px; margin-top: 22px;
+  }
+  .card h2 { margin: 0 0 4px; font-size: 15px; letter-spacing: .12em; color: #e6e8ee; }
+  .card ol { margin: 10px 0 14px; padding-left: 22px; }
+  .card li { margin: 9px 0; line-height: 1.5; font-size: 14px; color: #b9bec9; }
+  .card li::marker { color: #8a6a22; font-weight: 700; }
+  .fine { font-size: 12px; color: #6b7280; line-height: 1.5; padding: 14px 4px 0; }
+  .kc { font-weight: 700; }
+  .kc.y { color: #ffd24a; } .kc.c { color: #3fd2ff; } .kc.g { color: #54e07a; } .kc.o { color: #ff8a3d; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .on .a1, .live .a2, #hint, .live .wv1, .live .wv2, .live .wv3,
+    .spin #hatchGrp, .spin #rollerSpokes, .spin #wheelIcon,
+    .live .hornBody, .live #spark, .live #clickTxt { animation: none; }
+    .live #spark, .live #clickTxt { opacity: 1; }
+  }
+</style>
+
+<div id="app">
+  <header class="bar">
+    <div class="bar-inner">
+      <div class="row1">
+        <h1>🚌 BUS HORN CIRCUIT</h1>
+        <div class="chips">
+          <button class="chip" id="soundBtn" aria-pressed="true">🔊 SOUND</button>
+          <button class="chip" id="spinBtn" aria-pressed="false">↻ WHEEL</button>
+        </div>
+      </div>
+      <button id="hornBtn" aria-pressed="false">🖐 PRESS HORN</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="legend">
+      <span><span class="dot" style="background:#ffd24a"></span><b>battery feed</b> (hot at all times)</span>
+      <span><span class="dot" style="background:#3fd2ff"></span><b>horn-button circuit</b> (small current)</span>
+      <span><span class="dot" style="background:#54e07a"></span><b>ground return</b></span>
+      <span><span class="dot" style="background:#ff8a3d"></span><b>horn power</b> (after relay)</span>
+    </div>
+
+    <svg viewBox="0 0 800 3730" role="img" aria-label="Interactive bus horn circuit: steering-wheel horn button, steering column slip-ring contact, horn relay, and twin horns">
+      <defs>
+        <linearGradient id="brassV" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#a8842e"/><stop offset=".45" stop-color="#e8c258"/><stop offset="1" stop-color="#8a6a22"/>
+        </linearGradient>
+        <linearGradient id="brassH" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#8a6a22"/><stop offset=".5" stop-color="#e8c258"/><stop offset="1" stop-color="#8a6a22"/>
+        </linearGradient>
+        <g id="gsym" stroke="currentColor" stroke-width="4" stroke-linecap="round">
+          <line x1="0" y1="-12" x2="0" y2="0"/>
+          <line x1="-16" y1="0" x2="16" y2="0"/>
+          <line x1="-10" y1="8" x2="10" y2="8"/>
+          <line x1="-5" y1="16" x2="5" y2="16"/>
+        </g>
+        <clipPath id="plateClip"><rect x="354" y="1384" width="92" height="56" rx="4"/></clipPath>
+      </defs>
+
+      <!-- ================= SECTION 1 : STEERING WHEEL ================= -->
+      <text x="400" y="120" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2.5" fill="#e6e8ee">1 · STEERING WHEEL — HORN BUTTON</text>
+      <rect x="370" y="134" width="60" height="4" rx="2" fill="#8a6a22"/>
+
+      <g id="hint">
+        <text x="400" y="316" text-anchor="middle" font-size="24" font-weight="700" fill="#aeb4c2">TAP TO HONK 👆</text>
+        <text x="400" y="344" text-anchor="middle" font-size="17" fill="#6b7280">then scroll down and follow the current</text>
+        <circle cx="400" cy="460" r="100" fill="none" stroke="#565a66" stroke-width="3" stroke-dasharray="6 10"/>
+      </g>
+
+      <!-- shaft (down through everything) -->
+      <rect x="385" y="560" width="30" height="1188" fill="#4c4e58"/>
+      <rect x="393" y="560" width="6" height="1188" fill="#5d606c"/>
+
+      <!-- wheel rim cross-sections + spokes -->
+      <line x1="295" y1="590" x2="140" y2="590" stroke="#303038" stroke-width="16"/>
+      <line x1="505" y1="590" x2="660" y2="590" stroke="#303038" stroke-width="16"/>
+      <circle cx="110" cy="590" r="30" fill="#26262c" stroke="#3d3d46" stroke-width="4"/>
+      <circle cx="690" cy="590" r="30" fill="#26262c" stroke="#3d3d46" stroke-width="4"/>
+
+      <!-- hub -->
+      <rect x="295" y="540" width="210" height="100" rx="14" fill="#2b2b31" stroke="#3d3d46" stroke-width="3"/>
+      <rect x="296" y="540" width="12" height="18" fill="#0c0c10"/>
+      <rect x="492" y="540" width="12" height="18" fill="#0c0c10"/>
+
+      <!-- grounded base plate + insulators + brass ring -->
+      <rect x="305" y="542" width="190" height="14" fill="#565863"/>
+      <rect x="314" y="534" width="62" height="8" fill="#0c0c10"/>
+      <rect x="424" y="534" width="62" height="8" fill="#0c0c10"/>
+      <rect x="318" y="518" width="54" height="16" rx="3" fill="url(#brassH)" stroke="#7a5f1d" stroke-width="2"/>
+      <rect x="428" y="518" width="54" height="16" rx="3" fill="url(#brassH)" stroke="#7a5f1d" stroke-width="2"/>
+
+      <!-- spring (also the ground path) -->
+      <polyline id="springMain" points="400,486 378,493 422,500 378,507 422,514 378,521 422,528 378,535 400,542"
+        fill="none" stroke="#9aa0ad" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+
+      <!-- moving assembly: plastic cover + brass cap + clips -->
+      <g id="pressGrp">
+        <rect x="298" y="468" width="8" height="92" fill="#1d1e24"/>
+        <rect x="494" y="468" width="8" height="92" fill="#1d1e24"/>
+        <rect x="330" y="468" width="140" height="18" rx="5" fill="url(#brassH)" stroke="#7a5f1d" stroke-width="2"/>
+        <path d="M 310 468 Q 310 396 400 392 Q 490 396 490 468 Z" fill="#1d1e24" stroke="#3a3b44" stroke-width="3"/>
+        <text x="400" y="442" text-anchor="middle" font-size="20" font-weight="800" letter-spacing="5" fill="#565a66">HORN</text>
+      </g>
+
+      <!-- contact points -->
+      <circle class="ctrlDot" cx="345" cy="519" r="6"/>
+      <circle class="ctrlDot" cx="455" cy="519" r="6"/>
+
+      <!-- section 1 callouts -->
+      <g font-size="20" fill="#aeb4c2">
+        <text x="775" y="396" text-anchor="end">Plastic cover</text>
+        <text x="775" y="420" text-anchor="end" font-size="17" fill="#8b91a0">clips keep the spring loaded</text>
+        <line x1="640" y1="402" x2="478" y2="420" stroke="#4a4f5c" stroke-width="2"/>
+        <text x="25" y="470">Brass cap (moves with cover)</text>
+        <line x1="282" y1="464" x2="332" y2="474" stroke="#4a4f5c" stroke-width="2"/>
+        <text x="775" y="504" text-anchor="end">Return spring — the ground path</text>
+        <line x1="470" y1="499" x2="424" y2="512" stroke="#4a4f5c" stroke-width="2"/>
+        <text x="775" y="548" text-anchor="end">Brass contact ring</text>
+        <line x1="608" y1="542" x2="486" y2="528" stroke="#4a4f5c" stroke-width="2"/>
+        <text x="775" y="675" text-anchor="end">Steering shaft — grounded to the frame</text>
+        <line x1="448" y1="669" x2="417" y2="652" stroke="#4a4f5c" stroke-width="2"/>
+        <g id="gapLbl">
+          <text x="25" y="512" fill="#8b91a0">open gap — no current</text>
+          <line x1="222" y1="506" x2="320" y2="515" stroke="#4a4f5c" stroke-width="2"/>
+        </g>
+        <text id="contactLbl" x="25" y="512" fill="#3fd2ff" font-weight="700">CONTACT — circuit closed!</text>
+      </g>
+
+      <!-- ================= SECTION 2 : STEERING COLUMN ================= -->
+      <!-- column housing -->
+      <rect x="308" y="700" width="184" height="1000" fill="#131419"/>
+      <rect x="292" y="700" width="16" height="1000" fill="#2a2b33"/>
+      <rect x="492" y="700" width="16" height="1000" fill="#2a2b33"/>
+      <rect x="284" y="694" width="232" height="12" rx="5" fill="#34353e"/>
+      <rect x="284" y="1694" width="232" height="12" rx="5" fill="#34353e"/>
+      <!-- shaft continues over interior -->
+      <rect x="385" y="700" width="30" height="1048" fill="#4c4e58"/>
+      <rect x="393" y="700" width="6" height="1048" fill="#5d606c"/>
+
+      <!-- section 2 heading (drawn on top of the housing so it stays legible) -->
+      <text x="40" y="990" font-size="23" font-weight="800" letter-spacing="2.5" fill="#e6e8ee">2 · STEERING COLUMN</text>
+      <rect x="40" y="1002" width="60" height="4" rx="2" fill="#8a6a22"/>
+      <text x="40" y="1030" font-size="17" fill="#6b7280">the rotating contact</text>
+
+      <!-- steering-wheel top-view icon (turn demo) -->
+      <g id="wheelIcon">
+        <circle cx="120" cy="1150" r="44" fill="#0d0d11" stroke="#34353e" stroke-width="9"/>
+        <line x1="120" y1="1150" x2="120" y2="1190" stroke="#34353e" stroke-width="7"/>
+        <line x1="120" y1="1150" x2="85" y2="1130" stroke="#34353e" stroke-width="7"/>
+        <line x1="120" y1="1150" x2="155" y2="1130" stroke="#34353e" stroke-width="7"/>
+        <circle cx="120" cy="1150" r="10" fill="#34353e"/>
+      </g>
+      <path d="M 172 1122 A 62 62 0 0 1 180 1162" fill="none" stroke="#4a4f5c" stroke-width="3"/>
+      <path d="M 172 1166 L 182 1160 L 184 1172 Z" fill="#4a4f5c"/>
+      <text x="120" y="1224" text-anchor="middle" font-size="17" fill="#8b91a0">tap to turn the wheel</text>
+
+      <!-- brass plate (slip ring) on the shaft -->
+      <rect x="352" y="1380" width="96" height="64" rx="6" fill="url(#brassV)" stroke="#7a5f1d" stroke-width="3"/>
+      <g clip-path="url(#plateClip)">
+        <g id="hatchGrp" stroke="#5c4712" stroke-width="4" opacity=".55">
+          <line x1="340" y1="1442" x2="360" y2="1386"/><line x1="354" y1="1442" x2="374" y2="1386"/>
+          <line x1="368" y1="1442" x2="388" y2="1386"/><line x1="382" y1="1442" x2="402" y2="1386"/>
+          <line x1="396" y1="1442" x2="416" y2="1386"/><line x1="410" y1="1442" x2="430" y2="1386"/>
+          <line x1="424" y1="1442" x2="444" y2="1386"/><line x1="438" y1="1442" x2="458" y2="1386"/>
+          <line x1="452" y1="1442" x2="472" y2="1386"/><line x1="466" y1="1442" x2="486" y2="1386"/>
+          <line x1="480" y1="1442" x2="500" y2="1386"/>
+        </g>
+      </g>
+
+      <!-- spring-loaded brass roller -->
+      <rect x="296" y="1398" width="14" height="28" rx="3" fill="#3a3b44"/>
+      <line x1="308" y1="1382" x2="333" y2="1412" stroke="#565863" stroke-width="5" stroke-linecap="round"/>
+      <polyline points="309,1444 317,1440 309,1435 317,1430 312,1426" fill="none" stroke="#8a8f9c" stroke-width="2.5"/>
+      <circle cx="334" cy="1412" r="20" fill="url(#brassV)" stroke="#7a5f1d" stroke-width="3"/>
+      <g id="rollerSpokes" stroke="#7a5f1d" stroke-width="3">
+        <line x1="334" y1="1396" x2="334" y2="1428"/>
+        <line x1="318" y1="1412" x2="350" y2="1412"/>
+        <line x1="323" y1="1401" x2="345" y2="1423"/>
+        <line x1="323" y1="1423" x2="345" y2="1401"/>
+      </g>
+      <circle cx="334" cy="1412" r="4" fill="#4a3a10"/>
+
+      <!-- section 2 callouts -->
+      <g font-size="20" fill="#aeb4c2">
+        <text x="775" y="1352" text-anchor="end">Brass plate ring</text>
+        <text x="775" y="1376" text-anchor="end" font-size="17" fill="#8b91a0">turns with the wheel</text>
+        <line x1="608" y1="1368" x2="452" y2="1398" stroke="#4a4f5c" stroke-width="2"/>
+        <text x="25" y="1310">Spring-loaded brass roller</text>
+        <text x="25" y="1334" font-size="17" fill="#8b91a0">keeps contact while steering</text>
+        <line x1="205" y1="1344" x2="320" y2="1398" stroke="#4a4f5c" stroke-width="2"/>
+        <text x="202" y="1560" text-anchor="end" fill="#8b91a0">to the horn relay ↓</text>
+        <text x="775" y="1540" text-anchor="end" font-size="17" fill="#8b91a0">when honking, current returns</text>
+        <text x="775" y="1564" text-anchor="end" font-size="17" fill="#8b91a0">down the grounded shaft</text>
+        <line x1="520" y1="1552" x2="418" y2="1560" stroke="#4a4f5c" stroke-width="2"/>
+      </g>
+
+      <!-- steering box + ground -->
+      <path d="M 340 1748 L 460 1748 L 480 1815 L 320 1815 Z" fill="#2a2b33" stroke="#3d3d46" stroke-width="3"/>
+      <line x1="400" y1="1815" x2="400" y2="1832" stroke="#2c6e44" stroke-width="4"/>
+      <use href="#gsym" x="400" y="1844" id="gsShaft" class="gsym"/>
+      <text x="400" y="1884" text-anchor="middle" font-size="19" font-weight="700" fill="#aeb4c2">STEERING BOX</text>
+      <text x="400" y="1906" text-anchor="middle" font-size="16" fill="#6b7280">bolts the column to the frame = ground</text>
+
+      <!-- ================= SECTION 3 : RELAY & POWER ================= -->
+      <text x="400" y="1974" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2.5" fill="#e6e8ee">3 · HORN RELAY &amp; POWER</text>
+      <rect x="370" y="1988" width="60" height="4" rx="2" fill="#8a6a22"/>
+
+      <!-- relay box -->
+      <text x="600" y="2062" text-anchor="middle" font-size="22" font-weight="800" letter-spacing="3" fill="#aeb4c2">HORN RELAY</text>
+      <rect x="460" y="2080" width="280" height="240" rx="12" fill="#20212acc" stroke="#3d3e48" stroke-width="3"/>
+
+      <!-- base wires -->
+      <path class="wire" stroke="#6e5c20" d="M 225 2394 V 2360 H 420 M 420 2360 H 560 V 2320 M 420 2360 V 2248 a 8 8 0 0 1 0 -16 V 2120 H 510 V 2140"/>
+      <path class="wire" stroke="#1d5468" d="M 510 2230 V 2240 H 220 V 1412 H 333 M 377 1392 V 590 L 340 572 V 536"/>
+      <path class="wire" stroke="#25563a" d="M 95 2388 V 2372 H 50 V 2520"/>
+      <path class="wire" stroke="#6e401f" d="M 660 2320 V 2870 H 400 V 2940 M 400 2940 H 210 V 3172 M 400 2940 H 600 V 3172"/>
+      <path class="wire" stroke="#25563a" d="M 250 3172 V 3160 H 330 V 3556 M 560 3172 V 3160 H 480 V 3556"/>
+
+      <!-- relay internals -->
+      <g id="coilWind">
+        <rect x="492" y="2140" width="36" height="90" rx="4" fill="#1b1c22" stroke="#4a4f5c" stroke-width="2"/>
+        <path d="M 494 2150 Q 510 2158 526 2150" fill="none" stroke-width="3"/>
+        <path d="M 494 2166 Q 510 2174 526 2166" fill="none" stroke-width="3"/>
+        <path d="M 494 2182 Q 510 2190 526 2182" fill="none" stroke-width="3"/>
+        <path d="M 494 2198 Q 510 2206 526 2198" fill="none" stroke-width="3"/>
+        <path d="M 494 2214 Q 510 2222 526 2214" fill="none" stroke-width="3"/>
+      </g>
+      <line x1="532" y1="2185" x2="586" y2="2180" stroke="#4a4f5c" stroke-width="2" stroke-dasharray="4 5"/>
+      <line x1="560" y1="2313" x2="560" y2="2196" stroke="#6b7280" stroke-width="5"/>
+      <circle cx="560" cy="2192" r="6" fill="url(#brassV)" stroke="#7a5f1d" stroke-width="1.5"/>
+      <line x1="660" y1="2313" x2="660" y2="2160" stroke="#6b7280" stroke-width="5"/>
+      <g id="blade">
+        <line x1="660" y1="2160" x2="566" y2="2190" stroke="#c9ccd4" stroke-width="6" stroke-linecap="round"/>
+        <circle cx="568" cy="2189" r="5" fill="url(#brassV)"/>
+      </g>
+      <circle cx="660" cy="2160" r="7" fill="#6b7280"/>
+      <circle id="spark" cx="564" cy="2190" r="8" fill="#ffe9a8"/>
+      <text id="clickTxt" x="612" y="2128" text-anchor="middle" font-size="21" font-weight="800" fill="#ffd24a">CLICK!</text>
+
+      <!-- terminals -->
+      <g fill="#14151a" stroke="#6b7280" stroke-width="2.5">
+        <circle cx="460" cy="2120" r="7"/><circle cx="460" cy="2240" r="7"/>
+        <circle cx="560" cy="2320" r="7"/><circle cx="660" cy="2320" r="7"/>
+      </g>
+      <g font-size="14" fill="#8b91a0">
+        <text x="478" y="2110">86</text><text x="478" y="2264">85</text>
+        <text x="545" y="2306" text-anchor="end">30</text><text x="676" y="2306">87</text>
+      </g>
+      <g font-size="16" fill="#8b91a0">
+        <text x="446" y="2112" text-anchor="end">coil feed</text>
+        <text x="446" y="2270" text-anchor="end">up to horn button</text>
+        <text x="576" y="2352">battery</text>
+        <text x="676" y="2352">to horns</text>
+        <text x="544" y="2166" font-size="15" fill="#6b7280">coil</text>
+        <text x="648" y="2214" font-size="15" fill="#6b7280" text-anchor="end">armature</text>
+      </g>
+      <text x="600" y="2400" text-anchor="middle" font-size="18" fill="#8b91a0">A tiny current through the coil</text>
+      <text x="600" y="2426" text-anchor="middle" font-size="18" fill="#8b91a0">pulls the armature shut — and full</text>
+      <text x="600" y="2452" text-anchor="middle" font-size="18" fill="#8b91a0">battery power flows to the horns.</text>
+
+      <!-- battery + fuse -->
+      <rect x="70" y="2400" width="180" height="130" rx="10" fill="#191a20" stroke="#34353e" stroke-width="3"/>
+      <rect x="217" y="2388" width="16" height="12" fill="#6b7280"/>
+      <rect x="87" y="2388" width="16" height="12" fill="#6b7280"/>
+      <text x="225" y="2380" text-anchor="middle" font-size="20" font-weight="800" fill="#ffd24a">+</text>
+      <text x="95" y="2380" text-anchor="middle" font-size="22" font-weight="800" fill="#8b91a0">−</text>
+      <text x="160" y="2462" text-anchor="middle" font-size="22" font-weight="800" letter-spacing="2" fill="#aeb4c2">BATTERY</text>
+      <text x="160" y="2492" text-anchor="middle" font-size="17" fill="#6b7280">12 / 24 V</text>
+      <use href="#gsym" x="50" y="2532" id="gsBatt" class="gsym"/>
+      <text x="90" y="2556" font-size="15" fill="#6b7280">− grounded to frame</text>
+
+      <rect x="300" y="2348" width="60" height="24" rx="8" fill="#26262c" stroke="#4a4f5c" stroke-width="2"/>
+      <path d="M 306 2360 Q 318 2348 330 2360 Q 342 2372 354 2360" fill="none" stroke="#ffd24a" stroke-width="3"/>
+      <text x="330" y="2336" text-anchor="middle" font-size="16" fill="#8b91a0">FUSE</text>
+      <text x="330" y="2392" text-anchor="middle" font-size="14" fill="#7a6420">hot at all times</text>
+      <circle cx="420" cy="2360" r="5" fill="#b89a3a"/>
+
+      <!-- ================= SECTION 4 : HORNS ================= -->
+      <text x="400" y="2810" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2.5" fill="#e6e8ee">4 · TWIN HORNS — HIGH &amp; LOW NOTE</text>
+      <rect x="370" y="2824" width="60" height="4" rx="2" fill="#8a6a22"/>
+
+      <text x="644" y="2600" text-anchor="end" font-size="17" fill="#8b91a0">relay output — full power</text>
+      <line x1="650" y1="2594" x2="658" y2="2590" stroke="#4a4f5c" stroke-width="2"/>
+      <circle cx="400" cy="2940" r="6" fill="#8a5a2e"/>
+      <text x="378" y="2932" text-anchor="end" font-size="15" fill="#6b7280">splice</text>
+      <text x="400" y="3080" text-anchor="middle" font-size="18" fill="#8b91a0">each horn: power wire in · ground wire out</text>
+
+      <!-- HIGH NOTE horn -->
+      <path d="M 164 3272 L 104 3248 A 44 44 0 0 0 104 3332 L 164 3308 Z" fill="#33291a" stroke="#6b5a2e" stroke-width="4"/>
+      <ellipse cx="104" cy="3290" rx="8" ry="42" fill="#0c0c10" stroke="#6b5a2e" stroke-width="3"/>
+      <rect x="192" y="3172" width="76" height="32" rx="6" fill="#26262c" stroke="#3d3e48" stroke-width="2.5"/>
+      <rect x="216" y="3204" width="28" height="20" fill="#26262c"/>
+      <circle cx="210" cy="3172" r="6" fill="#14151a" stroke="#8a5a2e" stroke-width="2.5"/>
+      <circle cx="250" cy="3172" r="6" fill="#14151a" stroke="#2c6e44" stroke-width="2.5"/>
+      <rect x="222" y="3352" width="16" height="210" fill="#3a3b44" stroke="#2a2b33" stroke-width="2"/>
+      <g class="hornBody">
+        <circle cx="230" cy="3290" r="68" fill="#211d15" stroke="#6b5a2e" stroke-width="5"/>
+        <circle cx="230" cy="3290" r="48" fill="none" stroke="#4a3f22" stroke-width="4"/>
+        <circle cx="230" cy="3290" r="30" fill="none" stroke="#4a3f22" stroke-width="4"/>
+        <circle cx="230" cy="3290" r="14" fill="none" stroke="#4a3f22" stroke-width="4"/>
+        <circle cx="230" cy="3290" r="5" fill="#6b5a2e"/>
+      </g>
+      <path class="wv wv1" d="M 84 3266 Q 60 3290 84 3314"/>
+      <path class="wv wv2" d="M 70 3252 Q 38 3290 70 3328"/>
+      <path class="wv wv3" d="M 56 3240 Q 16 3290 56 3340"/>
+
+      <!-- LOW NOTE horn -->
+      <path d="M 636 3272 L 696 3248 A 44 44 0 0 1 696 3332 L 636 3308 Z" fill="#33291a" stroke="#6b5a2e" stroke-width="4"/>
+      <ellipse cx="696" cy="3290" rx="8" ry="42" fill="#0c0c10" stroke="#6b5a2e" stroke-width="3"/>
+      <rect x="532" y="3172" width="76" height="32" rx="6" fill="#26262c" stroke="#3d3e48" stroke-width="2.5"/>
+      <rect x="566" y="3204" width="28" height="20" fill="#26262c"/>
+      <circle cx="600" cy="3172" r="6" fill="#14151a" stroke="#8a5a2e" stroke-width="2.5"/>
+      <circle cx="560" cy="3172" r="6" fill="#14151a" stroke="#2c6e44" stroke-width="2.5"/>
+      <rect x="572" y="3352" width="16" height="210" fill="#3a3b44" stroke="#2a2b33" stroke-width="2"/>
+      <g class="hornBody">
+        <circle cx="580" cy="3290" r="68" fill="#211d15" stroke="#6b5a2e" stroke-width="5"/>
+        <circle cx="580" cy="3290" r="48" fill="none" stroke="#4a3f22" stroke-width="4"/>
+        <circle cx="580" cy="3290" r="30" fill="none" stroke="#4a3f22" stroke-width="4"/>
+        <circle cx="580" cy="3290" r="14" fill="none" stroke="#4a3f22" stroke-width="4"/>
+        <circle cx="580" cy="3290" r="5" fill="#6b5a2e"/>
+      </g>
+      <path class="wv wv1" d="M 716 3266 Q 740 3290 716 3314"/>
+      <path class="wv wv2" d="M 730 3252 Q 762 3290 730 3328"/>
+      <path class="wv wv3" d="M 744 3240 Q 784 3290 744 3340"/>
+
+      <!-- labels + bracket/ground notes -->
+      <rect x="140" y="3382" width="180" height="30" rx="15" fill="#14151a" stroke="#2a2b33" stroke-width="2"/>
+      <text x="230" y="3403" text-anchor="middle" font-size="17" font-weight="800" fill="#d7dae2">HIGH NOTE · 437 Hz</text>
+      <rect x="490" y="3382" width="180" height="30" rx="15" fill="#14151a" stroke="#2a2b33" stroke-width="2"/>
+      <text x="580" y="3403" text-anchor="middle" font-size="17" font-weight="800" fill="#d7dae2">LOW NOTE · 350 Hz</text>
+
+      <text x="25" y="3444" font-size="17" fill="#8b91a0">mounting bracket</text>
+      <text x="25" y="3468" font-size="17" fill="#8b91a0">= chassis ground</text>
+      <line x1="178" y1="3452" x2="220" y2="3452" stroke="#4a4f5c" stroke-width="2"/>
+      <rect x="300" y="3478" width="200" height="32" rx="16" fill="#000"/>
+      <text x="400" y="3500" text-anchor="middle" font-size="17" fill="#8b91a0">redundant ground wires</text>
+
+      <!-- frame rail -->
+      <rect x="40" y="3560" width="720" height="44" rx="6" fill="#1d1f26" stroke="#3a3d46" stroke-width="3"/>
+      <g stroke="#3a3d46" stroke-width="3">
+        <line x1="90" y1="3604" x2="78" y2="3620"/><line x1="170" y1="3604" x2="158" y2="3620"/>
+        <line x1="250" y1="3604" x2="238" y2="3620"/><line x1="330" y1="3604" x2="318" y2="3620"/>
+        <line x1="410" y1="3604" x2="398" y2="3620"/><line x1="490" y1="3604" x2="478" y2="3620"/>
+        <line x1="570" y1="3604" x2="558" y2="3620"/><line x1="650" y1="3604" x2="638" y2="3620"/>
+        <line x1="730" y1="3604" x2="718" y2="3620"/>
+      </g>
+      <circle class="ringTerm" cx="330" cy="3560" r="7" fill="#26262c" stroke="#2c6e44" stroke-width="3"/>
+      <circle class="ringTerm" cx="480" cy="3560" r="7" fill="#26262c" stroke="#2c6e44" stroke-width="3"/>
+      <circle cx="230" cy="3576" r="5" fill="#6b7280"/>
+      <circle cx="580" cy="3576" r="5" fill="#6b7280"/>
+      <text x="400" y="3652" text-anchor="middle" font-size="22" font-weight="800" letter-spacing="4" fill="#8b91a0">BUS FRAME — COMMON GROUND</text>
+      <text x="400" y="3692" text-anchor="middle" font-size="17" fill="#4f7c5f">← current returns through the frame to the battery (−)</text>
+
+      <!-- ============ animated current overlays ============ -->
+      <path class="flow fy a1" d="M 225 2394 V 2360 H 420 V 2248 a 8 8 0 0 1 0 -16 V 2120 H 510 V 2140"/>
+      <path class="flow fy a2" d="M 420 2360 H 560 V 2316"/>
+      <path class="flow fc a1" d="M 510 2230 V 2240 H 220 V 1412 H 377 V 590 L 340 572 V 534"/>
+      <path class="flow fg a1" d="M 400 516 V 1378 M 400 1446 V 1815"/>
+      <path class="flow fg a1" d="M 50 2520 V 2372 H 95 V 2390"/>
+      <path class="flow fo a2" d="M 560 2316 V 2196 L 660 2160 V 2870 H 400 V 2940"/>
+      <path class="flow fo a2" d="M 400 2940 H 210 V 3168"/>
+      <path class="flow fo a2" d="M 400 2940 H 600 V 3168"/>
+      <path class="flow fg a2" d="M 250 3172 V 3160 H 330 V 3556"/>
+      <path class="flow fg a2" d="M 560 3172 V 3160 H 480 V 3556"/>
+      <path class="flow fg a2" d="M 230 3356 V 3556"/>
+      <path class="flow fg a2" d="M 580 3356 V 3556"/>
+      <path class="flow fg a2" d="M 716 3582 H 96"/>
+      <polygon id="gndArrow" points="84,3582 100,3573 100,3591" fill="#54e07a"/>
+
+      <!-- tap targets -->
+      <rect id="hitHorn" class="hit" x="270" y="300" width="260" height="280" fill="transparent"/>
+      <circle id="hitWheel" class="hit" cx="120" cy="1150" r="64" fill="transparent"/>
+    </svg>
+
+    <div class="card">
+      <h2>HOW IT WORKS</h2>
+      <ol>
+        <li>You press the <b>plastic cover</b> — it pushes the <b>brass cap</b> down against the spring.</li>
+        <li>The cap lands on the <b>brass ring</b>: the horn switch is now closed.</li>
+        <li>A <span class="kc c">small current</span> flows from the <span class="kc y">battery</span> through the relay's coil, up the column wire, across the <b>brass roller wheel</b> onto the spinning <b>brass plate</b>, up to the ring — then back to <span class="kc g">ground</span> through the spring, hub, and steering shaft. Because the roller rides on the plate, this works at any steering angle.</li>
+        <li>The energized coil snaps the relay's armature shut — <b>click</b>.</li>
+        <li><span class="kc o">Full battery power</span> now flows through the relay's 30 → 87 contacts and down the horn power wire.</li>
+        <li>A splice feeds <b>both horns</b> — high note and low note together.</li>
+        <li>Each horn returns its current to <span class="kc g">ground</span> two ways: through its <b>mounting bracket</b> on the frame, and through its <b>redundant ground wire</b>. The frame carries it all back to the battery's negative post.</li>
+      </ol>
+      <p class="fine">Diagram is schematic — the geometry is simplified, but the circuit order matches the real setup: button → slip-ring contact → relay → twin horns, with the horns switched on the power side and permanently grounded.</p>
+    </div>
+  </main>
+</div>
+
+<script>
+(function () {
+  var app = document.getElementById('app');
+  var hornBtn = document.getElementById('hornBtn');
+  var soundBtn = document.getElementById('soundBtn');
+  var spinBtn = document.getElementById('spinBtn');
+
+  var hornOn = false, soundOn = true, spinning = false;
+  var relayTimer = null;
+
+  /* ---- sound: two-note electric horn ---- */
+  var ctx = null, voices = [];
+  function ensureCtx() {
+    if (!ctx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
+      ctx = new AC();
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+    return true;
+  }
+  function startSound() {
+    if (!ensureCtx()) return;
+    stopSound();
+    var now = ctx.currentTime;
+    [350, 437].forEach(function (f) {
+      [0, 7].forEach(function (det) {
+        var o = ctx.createOscillator();
+        o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = det;
+        var lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass'; lp.frequency.value = 1500; lp.Q.value = 2;
+        var g = ctx.createGain();
+        g.gain.setValueAtTime(0, now);
+        g.gain.linearRampToValueAtTime(0.055, now + 0.025);
+        o.connect(lp); lp.connect(g); g.connect(ctx.destination);
+        o.start(now);
+        voices.push({ o: o, g: g });
+      });
+    });
+  }
+  function stopSound() {
+    if (!ctx) return;
+    var now = ctx.currentTime;
+    voices.forEach(function (v) {
+      try {
+        v.g.gain.cancelScheduledValues(now);
+        v.g.gain.setValueAtTime(v.g.gain.value, now);
+        v.g.gain.linearRampToValueAtTime(0, now + 0.07);
+        v.o.stop(now + 0.1);
+      } catch (e) {}
+    });
+    voices = [];
+  }
+
+  /* ---- horn toggle ---- */
+  function setHorn(on) {
+    hornOn = on;
+    app.classList.add('used');
+    app.classList.toggle('on', on);
+    hornBtn.setAttribute('aria-pressed', String(on));
+    if (on) {
+      hornBtn.textContent = '📢 HONKING — TAP TO STOP';
+      clearTimeout(relayTimer);
+      relayTimer = setTimeout(function () {
+        app.classList.add('live');
+        if (soundOn) startSound();
+      }, 170);
+    } else {
+      clearTimeout(relayTimer);
+      app.classList.remove('live');
+      hornBtn.textContent = '🖐 PRESS HORN';
+      stopSound();
+    }
+  }
+  function toggleHorn() { setHorn(!hornOn); }
+
+  hornBtn.addEventListener('click', toggleHorn);
+  document.getElementById('hitHorn').addEventListener('click', toggleHorn);
+
+  /* ---- sound toggle ---- */
+  soundBtn.addEventListener('click', function () {
+    soundOn = !soundOn;
+    soundBtn.setAttribute('aria-pressed', String(soundOn));
+    soundBtn.textContent = soundOn ? '🔊 SOUND' : '🔇 MUTED';
+    if (!soundOn) stopSound();
+    else if (hornOn && app.classList.contains('live')) startSound();
+  });
+
+  /* ---- steering demo toggle ---- */
+  function toggleSpin() {
+    spinning = !spinning;
+    app.classList.toggle('spin', spinning);
+    spinBtn.setAttribute('aria-pressed', String(spinning));
+    spinBtn.textContent = spinning ? '🛑 STOP' : '↻ WHEEL';
+  }
+  spinBtn.addEventListener('click', toggleSpin);
+  document.getElementById('hitWheel').addEventListener('click', toggleSpin);
+})();
+</script>
