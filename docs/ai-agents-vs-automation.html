@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Build-a-Stack — AI Tools, Agents &amp; Your Stack</title>
+<style>
+  @page { size: A4; margin: 22mm 18mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Liberation Sans", "Helvetica Neue", Arial, sans-serif;
+    color: #1a1f29; line-height: 1.5; font-size: 11pt; margin: 0;
+  }
+  h1 { font-size: 24pt; color: #0b1f3a; margin: 0 0 2pt; letter-spacing: -0.4pt; }
+  h2 { font-size: 15pt; color: #0b1f3a; margin: 22pt 0 6pt;
+       border-bottom: 2px solid #2563eb; padding-bottom: 3pt; }
+  h3 { font-size: 12pt; color: #1d4ed8; margin: 14pt 0 4pt; }
+  .sub { color: #5b6472; font-size: 10.5pt; margin: 0 0 2pt; }
+  .meta { color: #8a93a3; font-size: 9pt; margin: 0 0 4pt; }
+  p { margin: 6pt 0; }
+  ul { margin: 6pt 0; padding-left: 18pt; }
+  li { margin: 3pt 0; }
+  strong { color: #0b1f3a; }
+  code { background: #eef2f7; padding: 1px 5px; border-radius: 3px;
+         font-family: "Liberation Mono", monospace; font-size: 9.5pt; color: #b3261e; }
+  table { border-collapse: collapse; width: 100%; margin: 8pt 0; font-size: 10pt; }
+  th { background: #0b1f3a; color: #fff; text-align: left; padding: 6pt 8pt; }
+  td { border: 1px solid #d7dde6; padding: 6pt 8pt; vertical-align: top; }
+  tr:nth-child(even) td { background: #f6f8fb; }
+  .callout { border-left: 4px solid #2563eb; background: #f0f5ff;
+             padding: 8pt 12pt; margin: 10pt 0; border-radius: 0 6px 6px 0; }
+  .warn { border-left: 4px solid #d97706; background: #fff7ed; }
+  .safe { border-left: 4px solid #16a34a; background: #f0fdf4; }
+  .tag { display: inline-block; background: #2563eb; color: #fff; font-size: 8.5pt;
+         padding: 1px 8px; border-radius: 20px; vertical-align: middle; }
+  .lead { font-size: 12pt; color: #2b3442; }
+  hr { border: none; border-top: 1px solid #e2e7ee; margin: 18pt 0; }
+  .footer { color: #8a93a3; font-size: 8.5pt; margin-top: 20pt;
+            border-top: 1px solid #e2e7ee; padding-top: 8pt; }
+</style>
+</head>
+<body>
+
+<h1>AI Tools, Agents &amp; Your Stack</h1>
+<p class="sub">A plain-English briefing — turning &ldquo;am I behind?&rdquo; into a teachable concept for Build-a-Stack</p>
+<p class="meta">Build-a-Stack companion doc &middot; Phase A&middot;3 candidate material &middot; Drafted June 2026</p>
+
+<div class="callout">
+<strong>The one-sentence takeaway:</strong> You are not behind. You already run a serious automation stack.
+The thing the industry is buzzing about is a <em>different kind of brain</em> — a reasoning agent — that
+can plug into the body you&rsquo;ve already built. Whether to use one is an engineering tradeoff, not a race to catch up.
+</div>
+
+<h2>1 &middot; Three tools everyone name-drops</h2>
+<p>They get lumped together, but they are three different categories. Sorting them out removes most of the &ldquo;I feel behind&rdquo; feeling.</p>
+
+<table>
+<tr><th>Tool</th><th>What it actually is</th><th>Who is in control</th></tr>
+<tr><td><strong>Devin</strong></td><td>An autonomous &ldquo;AI software engineer&rdquo; (a product). You hand it a ticket; it plans, codes, runs, and opens a pull request.</td><td>The AI</td></tr>
+<tr><td><strong>Cursor</strong></td><td>An AI-powered code <em>editor</em> (a VS Code fork). A human writes code, supercharged by AI autocomplete, inline edits, and a codebase-aware chat.</td><td>You</td></tr>
+<tr><td><strong>LangGraph</strong></td><td>A <em>library</em> (Python/JS) for <em>building</em> multi-step AI agents — loops, memory, branching. Not something you write code <em>in</em>; it&rsquo;s plumbing you build <em>with</em>.</td><td>N/A — it&rsquo;s a building block</td></tr>
+</table>
+
+<div class="callout">
+<strong>Key split:</strong> Devin and Cursor <em>compete</em> over &ldquo;help me write code faster.&rdquo;
+LangGraph isn&rsquo;t in that race at all — it&rsquo;s a component for <em>making</em> AI software.
+And note: the agentic workflow you&rsquo;re using right now (an AI committing and pushing to your repo) is the
+<em>same category</em> as Devin. You&rsquo;re already doing it.
+</div>
+
+<h2>2 &middot; The big idea: automation vs. a reasoning agent</h2>
+<p class="lead">This is the distinction worth internalizing. Everything else is detail.</p>
+
+<h3>What you have today — <span class="tag">deterministic automation</span></h3>
+<p>Your bots are <strong>rule-followers</strong>. You wrote the logic ahead of time:</p>
+<div class="callout"><em>WHEN websocket price crosses X AND a TradingView alert fires &rarr; place trade.
+IF a position drifts &rarr; the supervisor bot flattens it.</em></div>
+<p>The bot doesn&rsquo;t <em>decide</em> in any human sense — it evaluates conditions you predefined and runs the
+matching branch. <strong>Same inputs &rarr; same output, every time.</strong> Your supervisor bots watching other
+bots are still rules (&ldquo;if a child bot stops heart-beating, restart it&rdquo;) — that pattern is a
+<strong>watchdog</strong>, which already lives in your glossary. This is predictable, auditable, and — crucial for
+trading — <strong>provable</strong>.</p>
+
+<h3>What an AI agent adds — <span class="tag">reasoning over a model</span></h3>
+<p>An LLM agent doesn&rsquo;t run your <code>if/then</code>. It <strong>interprets a situation in natural language and
+chooses what to do</strong>, including things you never explicitly coded:</p>
+<div class="callout"><em>Observe (market data, news, positions) &rarr; reason in plain language about what&rsquo;s happening
+&rarr; pick an action from the tools you gave it (place trade, resize, alert you, do nothing) &rarr; see the result
+&rarr; reason again.</em></div>
+
+<table>
+<tr><th>Your bots</th><th>An AI agent</th></tr>
+<tr><td><strong>Execute rules</strong> you wrote</td><td><strong>Decides</strong> what to do</td></tr>
+<tr><td>Same input &rarr; same output</td><td>Same input &rarr; <em>maybe different</em> output</td></tr>
+<tr><td>You can <strong>prove</strong> its behavior</td><td>You can only <strong>observe</strong> its behavior</td></tr>
+<tr><td>&ldquo;Cross X &rarr; buy&rdquo;</td><td>&ldquo;Price crossed X, but volume is thin and there&rsquo;s a Fed headline — I&rsquo;ll wait&rdquo;</td></tr>
+</table>
+
+<p>That last row is the entire point: an agent can weigh <strong>fuzzy, unstructured information</strong> (a news
+headline, an ambiguous pattern) and handle situations <strong>you didn&rsquo;t anticipate</strong> — things you
+can&rsquo;t easily encode as <code>if/then</code>.</p>
+
+<h2>3 &middot; &ldquo;But wasn&rsquo;t I already doing this?&rdquo;</h2>
+<p><strong>Partly — and it&rsquo;s the hard part.</strong> Websockets, TradingView alerts, execution, supervisors:
+that&rsquo;s the <em>plumbing</em> an agent also needs. <strong>You&rsquo;ve built the body.</strong> An AI agent is
+just a <em>different brain</em> plugged into that same body.</p>
+<p>The piece you don&rsquo;t have is a non-deterministic LLM sitting in the decision seat instead of your
+hand-written rules. That brain — its multi-step reasoning loop, memory, and branching — is exactly what a library
+like <strong>LangGraph</strong> helps you build.</p>
+
+<h2>4 &middot; The honest warning (this matters for trading)</h2>
+<div class="callout warn">
+<p style="margin-top:0"><strong>An LLM agent is non-deterministic.</strong> Same market, run it twice, it might do two
+different things. In a chatbot that&rsquo;s fine. On a path that <strong>places real trades with real money</strong>,
+that property is dangerous:</p>
+<ul>
+<li>You can&rsquo;t fully predict it.</li>
+<li>It can &ldquo;hallucinate&rdquo; a reason and act on it.</li>
+<li>Backtesting is murky — past behavior doesn&rsquo;t guarantee future behavior.</li>
+<li>Latency: an LLM &ldquo;thinks&rdquo; in seconds; your websocket bots react in milliseconds.</li>
+</ul>
+</div>
+
+<h3>The mature pattern</h3>
+<p>Not &ldquo;replace my bots with an AI agent.&rdquo; Instead:</p>
+<ul>
+<li><strong>Keep deterministic bots on the trigger/execution path</strong> — fast, provable, safe.</li>
+<li><strong>Put the AI agent in an advisory / supervisory seat</strong> — it watches, reasons over the fuzzy stuff
+(news, regime shifts, &ldquo;does this setup still make sense?&rdquo;), and either <em>alerts you</em> or
+<em>adjusts parameters within hard guardrails</em>. The actual trade trigger stays rule-based, with circuit
+breakers the agent <strong>cannot</strong> override.</li>
+</ul>
+<p>That buys you the agent&rsquo;s judgment <strong>without</strong> handing a slot machine your order-entry.</p>
+
+<h2>5 &middot; Your plan: the agent as a &ldquo;cube entity&rdquo;</h2>
+<div class="callout safe">
+<p style="margin-top:0"><strong>Decision:</strong> if an LLM agent is added, it will be a <strong>cube entity</strong> —
+a class of agent in the stack that <strong>never places trades</strong>. It observes, reasons, and reports.</p>
+<p style="margin-bottom:0">This is the <strong>safest, most measurable</strong> way to test whether agent reasoning
+is actually effective: it sits beside the proven deterministic path, its calls can be logged and compared against
+what actually happened, and a bad call costs <em>nothing</em> because it has no authority to execute. You get a
+clean read on signal quality before ever granting it more responsibility.</p>
+</div>
+<p>This maps perfectly onto the &ldquo;know your debt&rdquo; philosophy Build-a-Stack already teaches: adopt the new
+capability deliberately, in its safest form, with a way to measure the tradeoff.</p>
+
+<h2>6 &middot; So, which tools should you actually care about?</h2>
+<table>
+<tr><th>Tool</th><th>Verdict for you</th></tr>
+<tr><td><strong>Cursor</strong></td><td>Optional convenience. A nicer local editor, but a sidegrade to the Claude Code workflow you already use. Not a gap.</td></tr>
+<tr><td><strong>Devin</strong></td><td>Not needed. You already run an equivalent agentic coding workflow. Swapping tools, not gaining a capability.</td></tr>
+<tr><td><strong>LangGraph</strong></td><td>Only relevant <em>if/when</em> you build the cube-entity advisory agent. Then it&rsquo;s the right kind of building block for the reasoning loop.</td></tr>
+</table>
+
+<h2>7 &middot; How this folds into Build-a-Stack</h2>
+<p>Build-a-Stack already teaches the plumbing — ports, processes, websockets, watchdogs, and <strong>MCP</strong>
+(the very protocol this whole agent world runs on). The natural next teaching unit:</p>
+<ul>
+<li><strong>Glossary card — &ldquo;Rule-bot vs. AI agent&rdquo;:</strong> same body, different brain; deterministic vs.
+reasoning; provable vs. observable — taught in the existing three layers
+(<em>what it is &rarr; how the real stack uses it &rarr; pragmatic vs. production tradeoff</em>).</li>
+<li><strong>Glossary card — &ldquo;Cube entity / advisory agent&rdquo;:</strong> the guardrail pattern — an agent that
+reasons but cannot execute, and why that&rsquo;s the safe, measurable way to adopt one.</li>
+<li><strong>Build challenge:</strong> wire an advisory agent that observes the data feed and emits an alert — but is
+physically prevented from connecting to the execution path.</li>
+</ul>
+
+<hr>
+<p class="footer">Build-a-Stack &mdash; an interactive way to learn how real software systems connect, grounded in a
+real trading-operations stack. Taught in three honest layers: what it is &rarr; how the real stack uses it &rarr;
+how a production-grade version would differ, and why. &middot; This companion document is candidate source material
+for the Phase A&middot;3 glossary and a future build challenge.</p>
+
+</body>
+</html>
