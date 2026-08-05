@@ -638,6 +638,36 @@
     </div>
   </section>
 
+  <!-- ================= QUICK PAY CALCULATOR ================= -->
+  <section class="card col" id="calc">
+    <h2>Quick pay calculator</h2>
+    <div class="colbody">
+    <div class="note" style="margin-bottom:14px">What-if hours, priced at your real rate and overtime rule — doesn't touch your actual clock or shift log.</div>
+
+    <div class="seg" id="qSpan">
+      <button data-span="day" class="on">Day</button><button data-span="week">Week</button><button data-span="period">Pay period</button>
+    </div>
+
+    <div class="cfgrid" style="margin-top:14px">
+      <div class="f"><label for="qAlready">Hours already worked (this <span id="qSpanWord">day</span>)</label>
+        <input type="number" id="qAlready" min="0" step="0.25"></div>
+      <div class="f"><label for="qAdd">Hours to price</label>
+        <input type="number" id="qAdd" min="0" step="0.25"></div>
+      <div class="f"><label>&nbsp;</label>
+        <label class="swrap"><input type="checkbox" id="qCustomRate"> Different rate (another job)</label></div>
+      <div class="f hide" id="fQRate"><label for="qRate">Rate ($/hr)</label>
+        <div class="prefixed"><span>$</span><input type="number" id="qRate" min="0" step="0.01" inputmode="decimal"></div></div>
+    </div>
+
+    <div class="paymode" id="qPayMode" style="margin-top:15px">
+      <button data-p="gross" class="on">GROSS</button><button data-p="net">NET</button>
+    </div>
+
+    <div class="note" id="qThreshNote" style="margin-top:10px"></div>
+    <div class="epreview" id="qResult" style="margin-top:6px"></div>
+    </div>
+  </section>
+
   <!-- ================= SETTINGS ================= -->
   <section class="card" id="cfg">
     <details>
@@ -799,6 +829,16 @@ function splitSession(startMs, endMs, cfg){
 }
 
 function otThresholdOf(cfg){ return cfg.otMode === 'weekly' ? cfg.weeklyThreshold : cfg.periodThreshold; }
+
+/* Quick Pay Calculator: a standalone what-if — hours in, gross pay out, independent of
+   the real clock and log. `already` is hours assumed already banked against the
+   threshold; `add` is the hours being priced; the split happens where they cross it. */
+function quickPay(already, add, rate, threshold, otMultiplier){
+  var reg = Math.max(0, Math.min(threshold - already, add));
+  var ot = Math.max(0, add - reg);
+  var regPay = reg * rate, otPay = ot * rate * otMultiplier;
+  return { regHours: reg, otHours: ot, regPay: regPay, otPay: otPay, gross: regPay + otPay };
+}
 
 /* Walk every shift in chronological order, filling each OT bucket as it goes. A shift that
    crosses the threshold mid-way is split: hours below it bill straight, the rest bill at OT. */
@@ -1319,6 +1359,7 @@ function render(){
   renderYtd(ledger, now);
   renderLog(ledger, period, active, now);
   renderColSums(ledger, period, now, active, netOn);
+  renderCalc();
 }
 
 /* Year to date: live totals, the OT tax-free cap, and a projection built from the
@@ -1654,7 +1695,7 @@ function applyStage(){
 /* ============================ collapsible sections ============================
    Every section folds independently; nothing opens anything else. All collapsed by
    default — the header line carries a live summary so a folded section still reads. */
-var COLS = ['hero', 'totals', 'progress', 'period', 'ytd', 'log'];
+var COLS = ['hero', 'totals', 'progress', 'period', 'ytd', 'log', 'calc'];
 function uiOpen(){ return state.ui || (state.ui = { open: {} }); }
 function applyCols(){
   var o = uiOpen().open || {};
@@ -1691,6 +1732,51 @@ function netCfg(){
 function currentNetView(gross, hours, mode, otHours, otPremYtdBefore){
   var nc = netCfg();
   return periodNetView(gross, hours, nc.items, nc, state.cfg, mode || nc.view, otHours, otPremYtdBefore);
+}
+
+/* ============================ quick pay calculator ============================
+   A standalone what-if, independent of the real clock and shift log. Defaults to
+   your real rate and overtime rule; a toggle lets it price a different job's rate. */
+function calcState(){
+  if (!state.calc) state.calc = { span: 'day', already: 0, add: 4, customRate: false, rate: null, payMode: 'gross' };
+  return state.calc;
+}
+function calcSpanWord(span){ return span === 'week' ? 'week' : span === 'period' ? 'pay period' : 'day'; }
+/* Day has no threshold of its own in this app — it's priced against whichever rule
+   actually governs your overtime. Week/pay period let you test the OTHER rule too. */
+function calcThreshold(span, cfg){
+  if (span === 'week') return cfg.weeklyThreshold;
+  if (span === 'period') return cfg.periodThreshold;
+  return otThresholdOf(cfg);
+}
+function renderCalc(){
+  var c = calcState(), cfg = state.cfg;
+  var rate = (c.customRate && c.rate != null && c.rate > 0) ? c.rate : cfg.rate;
+  var threshold = calcThreshold(c.span, cfg);
+  var already = Math.max(0, parseFloat(c.already) || 0);
+  var add = Math.max(0, parseFloat(c.add) || 0);
+  var r = quickPay(already, add, rate, threshold, cfg.otMultiplier);
+
+  var ruleWord = c.span === 'day' ? (cfg.otMode === 'weekly' ? 'week' : 'pay period') : calcSpanWord(c.span);
+  el('qThreshNote').textContent = 'Overtime after ' + threshold + ' h in the ' + ruleWord
+    + (c.span === 'day' ? ' — your real overtime rule.' : '.');
+
+  var html = '<b>' + r.regHours.toFixed(2) + ' h</b> regular'
+    + (r.otHours > 0.0001 ? ' <span style="color:var(--warn);font-weight:700">+ ' + r.otHours.toFixed(2) + ' h OT (' + cfg.otMultiplier + '×)</span>' : '')
+    + '<br>Regular ' + money(r.regPay)
+    + (r.otHours > 0.0001 ? ' &nbsp;·&nbsp; OT ' + money(r.otPay) : '')
+    + ' &nbsp;·&nbsp; <span class="pay">Gross ' + money(r.gross) + '</span>';
+
+  if (c.payMode === 'net'){
+    var nc = netCfg();
+    var ledger = buildLedger(state.sessions, cfg);
+    var ytdT = ytdSums(ledger, Date.now());
+    var premBefore = Math.max(0, otPremiumOf(ytdT) + ytdBasePremium());
+    var bd = periodNetView(r.gross, already + add, nc.items, nc, cfg, 'net', r.otHours, premBefore);
+    html += '<br>Taxes &amp; deductions ' + money(bd.deductions) + ' &nbsp;·&nbsp; <span class="pay">Net ' + money(bd.net) + '</span>';
+  }
+
+  el('qResult').innerHTML = html;
 }
 
 /* This calendar year's totals from an already-built ledger, live. */
@@ -2155,7 +2241,7 @@ function backup(){
   var payload = JSON.stringify({
     app: 'pay-clock', version: 1, savedAt: new Date().toISOString(),
     cfg: state.cfg, sessions: state.sessions, configured: state.configured, theme: state.theme, net: state.net, ui: state.ui,
-    unit: state.unit, planOn: state.planOn, plannedHours: state.plannedHours, sound: state.sound
+    unit: state.unit, planOn: state.planOn, plannedHours: state.plannedHours, sound: state.sound, calc: state.calc
   }, null, 2);
   var name = 'pay-clock-backup-' + dateInput(new Date()) + '.json';
   if (download(name, payload, 'application/json')) toast('Backup saved — ' + state.sessions.length + ' shifts.');
@@ -2184,6 +2270,7 @@ function restoreFrom(text){
   if (d.theme) state.theme = d.theme;
   if (d.net) state.net = d.net;
   if (d.ui) state.ui = d.ui;
+  if (d.calc) state.calc = d.calc;
   state.activeStart = null;              // never restore a running clock from a file
   save(); applyTheme(); renderThemeControls(); applyCols(); syncControls(); applyStage(); lastMoney = ''; render();
   toast('Restored ' + clean.length + ' shifts at ' + money(state.cfg.rate) + '/hr.');
@@ -2232,6 +2319,34 @@ document.getElementById('payMode').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
   setPayMode(b.dataset.p);
 });
+
+/* Quick pay calculator wiring — its own gross/net toggle, separate from the app's,
+   but it reuses the same saved deduction settings when net is switched on. */
+el('qSpan').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  var c = calcState(); c.span = b.dataset.span;
+  [].forEach.call(el('qSpan').querySelectorAll('button'), function(x){ x.classList.toggle('on', x === b); });
+  el('qSpanWord').textContent = calcSpanWord(c.span);
+  save(); renderCalc();
+});
+el('qAlready').oninput = function(e){ calcState().already = parseFloat(e.target.value) || 0; save(); renderCalc(); };
+el('qAdd').oninput = function(e){ calcState().add = parseFloat(e.target.value) || 0; save(); renderCalc(); };
+el('qCustomRate').onchange = function(e){
+  var c = calcState(); c.customRate = e.target.checked;
+  show('fQRate', c.customRate);
+  if (c.customRate && c.rate == null){ c.rate = state.cfg.rate; el('qRate').value = c.rate; }
+  save(); renderCalc();
+};
+el('qRate').oninput = function(e){ calcState().rate = parseFloat(e.target.value) || 0; save(); renderCalc(); };
+el('qPayMode').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  var nc = netCfg();
+  if (b.dataset.p === 'net' && !nc.configured){ openNetSetup(); return; }
+  calcState().payMode = b.dataset.p;
+  [].forEach.call(el('qPayMode').querySelectorAll('button'), function(x){ x.classList.toggle('on', x.dataset.p === b.dataset.p); });
+  save(); renderCalc();
+});
+
 document.getElementById('nCancel').onclick = function(){
   closeNetSetup();
   if (!netCfg().configured) setPayMode('gross');
@@ -2510,6 +2625,15 @@ function syncControls(){
   [].forEach.call(document.querySelectorAll('#seg button'), function(b){
     b.classList.toggle('on', b.dataset.u === state.unit);
   });
+  var cc = calcState();
+  [].forEach.call(document.querySelectorAll('#qSpan button'), function(b){ b.classList.toggle('on', b.dataset.span === cc.span); });
+  el('qSpanWord').textContent = calcSpanWord(cc.span);
+  el('qAlready').value = cc.already;
+  el('qAdd').value = cc.add;
+  el('qCustomRate').checked = cc.customRate;
+  show('fQRate', cc.customRate);
+  el('qRate').value = cc.rate != null ? cc.rate : state.cfg.rate;
+  [].forEach.call(document.querySelectorAll('#qPayMode button'), function(b){ b.classList.toggle('on', b.dataset.p === cc.payMode); });
 }
 
 /* Repaint fast enough that per-second stepping looks alive. Every figure is derived from
