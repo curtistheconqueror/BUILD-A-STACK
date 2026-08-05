@@ -153,6 +153,10 @@
   .qrow{display:grid;grid-template-columns:minmax(76px,1fr) minmax(120px,1.6fr) auto;
     gap:8px;align-items:center;margin-top:8px}
   .qrow select,.qrow input{min-width:0}
+  .qbank{margin-top:11px;padding:11px 13px;border:1px solid var(--border);border-radius:11px;
+    background:rgba(81,224,138,.07);font-size:13px;line-height:1.7}
+  .qbank b{color:var(--ok);font-variant-numeric:tabular-nums}
+  .qbank .sub{color:var(--muted);font-size:12.4px;display:block;margin-top:3px}
   .qsum{margin-top:13px;border-top:1px solid var(--border);padding-top:11px}
   .qline{display:flex;justify-content:space-between;gap:12px;font-size:13.2px;line-height:1.9}
   .qline span:first-child{color:var(--muted)}
@@ -455,13 +459,16 @@
       <label class="swrap" style="margin-top:9px"><input type="checkbox" id="nFedEx"> Exempt from federal withholding</label>
     </div>
 
-    <div class="ngroup"><b>Illinois state tax</b>
+    <div class="ngroup"><b>State tax</b>
       <div class="cfgrid">
+        <div class="f"><label for="nState">Which state you work in</label>
+          <select id="nState"></select></div>
         <div class="f"><label for="nStatePct">Rate (%)</label>
           <input type="number" id="nStatePct" min="0" max="20" step="0.01" value="4.95"></div>
         <div class="f"><label for="nStateOv">Per-check override (optional)</label>
           <div class="prefixed"><span>$</span><input type="number" id="nStateOv" min="0" step="0.01" placeholder="auto" inputmode="decimal"></div></div>
       </div>
+      <div class="note" id="nStateNote" style="margin-top:8px"></div>
       <label class="swrap" style="margin-top:9px"><input type="checkbox" id="nStateEx"> Exempt from state withholding</label>
     </div>
 
@@ -653,9 +660,12 @@
   <section class="card col" id="calc">
     <h2>Quick pay calculator</h2>
     <div class="colbody">
-    <div class="note" style="margin-bottom:14px">A what-if — doesn't touch your actual clock or shift log.</div>
+    <div class="note" style="margin-bottom:12px">A what-if — doesn't touch your actual clock or shift log.</div>
 
-    <div class="cfgrid">
+    <label class="swrap"><input type="checkbox" id="qSync"> Start from what I've already earned this pay period</label>
+    <div class="qbank hide" id="qBanked"></div>
+
+    <div class="cfgrid" style="margin-top:14px">
       <div class="f"><label for="qFreq">How often you're paid</label>
         <select id="qFreq">
           <option value="">Use my settings</option>
@@ -686,7 +696,12 @@
     </div>
 
     <div class="qsum" id="qResult"></div>
-    <div class="note hide" id="qNetNote" style="margin-top:11px"></div>
+    <!-- The button is static markup on purpose. Rebuilding it as innerHTML replaced the
+         node between mousedown and mouseup, so the browser never fired a click. -->
+    <div class="note hide" id="qNetNote" style="margin-top:11px">
+      <span id="qNetBasis"></span>
+      <button class="mini" id="qEditDed" style="margin-top:8px">Enter my real deductions</button>
+    </div>
     </div>
   </section>
 
@@ -1007,6 +1022,34 @@ var TAX2026 = {
     married: { std: 32200, brackets: [[0,.10],[24800,.12],[100800,.22],[211400,.24],[403550,.32],[512450,.35],[771200,.37]] },
     hoh:     { std: 24150, brackets: [[0,.10],[17700,.12],[67450,.22],[105700,.24],[201750,.32],[256225,.35],[640600,.37]] }
   }
+};
+
+/* State income tax withholding rates.
+     kind 'none'  no state income tax at all — exact
+     kind 'flat'  one rate on every dollar — exact
+     kind 'grad'  graduated brackets; the number is a middle-income effective rate,
+                  so it is an ESTIMATE and the UI says so. Local/county taxes (notably
+                  Maryland, Ohio, Pennsylvania, New York City) are not included.
+   Every one of these is a starting point: the per-check dollar override off a real
+   paystub always wins, and that is what the UI steers anyone to for an exact figure. */
+var STATE_TAX = {
+  AL:['Alabama',4.5,'grad'],        AK:['Alaska',0,'none'],           AZ:['Arizona',2.5,'flat'],
+  AR:['Arkansas',3.9,'grad'],       CA:['California',6.0,'grad'],     CO:['Colorado',4.4,'flat'],
+  CT:['Connecticut',5.0,'grad'],    DE:['Delaware',5.0,'grad'],       DC:['District of Columbia',6.5,'grad'],
+  FL:['Florida',0,'none'],          GA:['Georgia',5.19,'flat'],       HI:['Hawaii',7.5,'grad'],
+  ID:['Idaho',5.3,'flat'],          IL:['Illinois',4.95,'flat'],      IN:['Indiana',3.0,'flat'],
+  IA:['Iowa',3.8,'flat'],           KS:['Kansas',5.25,'grad'],        KY:['Kentucky',4.0,'flat'],
+  LA:['Louisiana',3.0,'flat'],      ME:['Maine',6.75,'grad'],         MD:['Maryland',4.75,'grad'],
+  MA:['Massachusetts',5.0,'flat'],  MI:['Michigan',4.25,'flat'],      MN:['Minnesota',6.8,'grad'],
+  MS:['Mississippi',4.4,'flat'],    MO:['Missouri',4.7,'grad'],       MT:['Montana',5.9,'grad'],
+  NE:['Nebraska',5.2,'grad'],       NV:['Nevada',0,'none'],           NH:['New Hampshire',0,'none'],
+  NJ:['New Jersey',5.525,'grad'],   NM:['New Mexico',4.9,'grad'],     NY:['New York',5.85,'grad'],
+  NC:['North Carolina',4.25,'flat'],ND:['North Dakota',2.0,'grad'],   OH:['Ohio',3.5,'grad'],
+  OK:['Oklahoma',4.75,'grad'],      OR:['Oregon',8.75,'grad'],        PA:['Pennsylvania',3.07,'flat'],
+  RI:['Rhode Island',4.75,'grad'],  SC:['South Carolina',6.2,'grad'], SD:['South Dakota',0,'none'],
+  TN:['Tennessee',0,'none'],        TX:['Texas',0,'none'],            UT:['Utah',4.55,'flat'],
+  VT:['Vermont',6.6,'grad'],        VA:['Virginia',5.75,'grad'],      WA:['Washington',0,'none'],
+  WV:['West Virginia',4.8,'grad'],  WI:['Wisconsin',5.3,'grad'],      WY:['Wyoming',0,'none']
 };
 
 function bracketTax(taxable, brackets){
@@ -1389,6 +1432,9 @@ function render(){
   renderYtd(ledger, now);
   renderLog(ledger, period, active, now);
   renderColSums(ledger, period, now, active, netOn);
+  // Synced to the real clock, so the banked figure has to keep up with it. Safe in the
+  // loop: renderCalc only writes result text, never the fields you type into.
+  if (calcState().sync) renderCalc();
 }
 
 /* Year to date: live totals, the OT tax-free cap, and a projection built from the
@@ -1750,7 +1796,7 @@ function netCfg(){
   if (!state.net) state.net = {
     enabled: false, configured: false, view: 'net',
     filing: 'single', dependents: 0, fedExempt: false, fedOverride: null,
-    statePct: 4.95, stateExempt: false, stateOverride: null, ficaOn: true,
+    state: 'IL', statePct: 4.95, stateExempt: false, stateOverride: null, ficaOn: true,
     items: [ { id: 'health', name: 'Healthcare', amount: 0, pretax: true },
              { id: 'dues',   name: 'Union dues', amount: 0, pretax: false } ]
   };
@@ -1786,26 +1832,51 @@ function calcMult(id, cfg){
    mistaken for a personalised one. */
 var FILING_LABEL = { single: 'single', married: 'married filing jointly', hoh: 'head of household' };
 function netBasisNote(nc){
+  var st = STATE_TAX[nc.state || 'IL'];
+  var pct = nc.statePct != null ? nc.statePct : 4.95;
   var bits = [ FILING_LABEL[nc.filing] || 'single',
                (nc.dependents || 0) + ' dependent' + ((nc.dependents || 0) === 1 ? '' : 's'),
-               (nc.statePct != null ? nc.statePct : 4.95) + '% state' ];
+               nc.stateOverride != null ? (st ? st[0] : 'state') + ' from your paystub'
+                 : (st ? st[0] : 'state') + (pct > 0 ? ' at ' + pct + '%' : ' (no income tax)') ];
   if (nc.ficaOn !== false) bits.push('FICA');
   var fixed = (nc.items || []).reduce(function(s, it){ return s + (parseFloat(it.amount) || 0); }, 0);
-  return (nc.configured
+  return nc.configured
       ? 'Using your saved deductions — ' + bits.join(', ')
         + (fixed > 0 ? ', ' + money(fixed) + ' a check in other deductions' : ', no other deductions')
       : 'Estimate only — standard withholding for ' + bits.join(', ')
-        + '. Nothing personal entered yet.')
-    + ' <button class="mini" id="qEditDed" style="margin-top:8px">'
-    + (nc.configured ? 'Edit my deductions' : 'Enter my real deductions') + '</button>';
+        + '. Nothing personal entered yet.';
 }
 
 function calcState(){
   if (!state.calc || !state.calc.rows){
-    state.calc = { freq: '', myRate: true, rate: null, payday: null, payMode: 'gross',
+    state.calc = { freq: '', myRate: true, rate: null, payday: null, payMode: 'gross', sync: false,
                    rows: [ { id: uid(), hours: 8, kind: 'reg' } ] };
   }
   return state.calc;
+}
+
+/* What this pay period has actually banked, for the "start from where I am" toggle.
+   A running shift counts too — out to its auto-stop target when one is armed, since
+   that hour is already committed, otherwise only as far as the clock has actually run.
+   Priced by the real ledger, so rate history, unpaid lunch and shift adjustments all
+   carry through exactly as the rest of the app reports them. */
+function calcBanked(){
+  var cfg = state.cfg, now = Date.now();
+  var sessions = state.sessions.slice(), through = now, planned = false;
+  if (state.activeStart){
+    var stop = state.planOn ? plannedStopAt(state.activeStart, state.plannedHours, state.sessions, cfg) : null;
+    if (stop && stop > now){ through = stop; planned = true; }
+    sessions.push({ id: '__live', start: state.activeStart, end: through });
+  }
+  var ledger = buildLedger(sessions, cfg);
+  var per = periodInfo(now, cfg);
+  var t = sumRange(ledger.parts, per.startMs, per.endMs);
+  var thr = otThresholdOf(cfg), banked = bucketHoursAt(ledger, now, cfg);
+  return { hours: t.hours, otHours: t.otHours,
+           gross: Math.max(0, t.gross - extraLunchMoney()),
+           premium: t.otHours * cfg.rate * ((cfg.otMultiplier || 1.5) - 1),
+           toOt: Math.max(0, thr - banked), threshold: thr, bucketHours: banked,
+           live: !!state.activeStart, planned: planned, through: through, period: per };
 }
 function calcRate(){
   var c = calcState();
@@ -1819,6 +1890,8 @@ function calcPeriodDays(){
 /* The payday this calculation lands on. Defaults to your next real one. */
 function calcPayday(){
   var c = calcState();
+  // Synced means "this period, the real one" — so its real payday, not a chosen date.
+  if (c.sync) return periodInfo(Date.now(), state.cfg).payDate;
   if (c.payday) return ymd(c.payday);
   return periodInfo(Date.now(), state.cfg).payDate;
 }
@@ -1848,7 +1921,35 @@ function renderCalc(){
   var rows = c.rows.map(function(r){ return { hours: r.hours, mult: calcMult(r.kind, cfg) }; });
   var t = quickRows(rows, rate);
 
+  /* Synced: everything real this period is the starting line, and the rows are what
+     you plan to add on top of it. */
+  var bank = c.sync ? calcBanked() : null;
+  var totHours = t.hours + (bank ? bank.hours : 0);
+  var totGross = t.gross + (bank ? bank.gross : 0);
+  var totPrem  = t.premium + (bank ? bank.premium : 0);
+
+  if (bank){
+    el('qBanked').innerHTML =
+      'Already earned this period: <b>' + bank.hours.toFixed(2) + ' h</b> · <b>' + money(bank.gross) + '</b>'
+      + '<span class="sub">'
+      + (bank.live
+          ? (bank.planned
+              ? 'Counting today out to your auto-stop at ' + ftime(bank.through) + '. '
+              : 'Counting the shift running right now, up to this moment. ')
+          : '')
+      + (bank.toOt > 0.004
+          ? bank.toOt.toFixed(2) + ' h left before overtime starts (' + bank.threshold + ' h '
+            + (cfg.otMode === 'weekly' ? 'a week' : 'a period') + ').'
+          : 'You are past ' + bank.threshold + ' h — everything further bills at overtime.')
+      + '</span>';
+  }
+  show('qBanked', !!bank);
+
   var html = '';
+  if (bank){
+    html += '<div class="qline"><span>' + bank.hours.toFixed(2) + ' h already banked</span>'
+          + '<b>' + money(bank.gross) + '</b></div>';
+  }
   c.rows.forEach(function(r, i){
     var line = t.lines[i], k = calcKind(r.kind);
     if (!(line.hours > 0)) return;
@@ -1858,31 +1959,35 @@ function renderCalc(){
   });
   if (!html) html = '<div class="qline"><span>Enter some hours above.</span><b></b></div>';
 
-  html += '<div class="qline tot"><span>' + t.hours.toFixed(2) + ' h — gross</span><b>' + money(t.gross) + '</b></div>';
+  html += '<div class="qline tot"><span>' + totHours.toFixed(2) + ' h — gross</span><b>' + money(totGross) + '</b></div>';
 
   if (c.payMode === 'net'){
     var nc = netCfg();
     // The overtime tax break shields the premium above straight time, capped for the
-    // year — so take off whatever this year's real work has already used up.
+    // year — so take off whatever this year's real work has already used up. When
+    // synced, this period's own premium is part of the figure, not already spent.
     var ytdT = ytdSums(buildLedger(state.sessions, cfg), Date.now());
-    var used = Math.max(0, otPremiumOf(ytdT) + ytdBasePremium());
+    var used = Math.max(0, otPremiumOf(ytdT) + ytdBasePremium() - (bank ? bank.premium : 0));
     var room = Math.max(0, (TAX2026.otCap[nc.filing] || TAX2026.otCap.single) - used);
-    var n2 = Object.assign({}, nc, { fedDeduct: nc.otBreak === false ? 0 : Math.min(t.premium, room) });
+    var n2 = Object.assign({}, nc, { fedDeduct: nc.otBreak === false ? 0 : Math.min(totPrem, room) });
     var pcfg = Object.assign({}, cfg, { periodLengthDays: calcPeriodDays() });
-    var bd = periodNetView(t.gross, t.hours, nc.items, n2, pcfg, 'net', 0, 0);
+    var bd = periodNetView(totGross, totHours, nc.items, n2, pcfg, 'net', 0, 0);
     html += '<div class="qline"><span>Federal</span><b style="color:var(--bad)">−' + money(bd.fed) + '</b></div>'
           + '<div class="qline"><span>State</span><b style="color:var(--bad)">−' + money(bd.state) + '</b></div>'
           + '<div class="qline"><span>Social Security &amp; Medicare</span><b style="color:var(--bad)">−' + money(bd.ss + bd.medicare) + '</b></div>'
           + (bd.fixedApplied > 0.004
               ? '<div class="qline"><span>Your other deductions</span><b style="color:var(--bad)">−' + money(bd.fixedApplied) + '</b></div>' : '')
           + '<div class="qline tot"><span>Take-home</span><b>' + money(bd.net) + '</b></div>';
-    el('qNetNote').innerHTML = netBasisNote(nc);
+    el('qNetBasis').textContent = netBasisNote(nc);
+    el('qEditDed').textContent = nc.configured ? 'Edit my deductions' : 'Enter my real deductions';
   }
   show('qNetNote', c.payMode === 'net');
 
   el('qResult').innerHTML = html;
+  el('qPayday').disabled = !!c.sync;
   el('qPaydayNote').textContent = 'Paid ' + fdateY(calcPayday())
-    + (c.payday ? '.' : ' — your next payday. Change it to price a different one.');
+    + (c.sync ? ' — the payday for the period you are working now.'
+       : c.payday ? '.' : ' — your next payday. Change it to price a different one.');
 }
 
 /* This calendar year's totals from an already-built ledger, live. */
@@ -1926,6 +2031,7 @@ function readNetForm(){
   nc.fedExempt = document.getElementById('nFedEx').checked;
   var fo = parseFloat(document.getElementById('nFedOv').value);
   nc.fedOverride = isFinite(fo) && document.getElementById('nFedOv').value !== '' ? fo : null;
+  nc.state = document.getElementById('nState').value;
   var sp = parseFloat(document.getElementById('nStatePct').value);
   nc.statePct = isFinite(sp) && sp >= 0 ? sp : 4.95;
   nc.stateExempt = document.getElementById('nStateEx').checked;
@@ -1935,12 +2041,35 @@ function readNetForm(){
   nc.otBreak = document.getElementById('nOtBreak').checked;
 }
 
+/* Fill the state list once, and describe whatever is picked. */
+function buildStateList(){
+  var sel = document.getElementById('nState');
+  if (sel.options.length) return;
+  var keys = Object.keys(STATE_TAX).sort(function(a, b){
+    return STATE_TAX[a][0] < STATE_TAX[b][0] ? -1 : 1;
+  });
+  sel.innerHTML = keys.map(function(k){
+    return '<option value="' + k + '">' + STATE_TAX[k][0] + '</option>';
+  }).join('');
+}
+function stateNote(code){
+  var s = STATE_TAX[code];
+  if (!s) return '';
+  if (s[2] === 'none') return s[0] + ' has no state income tax, so this line is $0.';
+  if (s[2] === 'flat') return s[0] + ' taxes every dollar at a flat ' + s[1] + '%. Exact.';
+  return s[0] + ' uses graduated brackets — ' + s[1] + '% is a middle-income estimate, not your exact rate. '
+       + 'For a figure you can trust, put the state tax off a real paystub in the override box.';
+}
+
 function syncNetForm(){
   var nc = netCfg();
+  buildStateList();
   document.getElementById('nFiling').value = nc.filing;
   document.getElementById('nDeps').value = nc.dependents;
   document.getElementById('nFedEx').checked = !!nc.fedExempt;
   document.getElementById('nFedOv').value = nc.fedOverride == null ? '' : nc.fedOverride;
+  document.getElementById('nState').value = nc.state || 'IL';
+  document.getElementById('nStateNote').textContent = stateNote(nc.state || 'IL');
   document.getElementById('nStatePct').value = nc.statePct;
   document.getElementById('nStateEx').checked = !!nc.stateExempt;
   document.getElementById('nStateOv').value = nc.stateOverride == null ? '' : nc.stateOverride;
@@ -2435,6 +2564,11 @@ document.getElementById('payMode').addEventListener('click', function(e){
 /* Quick pay calculator wiring — its own gross/net toggle, separate from the app's,
    but it reuses the same saved deduction settings when net is switched on. Rows are
    rebuilt only when one is added or removed, so typing is never interrupted. */
+el('qSync').onchange = function(e){
+  var c = calcState(); c.sync = e.target.checked;
+  if (c.sync){ c.payday = null; el('qPayday').value = dateInput(calcPayday()); }
+  save(); renderCalc();
+};
 el('qFreq').onchange = function(e){ calcState().freq = e.target.value; save(); renderCalc(); };
 el('qMyRate').onchange = function(e){
   var c = calcState(); c.myRate = e.target.checked;
@@ -2460,9 +2594,10 @@ el('qRows').addEventListener('input', function(e){
   save(); renderCalc();
 });
 el('qRows').addEventListener('change', function(e){
+  if (e.target.dataset.f !== 'kind') return;    // an hours field blurring is not a change to act on
   var row = e.target.closest('.qrow'); if (!row) return;
   var r = calcState().rows.find(function(x){ return x.id === row.dataset.id; }); if (!r) return;
-  if (e.target.dataset.f === 'kind') r.kind = e.target.value;
+  r.kind = e.target.value;
   save(); renderCalc();
 });
 el('qRows').addEventListener('click', function(e){
@@ -2496,6 +2631,19 @@ document.getElementById('nSave').onclick = function(){
   nc.configured = true; nc.enabled = true;
   save(); closeNetSetup(); setPayMode('net'); renderCalc();   // the calculator quotes these too
   toast('Net pay on — showing what you keep.');
+};
+/* Picking a state fills in its rate. The rate box stays editable afterwards — the
+   state is a starting point, not a lock. */
+document.getElementById('nState').onchange = function(e){
+  var code = e.target.value, s = STATE_TAX[code];
+  var nc = netCfg();
+  nc.state = code;
+  if (s) nc.statePct = s[1];
+  document.getElementById('nStatePct').value = nc.statePct;
+  document.getElementById('nStateOv').value = '';        // an old state's dollar figure is meaningless now
+  nc.stateOverride = null;
+  document.getElementById('nStateNote').textContent = stateNote(code);
+  save(); previewNet(); renderCalc();
 };
 document.getElementById('nView').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
@@ -2772,6 +2920,7 @@ function syncControls(){
    retyped. Rows are only rebuilt when focus is elsewhere — never mid-keystroke. */
 function syncCalc(){
   var cc = calcState();
+  el('qSync').checked = !!cc.sync;
   el('qFreq').value = cc.freq || '';
   el('qMyRate').checked = cc.myRate;
   el('qRate').disabled = cc.myRate;
