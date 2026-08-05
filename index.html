@@ -686,6 +686,7 @@
     </div>
 
     <div class="qsum" id="qResult"></div>
+    <div class="note hide" id="qNetNote" style="margin-top:11px"></div>
     </div>
   </section>
 
@@ -1781,6 +1782,24 @@ function calcMult(id, cfg){
   var k = calcKind(id);
   return k.mult === null ? (cfg.otMultiplier || 1.5) : k.mult;
 }
+/* Says plainly what the net figure is built on, so an untouched estimate is never
+   mistaken for a personalised one. */
+var FILING_LABEL = { single: 'single', married: 'married filing jointly', hoh: 'head of household' };
+function netBasisNote(nc){
+  var bits = [ FILING_LABEL[nc.filing] || 'single',
+               (nc.dependents || 0) + ' dependent' + ((nc.dependents || 0) === 1 ? '' : 's'),
+               (nc.statePct != null ? nc.statePct : 4.95) + '% state' ];
+  if (nc.ficaOn !== false) bits.push('FICA');
+  var fixed = (nc.items || []).reduce(function(s, it){ return s + (parseFloat(it.amount) || 0); }, 0);
+  return (nc.configured
+      ? 'Using your saved deductions — ' + bits.join(', ')
+        + (fixed > 0 ? ', ' + money(fixed) + ' a check in other deductions' : ', no other deductions')
+      : 'Estimate only — standard withholding for ' + bits.join(', ')
+        + '. Nothing personal entered yet.')
+    + ' <button class="mini" id="qEditDed" style="margin-top:8px">'
+    + (nc.configured ? 'Edit my deductions' : 'Enter my real deductions') + '</button>';
+}
+
 function calcState(){
   if (!state.calc || !state.calc.rows){
     state.calc = { freq: '', myRate: true, rate: null, payday: null, payMode: 'gross',
@@ -1851,9 +1870,15 @@ function renderCalc(){
     var n2 = Object.assign({}, nc, { fedDeduct: nc.otBreak === false ? 0 : Math.min(t.premium, room) });
     var pcfg = Object.assign({}, cfg, { periodLengthDays: calcPeriodDays() });
     var bd = periodNetView(t.gross, t.hours, nc.items, n2, pcfg, 'net', 0, 0);
-    html += '<div class="qline"><span>Taxes &amp; deductions</span><b style="color:var(--bad)">−' + money(bd.deductions) + '</b></div>'
+    html += '<div class="qline"><span>Federal</span><b style="color:var(--bad)">−' + money(bd.fed) + '</b></div>'
+          + '<div class="qline"><span>State</span><b style="color:var(--bad)">−' + money(bd.state) + '</b></div>'
+          + '<div class="qline"><span>Social Security &amp; Medicare</span><b style="color:var(--bad)">−' + money(bd.ss + bd.medicare) + '</b></div>'
+          + (bd.fixedApplied > 0.004
+              ? '<div class="qline"><span>Your other deductions</span><b style="color:var(--bad)">−' + money(bd.fixedApplied) + '</b></div>' : '')
           + '<div class="qline tot"><span>Take-home</span><b>' + money(bd.net) + '</b></div>';
+    el('qNetNote').innerHTML = netBasisNote(nc);
   }
+  show('qNetNote', c.payMode === 'net');
 
   el('qResult').innerHTML = html;
   el('qPaydayNote').textContent = 'Paid ' + fdateY(calcPayday())
@@ -1928,7 +1953,13 @@ function syncNetForm(){
   previewNet();
 }
 
-function openNetSetup(){ syncNetForm(); show('netsetup', true); }
+/* The setup panel lives near the top of the page, so opening it from something far
+   below (the calculator) would otherwise change nothing you can see. Bring it to you. */
+function openNetSetup(){
+  syncNetForm(); show('netsetup', true);
+  try { el('netsetup').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  catch(e){ el('netsetup').scrollIntoView(); }
+}
 function closeNetSetup(){ show('netsetup', false); }
 
 function setPayMode(mode){
@@ -2441,13 +2472,18 @@ el('qRows').addEventListener('click', function(e){
   if (!c.rows.length) c.rows = [{ id: uid(), hours: 0, kind: 'reg' }];
   save(); renderCalcRows(); renderCalc();
 });
+/* Unlike the app's own NET toggle, this one never sends you off to the interview
+   first — a what-if should answer immediately. With nothing entered it estimates
+   from standard withholding and says so; the note offers the interview if you want
+   a closer figure. */
 el('qPayMode').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
-  var nc = netCfg();
-  if (b.dataset.p === 'net' && !nc.configured){ openNetSetup(); return; }
   calcState().payMode = b.dataset.p;
   [].forEach.call(el('qPayMode').querySelectorAll('button'), function(x){ x.classList.toggle('on', x.dataset.p === b.dataset.p); });
   save(); renderCalc();
+});
+el('qNetNote').addEventListener('click', function(e){
+  if (e.target.closest('#qEditDed')) openNetSetup();
 });
 
 document.getElementById('nCancel').onclick = function(){
@@ -2458,7 +2494,7 @@ document.getElementById('nSave').onclick = function(){
   readNetForm();
   var nc = netCfg();
   nc.configured = true; nc.enabled = true;
-  save(); closeNetSetup(); setPayMode('net');
+  save(); closeNetSetup(); setPayMode('net'); renderCalc();   // the calculator quotes these too
   toast('Net pay on — showing what you keep.');
 };
 document.getElementById('nView').addEventListener('click', function(e){
