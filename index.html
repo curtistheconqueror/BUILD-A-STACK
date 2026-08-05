@@ -642,21 +642,26 @@
   <section class="card col" id="calc">
     <h2>Quick pay calculator</h2>
     <div class="colbody">
-    <div class="note" style="margin-bottom:14px">What-if hours, priced at your real rate and overtime rule — doesn't touch your actual clock or shift log.</div>
+    <div class="note" style="margin-bottom:14px">A what-if, priced at your real rate — doesn't touch your actual clock or shift log.</div>
 
-    <div class="seg" id="qSpan">
-      <button data-span="day" class="on">Day</button><button data-span="week">Week</button><button data-span="period">Pay period</button>
-    </div>
-
-    <div class="cfgrid" style="margin-top:14px">
-      <div class="f"><label for="qAlready">Hours already worked (this <span id="qSpanWord">day</span>)</label>
-        <input type="number" id="qAlready" min="0" step="0.25"></div>
-      <div class="f"><label for="qAdd">Hours to price</label>
-        <input type="number" id="qAdd" min="0" step="0.25"></div>
+    <div class="cfgrid">
+      <div class="f"><label for="qHours">Hours worked</label>
+        <input type="number" id="qHours" min="0" step="0.25" placeholder="0"></div>
       <div class="f"><label>&nbsp;</label>
         <label class="swrap"><input type="checkbox" id="qCustomRate"> Different rate (another job)</label></div>
       <div class="f hide" id="fQRate"><label for="qRate">Rate ($/hr)</label>
         <div class="prefixed"><span>$</span><input type="number" id="qRate" min="0" step="0.01" inputmode="decimal"></div></div>
+    </div>
+
+    <div class="f" style="margin-top:14px"><label>Overtime kicks in</label>
+      <div class="seg" id="qOtStyle">
+        <button data-style="accrue" class="on">My real rule</button><button data-style="daily">After 8 h in a day</button>
+      </div>
+    </div>
+
+    <div class="cfgrid" id="fQAlready" style="margin-top:14px">
+      <div class="f"><label for="qAlready">Hours already worked this <span id="qAlreadyWord">week</span></label>
+        <input type="number" id="qAlready" min="0" step="0.25" placeholder="0"></div>
     </div>
 
     <div class="paymode" id="qPayMode" style="margin-top:15px">
@@ -1736,30 +1741,31 @@ function currentNetView(gross, hours, mode, otHours, otPremYtdBefore){
 
 /* ============================ quick pay calculator ============================
    A standalone what-if, independent of the real clock and shift log. Defaults to
-   your real rate and overtime rule; a toggle lets it price a different job's rate. */
+   your real rate and overtime rule; a toggle lets it price a different job's rate.
+   Two overtime styles: accrue toward your real weekly/period threshold (needs to
+   know what's already banked), or a flat daily rule — anything past 8 h that day
+   is overtime right away, no accrual bookkeeping needed. */
+var CALC_DAILY_THRESHOLD = 8;
 function calcState(){
-  if (!state.calc) state.calc = { span: 'day', already: 0, add: 4, customRate: false, rate: null, payMode: 'gross' };
+  if (!state.calc) state.calc = { hours: 0, already: 0, otStyle: 'accrue', customRate: false, rate: null, payMode: 'gross' };
   return state.calc;
 }
-function calcSpanWord(span){ return span === 'week' ? 'week' : span === 'period' ? 'pay period' : 'day'; }
-/* Day has no threshold of its own in this app — it's priced against whichever rule
-   actually governs your overtime. Week/pay period let you test the OTHER rule too. */
-function calcThreshold(span, cfg){
-  if (span === 'week') return cfg.weeklyThreshold;
-  if (span === 'period') return cfg.periodThreshold;
-  return otThresholdOf(cfg);
-}
+function calcAlreadyWord(cfg){ return cfg.otMode === 'weekly' ? 'week' : 'pay period'; }
 function renderCalc(){
   var c = calcState(), cfg = state.cfg;
   var rate = (c.customRate && c.rate != null && c.rate > 0) ? c.rate : cfg.rate;
-  var threshold = calcThreshold(c.span, cfg);
-  var already = Math.max(0, parseFloat(c.already) || 0);
-  var add = Math.max(0, parseFloat(c.add) || 0);
-  var r = quickPay(already, add, rate, threshold, cfg.otMultiplier);
+  var hours = Math.max(0, parseFloat(c.hours) || 0);
+  var r, note;
 
-  var ruleWord = c.span === 'day' ? (cfg.otMode === 'weekly' ? 'week' : 'pay period') : calcSpanWord(c.span);
-  el('qThreshNote').textContent = 'Overtime after ' + threshold + ' h in the ' + ruleWord
-    + (c.span === 'day' ? ' — your real overtime rule.' : '.');
+  if (c.otStyle === 'daily'){
+    r = quickPay(0, hours, rate, CALC_DAILY_THRESHOLD, cfg.otMultiplier);
+    note = 'Overtime after ' + CALC_DAILY_THRESHOLD + ' h in a day.';
+  } else {
+    var threshold = otThresholdOf(cfg), already = Math.max(0, parseFloat(c.already) || 0);
+    r = quickPay(already, hours, rate, threshold, cfg.otMultiplier);
+    note = 'Overtime after ' + threshold + ' h this ' + calcAlreadyWord(cfg) + ' — your real rule.';
+  }
+  el('qThreshNote').textContent = note;
 
   var html = '<b>' + r.regHours.toFixed(2) + ' h</b> regular'
     + (r.otHours > 0.0001 ? ' <span style="color:var(--warn);font-weight:700">+ ' + r.otHours.toFixed(2) + ' h OT (' + cfg.otMultiplier + '×)</span>' : '')
@@ -1772,7 +1778,7 @@ function renderCalc(){
     var ledger = buildLedger(state.sessions, cfg);
     var ytdT = ytdSums(ledger, Date.now());
     var premBefore = Math.max(0, otPremiumOf(ytdT) + ytdBasePremium());
-    var bd = periodNetView(r.gross, already + add, nc.items, nc, cfg, 'net', r.otHours, premBefore);
+    var bd = periodNetView(r.gross, hours, nc.items, nc, cfg, 'net', r.otHours, premBefore);
     html += '<br>Taxes &amp; deductions ' + money(bd.deductions) + ' &nbsp;·&nbsp; <span class="pay">Net ' + money(bd.net) + '</span>';
   }
 
@@ -2322,15 +2328,15 @@ document.getElementById('payMode').addEventListener('click', function(e){
 
 /* Quick pay calculator wiring — its own gross/net toggle, separate from the app's,
    but it reuses the same saved deduction settings when net is switched on. */
-el('qSpan').addEventListener('click', function(e){
+el('qHours').oninput = function(e){ calcState().hours = parseFloat(e.target.value) || 0; save(); renderCalc(); };
+el('qAlready').oninput = function(e){ calcState().already = parseFloat(e.target.value) || 0; save(); renderCalc(); };
+el('qOtStyle').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
-  var c = calcState(); c.span = b.dataset.span;
-  [].forEach.call(el('qSpan').querySelectorAll('button'), function(x){ x.classList.toggle('on', x === b); });
-  el('qSpanWord').textContent = calcSpanWord(c.span);
+  var c = calcState(); c.otStyle = b.dataset.style;
+  [].forEach.call(el('qOtStyle').querySelectorAll('button'), function(x){ x.classList.toggle('on', x === b); });
+  show('fQAlready', c.otStyle === 'accrue');
   save(); renderCalc();
 });
-el('qAlready').oninput = function(e){ calcState().already = parseFloat(e.target.value) || 0; save(); renderCalc(); };
-el('qAdd').oninput = function(e){ calcState().add = parseFloat(e.target.value) || 0; save(); renderCalc(); };
 el('qCustomRate').onchange = function(e){
   var c = calcState(); c.customRate = e.target.checked;
   show('fQRate', c.customRate);
@@ -2626,10 +2632,11 @@ function syncControls(){
     b.classList.toggle('on', b.dataset.u === state.unit);
   });
   var cc = calcState();
-  [].forEach.call(document.querySelectorAll('#qSpan button'), function(b){ b.classList.toggle('on', b.dataset.span === cc.span); });
-  el('qSpanWord').textContent = calcSpanWord(cc.span);
+  el('qHours').value = cc.hours;
   el('qAlready').value = cc.already;
-  el('qAdd').value = cc.add;
+  [].forEach.call(document.querySelectorAll('#qOtStyle button'), function(b){ b.classList.toggle('on', b.dataset.style === cc.otStyle); });
+  show('fQAlready', cc.otStyle === 'accrue');
+  el('qAlreadyWord').textContent = calcAlreadyWord(state.cfg);
   el('qCustomRate').checked = cc.customRate;
   show('fQRate', cc.customRate);
   el('qRate').value = cc.rate != null ? cc.rate : state.cfg.rate;
