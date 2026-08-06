@@ -406,9 +406,15 @@
     button.mini{min-height:44px;padding:10px 15px;font-size:13.4px}
     .seg button{min-height:44px;padding:0 22px}
     .emode button,.schoice button{min-height:44px}
-    input[type=number],input[type=text],input[type=date],input[type=time],select{min-height:44px}
+    /* Safari zooms the whole page whenever a focused field is under 16px, and there is
+       no zooming back out — you are left dragging the page around to find where you
+       were. Worst inside the calendar, where the field is small and sits in its own
+       scroller, but it is the same trap in every form here. 16px on touch only; the
+       desktop keeps its smaller type. */
+    input[type=number],input[type=text],input[type=date],input[type=time],
+    input[type=datetime-local],select,textarea{min-height:44px;font-size:16px}
     /* A calendar cell is the tap target, and it clears 44px on its own. */
-    .calcell input[type=number]{min-height:34px}
+    .calcell input[type=number]{min-height:34px;font-size:16px}
     .swrap input{width:22px;height:22px}
     .sw input[type=color]{width:44px;height:44px}
     .paymode button{min-height:44px;padding:0 18px}
@@ -2379,6 +2385,22 @@ function paintCal(){
       }).join('')
     : '<div class="note">Type hours into any day and its pay period totals up here.</div>';
 
+  paintCalRule();
+}
+
+/* The line above the grid. While a day is open it names that day and what it is worth,
+   since a cell is small and every other cell looks the same; otherwise it states the
+   overtime rule. One owner, so a repaint mid-entry cannot wipe the label. */
+function paintCalRule(){
+  var sc = el('qCalScroll'), cc = calCfg();
+  var inp = sc.contains(document.activeElement)
+    ? document.activeElement.closest('input[data-d]') : null;
+  if (inp){
+    var b = calPriced().byDay[inp.dataset.d];
+    el('qCalRule').innerHTML = '<b style="color:var(--acc)">Editing ' + fdateY(ymd(inp.dataset.d)) + '</b>'
+      + (b ? ' — ' + b.hours.toFixed(2) + ' h · ' + money(b.gross) : ' — no hours yet');
+    return;
+  }
   el('qCalRule').textContent = cc.otStyle === 'daily'
     ? 'Anything past ' + (cc.dailyAfter || 8) + ' h in a day counts as overtime right away.'
     : 'Overtime builds the way it really does — after ' + otThresholdOf(state.cfg) + ' h '
@@ -3115,6 +3137,15 @@ el('qCalScroll').addEventListener('input', function(e){
   save(); paintCal();                       // figures only — the field you are in is left alone
 });
 el('qCalScroll').addEventListener('scroll', calScrolled);
+/* A cell is small and the grid is a wall of numbers, so while one is open the line above
+   the calendar says which day it belongs to and what that day is worth. */
+el('qCalScroll').addEventListener('focusin', function(e){
+  if (e.target.closest('input[data-d]')) paintCalRule();
+});
+el('qCalScroll').addEventListener('focusout', function(e){
+  if (!e.target.closest('input[data-d]')) return;
+  setTimeout(paintCalRule, 0);                 // let focus land on the next cell first
+});
 el('qCalToday').onclick = calJumpToday;
 el('qCalClear').onclick = function(){
   if (!Object.keys(calCfg().hours).length){ toast('The calendar is already empty.'); return; }
