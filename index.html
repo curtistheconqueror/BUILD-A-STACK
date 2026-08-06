@@ -310,6 +310,7 @@
   /* Edit and delete stay pinned to the right edge. The log is wider than a phone, and
      leaving them past the end meant sideways-swiping a table inside a scrolling page
      to reach them — findable only if you already knew they were there. */
+  .logscroll{overflow-x:auto}
   th.act,td.act{position:sticky;right:0;z-index:1;padding-right:0;text-align:right;
     background:var(--card-solid,var(--bg0));box-shadow:-11px 0 13px -9px rgba(0,0,0,.55)}
   tr.live td.act,tr.pending td.act{background:var(--card-solid,var(--bg0))}
@@ -356,8 +357,39 @@
     /* On a phone the OT column is the first thing to go — the row already turns amber
        when it has overtime, and the period's OT total still shows in the footer. */
     .otcol{display:none}td{padding-right:5px}
-    .dow{display:none}
-    .act .mini{padding:10px 9px;font-size:12.6px}}
+    .act .mini{padding:10px 9px;font-size:12.6px}
+    /* Seven columns never fit a phone. Rather than pin the buttons over the top of the
+       pay, each shift becomes a block: date and buttons on one line, times and totals
+       on the next. Nothing overlaps and nothing has to be scrolled sideways. */
+    .logscroll{overflow-x:visible}
+    #logBody table,#logBody tbody,#logBody tfoot,#logBody tr,#logBody td{display:block;width:auto}
+    #logBody thead{display:none}
+    #logBody tbody tr{display:flex;flex-wrap:wrap;align-items:center;gap:2px 9px;
+      padding:11px 0;border-top:1px solid var(--border)}
+    #logBody tbody td{padding:0;border:0;text-align:left}
+    #logBody td.c-day{order:1;font-weight:800;color:var(--ink)}
+    #logBody td.act{order:2;margin-left:auto;position:static;background:none;box-shadow:none}
+    #logBody tbody tr::after{content:"";order:3;flex-basis:100%;height:0}
+    #logBody td.c-in{order:4}
+    #logBody td.c-out{order:5}
+    #logBody td.c-out::before{content:"– "}
+    #logBody td.c-hours{order:6}
+    #logBody td.c-hours::before{content:"·  "}
+    #logBody td.c-hours::after{content:" h"}
+    /* The block layout has room for overtime again, so it comes back — but only on the
+       shifts that actually have any, rather than a dash on every line. */
+    #logBody tbody td.otcol{order:7}
+    #logBody td.otcol{display:block}
+    #logBody td.otcol::before{content:"·  ";color:var(--muted);font-weight:400}
+    #logBody td.otcol::after{content:" OT"}
+    #logBody td.noot{display:none}
+    #logBody td.c-gross{order:8;color:var(--ok);font-weight:800}
+    #logBody td.c-gross::before{content:"·  ";color:var(--muted);font-weight:400}
+    #logBody tfoot tr{display:flex;align-items:center;gap:10px;padding-top:11px;
+      border-top:1px solid var(--border);margin-top:2px}
+    #logBody tfoot td{padding:0;border:0}
+    #logBody tfoot td:first-child{flex:1}
+    #logBody tfoot td.act{display:none}}
   /* Touch devices: every control needs a finger-sized target, not a cursor-sized one. */
   @media(pointer:coarse){
     button.mini{min-height:44px;padding:10px 15px;font-size:13.4px}
@@ -1880,7 +1912,7 @@ function renderLog(ledger, period, active, now){
       : '<div class="empty">No shifts logged this period yet.</div>';
     return;
   }
-  var html = '<div style="overflow-x:auto"><table><thead><tr><th>Day</th><th>In</th><th>Out</th>'
+  var html = '<div class="logscroll"><table><thead><tr><th>Day</th><th>In</th><th>Out</th>'
            + '<th class="num">Hours</th><th class="num otcol">OT</th><th class="num">Gross</th>'
            + '<th class="act"></th></tr></thead><tbody>';
   var tot = { hours: 0, otHours: 0, gross: 0 };
@@ -1889,13 +1921,14 @@ function renderLog(ledger, period, active, now){
     tot.hours += t.hours; tot.otHours += t.otHours; tot.gross += t.gross;
     var asking = pendingDelete === s.id;
     html += '<tr class="' + (t.otHours > 0.0001 ? 'otrow ' : '') + (s.live ? 'live' : '') + (asking ? ' pending' : '') + '">'
-      + '<td>' + fdate(new Date(s.start)).replace(/^(\w{3}) /, '<span class="dow">$1 </span>')
+      + '<td class="c-day">' + fdate(new Date(s.start)).replace(/^(\w{3}) /, '<span class="dow">$1 </span>')
       + (s.adj ? ' <span style="opacity:.65;font-size:10.5px">· ' + (s.adj.noOt ? 'PTO' : s.adj.mult ? '×' + s.adj.mult : s.adj.diff ? '+$' + s.adj.diff + '/h' : 'no lunch') + '</span>' : '')
-      + '</td><td>' + ftime(s.start) + '</td>'
-      + '<td>' + (s.live ? '<span class="running">running</span>' : ftime(s.end)) + '</td>'
-      + '<td class="num">' + t.hours.toFixed(2) + '</td>'
-      + '<td class="num g otcol">' + (t.otHours > 0.0001 ? t.otHours.toFixed(2) : '—') + '</td>'
-      + '<td class="num">' + money(t.gross) + '</td>'
+      + '</td><td class="c-in">' + ftime(s.start) + '</td>'
+      + '<td class="c-out">' + (s.live ? '<span class="running">running</span>' : ftime(s.end)) + '</td>'
+      + '<td class="num c-hours">' + t.hours.toFixed(2) + '</td>'
+      + '<td class="num g otcol' + (t.otHours > 0.0001 ? '' : ' noot') + '">'
+      + (t.otHours > 0.0001 ? t.otHours.toFixed(2) : '—') + '</td>'
+      + '<td class="num c-gross">' + money(t.gross) + '</td>'
       + '<td class="act">' + (s.live ? ''
           : asking
             ? 'Delete? <button class="mini danger" data-del-yes="' + s.id + '">yes</button> '
@@ -1905,7 +1938,8 @@ function renderLog(ledger, period, active, now){
   });
   html += '</tbody><tfoot><tr><td colspan="3"><b>Period total</b></td>'
        + '<td class="num"><b>' + tot.hours.toFixed(2) + '</b></td>'
-       + '<td class="num g otcol"><b>' + (tot.otHours > 0.0001 ? tot.otHours.toFixed(2) : '—') + '</b></td>'
+       + '<td class="num g otcol' + (tot.otHours > 0.0001 ? '' : ' noot') + '"><b>'
+       + (tot.otHours > 0.0001 ? tot.otHours.toFixed(2) : '—') + '</b></td>'
        + '<td class="num"><b>' + money(tot.gross) + '</b></td><td class="act"></td></tr></tfoot></table></div>';
   box.innerHTML = html;
 }
