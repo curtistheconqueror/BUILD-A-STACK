@@ -192,6 +192,17 @@
   .calcell:focus-within .calval{display:none}
   .calpay{position:absolute;left:0;right:0;bottom:0;font-size:8.5px;line-height:1.35;text-align:center;
     color:var(--cal-bg);background:var(--cal-fill);font-weight:800;pointer-events:none}
+  .xrow{display:grid;grid-template-columns:1fr auto 62px 62px;gap:9px;align-items:center;
+    padding:8px 0;border-top:1px solid var(--border);font-size:13.2px}
+  .xrow.xhead{border-top:0;padding-top:0;color:var(--muted);font-size:10.6px;letter-spacing:1.5px;
+    text-transform:uppercase;font-weight:800}
+  .xrow .xd{font-weight:700;color:var(--ink)}
+  .xrow .xt{color:var(--muted);font-size:12.6px}
+  .xrow .xb,.xrow .xa{text-align:right;font-variant-numeric:tabular-nums}
+  .xrow .xb{color:var(--acc)}
+  .xrow .xa{color:var(--warn)}
+  .xrow.xhead .xb,.xrow.xhead .xa{color:var(--muted)}
+  .xsum{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
   .calsums{margin-top:12px}
   .calsum{display:flex;justify-content:space-between;gap:10px;font-size:13px;line-height:1.85}
   .calsum span{color:var(--muted)}
@@ -768,6 +779,22 @@
     </div>
   </section>
 
+  <!-- ================= EXTRA TIME ================= -->
+  <section class="card col" id="extra">
+    <h2>Extra time — this period<span class="colsum" id="sum_extra"></span></h2>
+    <div class="colbody">
+    <div class="note" style="margin-bottom:12px">What an overtime slip asks for: the time either side of
+    your scheduled shift, in decimal hours. Read from the shifts already in your log.</div>
+
+    <div class="cfgrid">
+      <div class="f"><label for="cSchedStart">Scheduled start</label><input type="time" id="cSchedStart"></div>
+      <div class="f"><label for="cSchedEnd">Scheduled end</label><input type="time" id="cSchedEnd"></div>
+    </div>
+    <div class="note" id="xSched" style="margin-top:9px"></div>
+    <div id="xBody" style="margin-top:13px"></div>
+    </div>
+  </section>
+
   <!-- ================= QUICK PAY CALCULATOR ================= -->
   <section class="card col" id="calc">
     <h2>Quick pay calculator</h2>
@@ -957,7 +984,9 @@ var DEFAULTS = {
   periodAnchor: '2026-01-04',// any Sunday; setup replaces it with your real period start
   periodLengthDays: 14,
   payDateOffsetDays: 13,     // payday = last day of the period + this many days
-  clock24: false             // print times as 14:30 rather than 2:30 PM
+  clock24: false,            // print times as 14:30 rather than 2:30 PM
+  schedStart: '09:00',       // the scheduled shift, for working out extra time
+  schedEnd: '17:00'
 };
 
 function ymd(s){ var p = String(s).split('-').map(Number); return new Date(p[0], p[1]-1, p[2]); }
@@ -1176,6 +1205,29 @@ function plannedStopAt(activeStart, plannedHours, completed, cfg){
   // An unpaid lunch inside this shift adds its wall time to reaching the paid target.
   if ((cfg.lunchMins || 0) && need * HOUR_MS > LUNCH_AFTER) stop += cfg.lunchMins * 60000;
   return stop;
+}
+
+/* ---- time worked outside the scheduled shift, for an overtime slip ----
+   An OT slip does not want the whole shift, only the part either side of it: how early
+   you clocked in, and how late you clocked out. Both come back in decimal hours, since
+   that is how a slip is written — half an hour is 0.50.
+   `schedStart`/`schedEnd` are minutes past midnight. An end at or before the start means
+   the scheduled shift itself runs past midnight, so its end belongs to the next day. */
+function extraTime(startMs, endMs, schedStart, schedEnd){
+  var day = +midnight(startMs);
+  var s = day + schedStart * 60000;
+  var e = day + schedEnd * 60000;
+  if (schedEnd <= schedStart) e += DAY_MS;
+  var before = Math.max(0, s - startMs) / HOUR_MS;
+  var after = Math.max(0, endMs - e) / HOUR_MS;
+  return { before: before, after: after, total: before + after };
+}
+function hhmmToMin(s){
+  var m = /^(\d{1,2}):(\d{2})$/.exec(String(s || ''));
+  if (!m) return null;
+  var h = +m[1], mi = +m[2];
+  if (h > 23 || mi > 59) return null;
+  return h * 60 + mi;
 }
 
 /* Money earned by a shift running start -> now, as of the last tick of `unit`.
@@ -1696,6 +1748,7 @@ function render(){
   renderProgress(ledger, period, now);
   renderYtd(ledger, now);
   renderLog(ledger, period, active, now);
+  renderExtra(period, active, now);
   renderColSums(ledger, period, now, active, netOn);
   // Synced to the real clock, so the banked figure has to keep up with it. Safe in the
   // loop: renderCalc only writes result text, never the fields you type into.
@@ -2040,7 +2093,7 @@ function applyStage(){
 /* ============================ collapsible sections ============================
    Every section folds independently; nothing opens anything else. All collapsed by
    default — the header line carries a live summary so a folded section still reads. */
-var COLS = ['hero', 'totals', 'progress', 'period', 'ytd', 'log', 'calc'];
+var COLS = ['hero', 'totals', 'progress', 'period', 'ytd', 'log', 'extra', 'calc'];
 function uiOpen(){ return state.ui || (state.ui = { open: {} }); }
 function applyCols(){
   var o = uiOpen().open || {};
@@ -2258,6 +2311,60 @@ function renderCalc(){
   el('qPaydayNote').textContent = 'Paid ' + fdateY(calcPayday())
     + (c.sync ? ' — the payday for the period you are working now.'
        : c.payday ? '.' : ' — your next payday. Change it to price a different one.');
+}
+
+/* ============================ extra time ============================
+   Every shift in the current period, measured against the scheduled one, so an overtime
+   slip can be filled in without doing the arithmetic by hand. Decimal hours throughout —
+   half an hour is 0.50 — and the raw minutes alongside, since a slip is usually checked
+   against a punch card in minutes. */
+function renderExtra(period, active, now){
+  var cfg = state.cfg;
+  var ss = hhmmToMin(cfg.schedStart), se = hhmmToMin(cfg.schedEnd);
+  var box = el('xBody');
+  if (ss == null || se == null){
+    el('xSched').textContent = 'Set the shift you are scheduled for and the rest follows.';
+    box.innerHTML = ''; el('sum_extra').textContent = '';
+    return;
+  }
+  var day0 = +midnight(Date.now());
+  el('xSched').textContent = 'Counting anything before ' + ftime(day0 + ss * 60000)
+    + ' and after ' + ftime(day0 + se * 60000 + (se <= ss ? DAY_MS : 0))
+    + (se <= ss ? ' the next morning.' : '.');
+
+  var rows = state.sessions.filter(function(s){
+    return s.end > period.startMs && s.start < period.endMs;
+  }).slice();
+  if (active && active < period.endMs) rows.push({ id: '__active', start: active, end: now, live: true });
+  rows.sort(function(a, b){ return a.start - b.start; });
+
+  var tb = 0, ta = 0, html = '';
+  rows.forEach(function(s){
+    var x = extraTime(s.start, s.end, ss, se);
+    tb += x.before; ta += x.after;
+    if (x.total < 0.0001) return;                 // a shift inside its hours has nothing to claim
+    html += '<div class="xrow"><span class="xd">' + fdate(new Date(s.start))
+      + (s.live ? ' <span class="running">running</span>' : '') + '</span>'
+      + '<span class="xt">' + ftime(s.start) + ' – ' + (s.live ? 'now' : ftime(s.end)) + '</span>'
+      + '<b class="xb">' + (x.before > 0.0001 ? x.before.toFixed(2) : '—') + '</b>'
+      + '<b class="xa">' + (x.after > 0.0001 ? x.after.toFixed(2) : '—') + '</b></div>';
+  });
+
+  var tot = tb + ta;
+  box.innerHTML = (html
+      ? '<div class="xrow xhead"><span class="xd">Day</span><span class="xt">Clocked</span>'
+        + '<b class="xb">Before</b><b class="xa">After</b></div>' + html
+      : '<div class="note">Nothing outside your scheduled hours this period.</div>')
+    + '<div class="xsum">'
+    + '<div class="qline"><span>Before the shift</span><b>' + tb.toFixed(2) + ' h</b></div>'
+    + '<div class="qline"><span>After the shift</span><b>' + ta.toFixed(2) + ' h</b></div>'
+    + '<div class="qline tot"><span>Extra time this period</span><b>' + tot.toFixed(2) + ' h</b></div>'
+    + (tot > 0.0001 ? '<div class="note" style="margin-top:8px">That is '
+        + Math.round(tot * 60) + ' minutes — worth ' + money(tot * cfg.rate * (cfg.otMultiplier || 1.5))
+        + ' at the overtime rate, or ' + money(tot * cfg.rate) + ' straight.</div>' : '')
+    + '</div>';
+
+  el('sum_extra').textContent = tot > 0.0001 ? tot.toFixed(2) + ' h extra' : '';
 }
 
 /* ============================ the calendar ============================
@@ -3435,6 +3542,13 @@ function offerUndo(was, key){
   offerUndo.t = setTimeout(function(){ show('cfgUndo', false); }, 20000);
 }
 document.getElementById('cSound').onchange = function(e){ state.sound = e.target.value === '1'; save(); };
+['cSchedStart', 'cSchedEnd'].forEach(function(id){
+  document.getElementById(id).onchange = function(e){
+    var key = id === 'cSchedStart' ? 'schedStart' : 'schedEnd';
+    if (hhmmToMin(e.target.value) == null){ syncControls(); return; }
+    state.cfg[key] = e.target.value; save(); render();
+  };
+});
 document.getElementById('cClock24').onchange = function(e){
   state.cfg.clock24 = e.target.value === '1';
   save(); lastMoney = ''; render(); syncCalc();
@@ -3463,6 +3577,8 @@ function syncControls(){
   CFG_FIELDS.forEach(function(f){ document.getElementById(f[0]).value = state.cfg[f[1]]; });
   document.getElementById('cSound').value = state.sound ? '1' : '0';
   document.getElementById('cClock24').value = state.cfg.clock24 ? '1' : '0';
+  document.getElementById('cSchedStart').value = state.cfg.schedStart || '09:00';
+  document.getElementById('cSchedEnd').value = state.cfg.schedEnd || '17:00';
   document.getElementById('cYtd').value = netCfg().ytdShow === false ? '0' : '1';
   document.getElementById('cLunch').value = String(state.cfg.lunchMins || 0);
   var xEl = document.getElementById('cLunchExtra');
