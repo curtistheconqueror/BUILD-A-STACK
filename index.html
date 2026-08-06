@@ -1373,8 +1373,18 @@ function clockOut(atMs, silent){
    worked — the whole point is that the shift was never really interrupted. Only the
    most recent shift qualifies, and only for a while after it ended; anything older
    belongs in the shift editor where the times are typed out in full. */
-var RESUME_WINDOW = 8 * HOUR_MS;
-var RESUME_OVERNIGHT_GRACE = 4 * HOUR_MS;
+/* How long after the accidental tap you can still be noticing it. */
+var RESUME_WINDOW = 4 * HOUR_MS;
+
+/* How long a shift can plausibly have been running and still be worth reopening,
+   measured from its own start. Built from the day's target — the app's idea of a usual
+   end time — plus room to run past it, since going long is exactly when a stray tap
+   goes unnoticed. Bounded either way so an odd target cannot make this meaningless. */
+function resumeSpanLimit(){
+  var usual = state.plannedHours > 0 ? state.plannedHours : 8;
+  return Math.min(20, Math.max(12, usual + 6)) * HOUR_MS;
+}
+
 function resumableShift(){
   if (state.activeStart) return null;
   var best = null;
@@ -1384,12 +1394,13 @@ function resumableShift(){
   if (!best) return null;
   var now = Date.now(), gap = now - best.end;
   if (gap < 0 || gap > RESUME_WINDOW) return null;
-  /* Never a shift from an earlier day. By the next morning it is not a shift to pick
-     back up — it is one to correct in the editor — and reopening it would quietly bill
-     the whole night in between. The exception is working past midnight: a shift that
-     ended just before the date rolled over is still the same night's work, so it stays
-     offered for a few hours after. */
-  if (+midnight(best.end) !== +midnight(now) && gap > RESUME_OVERNIGHT_GRACE) return null;
+  /* Judged by the shift, not the calendar. Reopening has to leave the whole thing still
+     the length of a shift someone could actually be working, counted from when it began
+     — so a night shift that starts at 10 and loses its clock at 5 is plainly still going,
+     while yesterday's shift is plainly not, and crossing midnight never matters on its
+     own. This only decides whether reopening is offered; once reopened the clock runs
+     as long as you like, overtime included. */
+  if (now - best.start > resumeSpanLimit()) return null;
   return best;
 }
 
