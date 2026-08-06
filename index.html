@@ -203,6 +203,26 @@
   .xrow .xa{color:var(--warn)}
   .xrow.xhead .xb,.xrow.xhead .xa{color:var(--muted)}
   .xsum{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
+  /* the printed minutes→decimal chart, folded away until it is wanted */
+  .hsub{color:var(--muted);font-weight:600;text-transform:none;letter-spacing:.2px}
+  .charthead{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;
+    margin-top:16px;padding:11px 13px;background:var(--card2);border:1px solid var(--border);
+    border-radius:11px;color:var(--ink);font:inherit;font-size:13.2px;font-weight:700;
+    cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .charthead:hover{border-color:var(--acc)}
+  .charthead .chev{color:var(--muted);transition:transform .2s}
+  .charthead[aria-expanded="true"] .chev{transform:rotate(180deg)}
+  .chartwrap{margin-top:10px}
+  .chartgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px 10px}
+  .chartcol{display:flex;flex-direction:column;gap:2px}
+  .chartrow{display:flex;justify-content:space-between;gap:6px;padding:3px 7px;border-radius:6px;
+    font-size:12.4px;font-variant-numeric:tabular-nums;line-height:1.35}
+  .chartrow:nth-child(odd){background:var(--card2)}
+  .chartrow .m{color:var(--muted)}
+  .chartrow .h{color:var(--acc);font-weight:700}
+  .chartrow.q{outline:1px solid var(--border)}
+  .charthd{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:6px;
+    color:var(--muted);font-size:10.4px;letter-spacing:1.4px;text-transform:uppercase;font-weight:800}
   .calsums{margin-top:12px}
   .calsum{display:flex;justify-content:space-between;gap:10px;font-size:13px;line-height:1.85}
   .calsum span{color:var(--muted)}
@@ -251,7 +271,7 @@
   .backrow{margin-top:11px}
   .planrow{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:16px;
     border-top:1px solid var(--border);padding-top:16px;color:var(--muted);font-size:13.6px}
-  input[type=number],input[type=text],input[type=date],input[type=datetime-local],select{
+  input[type=number],input[type=text],input[type=date],input[type=time],input[type=datetime-local],select{
     font-family:inherit;background:rgba(10,16,32,.65);color:var(--ink);border:1px solid var(--border);
     border-radius:9px;padding:8px 10px;font-size:13.6px;font-variant-numeric:tabular-nums}
   input:focus,select:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 2px rgba(53,208,224,.16)}
@@ -259,6 +279,13 @@
   .swrap{display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
   .swrap input{accent-color:var(--acc);width:16px;height:16px;cursor:pointer}
   .eta{color:var(--acc);font-weight:700}
+  /* which days auto clock-in is allowed to fire on — only shown once it is switched on */
+  .autodays{display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap;margin-top:10px}
+  .autodays .adlbl{color:var(--muted);font-size:12.4px;margin-right:2px}
+  .autodays button{background:var(--card2);border:1px solid var(--border);color:var(--muted);
+    border-radius:8px;padding:6px 9px;font:inherit;font-size:12.4px;font-weight:700;cursor:pointer;
+    -webkit-tap-highlight-color:transparent}
+  .autodays button.on{border-color:var(--acc);color:var(--acc);background:rgba(53,208,224,.12)}
 
   /* ---- period ---- */
   #period{--ca:var(--acc2)}
@@ -382,6 +409,9 @@
     .wrap{padding:calc(18px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right))
                  calc(80px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left))}
     .card{padding:15px 14px}.timer{font-size:26px}th,td{font-size:12.3px}
+    /* Four chart columns are unreadable on a phone; two are comfortable and the whole
+       chart still fits without scrolling sideways. */
+    .chartgrid,.charthd{grid-template-columns:repeat(2,1fr)}
     /* On a phone the OT column is the first thing to go — the row already turns amber
        when it has overtime, and the period's OT total still shows in the footer. */
     .otcol{display:none}td{padding-right:5px}
@@ -554,6 +584,22 @@
     </div>
 
     <div class="planrow">
+      <label class="swrap"><input type="checkbox" id="autoOn"> Auto clock-in at</label>
+      <input type="time" id="autoAt">
+      <span class="eta" id="autoEta"></span>
+    </div>
+    <div class="autodays hide" id="autoDays">
+      <span class="adlbl">on</span>
+      <button data-d="0">Sun</button><button data-d="1">Mon</button><button data-d="2">Tue</button>
+      <button data-d="3">Wed</button><button data-d="4">Thu</button><button data-d="5">Fri</button>
+      <button data-d="6">Sat</button>
+    </div>
+    <div class="confirm hide" id="autoConfirm" style="border-color:var(--acc)">
+      <span id="autoTxt"></span>
+      <button class="mini" id="autoUndo">↩ Undo — I wasn't working</button>
+    </div>
+
+    <div class="planrow">
       <label class="swrap"><input type="checkbox" id="planOn"> Auto-stop after</label>
       <input type="number" id="planHrs" min="0.25" max="24" step="0.25" value="8"> <span>hours today</span>
       <span class="eta" id="planEta"></span>
@@ -646,6 +692,19 @@
     </div>
   </section>
 
+  <!-- ================= PERIOD ================= -->
+  <section class="card col" id="period">
+    <h2>Pay period<span class="colsum" id="sum_period"></span></h2>
+    <div class="colbody">
+    <div class="prange" id="prange">—</div>
+    <div class="pmeta">
+      <div class="pm"><div class="k">Payday</div><div class="v" id="payday">—</div></div>
+      <div class="pm"><div class="k">Period ends in</div><div class="v" id="pleft">—</div></div>
+      <div class="pm"><div class="k">Paid in</div><div class="v" id="payin">—</div></div>
+    </div>
+    </div>
+  </section>
+
   <!-- ================= PERIOD PROGRESS ================= -->
   <section class="card col" id="progress">
     <h2>Pay period progress <span id="p80Badge"></span><span class="colsum" id="sum_progress"></span></h2>
@@ -661,67 +720,6 @@
       <div class="bar"><i class="reg" id="p80Reg"></i><i class="otf" id="p80Ot"></i></div>
     </div>
     <div class="p80note" id="p80Note"></div>
-    </div>
-  </section>
-
-  <!-- ================= PERIOD ================= -->
-  <section class="card col" id="period">
-    <h2>Pay period<span class="colsum" id="sum_period"></span></h2>
-    <div class="colbody">
-    <div class="prange" id="prange">—</div>
-    <div class="pmeta">
-      <div class="pm"><div class="k">Payday</div><div class="v" id="payday">—</div></div>
-      <div class="pm"><div class="k">Period ends in</div><div class="v" id="pleft">—</div></div>
-      <div class="pm"><div class="k">Paid in</div><div class="v" id="payin">—</div></div>
-    </div>
-    </div>
-  </section>
-
-  <!-- ================= YEAR TO DATE ================= -->
-  <section class="card col" id="ytd">
-    <h2>Year to date <span id="ytdYear"></span><span class="colsum" id="sum_ytd"></span></h2>
-    <div class="colbody">
-    <div class="tgrid">
-      <div class="tile"><div class="k">Earned this year</div><div class="big" id="yGross">$0.00</div>
-        <div class="det" id="yDet">0.00 h</div></div>
-      <div class="tile"><div class="k">Overtime this year</div><div class="big" id="yOt">0.00 h</div>
-        <div class="det" id="yOtDet"></div></div>
-      <div class="tile"><div class="k">Projected by Dec 31</div><div class="big" id="yProj">—</div>
-        <div class="det" id="yProjDet"></div></div>
-    </div>
-    <div class="otbar" id="yCapWrap">
-      <div class="lbl"><span id="yCapLbl">Tax-free overtime premium used</span><span id="yCapNum"></span></div>
-      <div class="bar"><i class="reg" id="yCapReg"></i><i class="otf" id="yCapOver"></i></div>
-      <div class="p80note" id="yCapNote"></div>
-    </div>
-    <div class="planrow" style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
-      <span>Overtime I plan to work each week:</span>
-      <input type="number" id="yCommit" min="0" max="80" step="0.5" value="0"> <span>h</span>
-    </div>
-
-    <div class="planrow" style="margin-top:4px">
-      <button class="mini" id="yBaseBtn">✎ Started mid-year? Set your year-so-far</button>
-      <span class="eta" id="yBaseSummary"></span>
-    </div>
-    <div class="editor hide" id="yBase">
-      <div class="etitle">Your year before this app</div>
-      <div class="note" style="margin-bottom:12px">Copy the YTD line off your latest paystub. Earnings is
-      enough by itself; add hours and overtime if the stub shows them — that makes the overtime
-      tax-break cap accurate too.</div>
-      <div class="egrid">
-        <div class="f"><label for="yBaseGross">YTD earnings before tracking here</label>
-          <div class="prefixed"><span>$</span><input type="number" id="yBaseGross" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div></div>
-        <div class="f"><label for="yBaseHours">Hours so far (optional)</label>
-          <input type="number" id="yBaseHours" min="0" step="0.25" placeholder="unknown"></div>
-        <div class="f"><label for="yBaseOt">Of which overtime h (optional)</label>
-          <input type="number" id="yBaseOt" min="0" step="0.25" placeholder="unknown"></div>
-      </div>
-      <div class="eerr hide" id="yBaseErr"></div>
-      <div class="eactions">
-        <button class="btn go" id="yBaseSave">Save starting point</button>
-        <button class="btn ghost" id="yBaseCancel">Cancel</button>
-      </div>
-    </div>
     </div>
   </section>
 
@@ -785,9 +783,9 @@
     </div>
   </section>
 
-  <!-- ================= EXTRA TIME ================= -->
+  <!-- ================= DECIMAL TIME CONVERSION ================= -->
   <section class="card col" id="extra">
-    <h2>Extra time — this period<span class="colsum" id="sum_extra"></span></h2>
+    <h2>Decimal Time Conversion <span class="hsub">(OT sheets)</span><span class="colsum" id="sum_extra"></span></h2>
     <div class="colbody">
     <div class="note" style="margin-bottom:12px">What an overtime slip asks for: the time either side of
     your scheduled shift, in decimal hours. Read from the shifts already in your log.</div>
@@ -798,6 +796,61 @@
     </div>
     <div class="note" id="xSched" style="margin-top:9px"></div>
     <div id="xBody" style="margin-top:13px"></div>
+
+    <!-- The printed conversion chart, for checking a figure by eye or filling a slip by hand.
+         Built from the same chartHours() the totals above use, so the two cannot drift apart. -->
+    <button class="charthead" id="xChartBtn" aria-expanded="false" aria-controls="xChart">
+      <span>📋 Minutes to decimal hours — the chart</span><span class="chev">▾</span>
+    </button>
+    <div class="chartwrap hide" id="xChart"></div>
+    </div>
+  </section>
+
+  <!-- ================= YEAR TO DATE ================= -->
+  <section class="card col" id="ytd">
+    <h2>Year to date <span id="ytdYear"></span><span class="colsum" id="sum_ytd"></span></h2>
+    <div class="colbody">
+    <div class="tgrid">
+      <div class="tile"><div class="k">Earned this year</div><div class="big" id="yGross">$0.00</div>
+        <div class="det" id="yDet">0.00 h</div></div>
+      <div class="tile"><div class="k">Overtime this year</div><div class="big" id="yOt">0.00 h</div>
+        <div class="det" id="yOtDet"></div></div>
+      <div class="tile"><div class="k">Projected by Dec 31</div><div class="big" id="yProj">—</div>
+        <div class="det" id="yProjDet"></div></div>
+    </div>
+    <div class="otbar" id="yCapWrap">
+      <div class="lbl"><span id="yCapLbl">Tax-free overtime premium used</span><span id="yCapNum"></span></div>
+      <div class="bar"><i class="reg" id="yCapReg"></i><i class="otf" id="yCapOver"></i></div>
+      <div class="p80note" id="yCapNote"></div>
+    </div>
+    <div class="planrow" style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
+      <span>Overtime I plan to work each week:</span>
+      <input type="number" id="yCommit" min="0" max="80" step="0.5" value="0"> <span>h</span>
+    </div>
+
+    <div class="planrow" style="margin-top:4px">
+      <button class="mini" id="yBaseBtn">✎ Started mid-year? Set your year-so-far</button>
+      <span class="eta" id="yBaseSummary"></span>
+    </div>
+    <div class="editor hide" id="yBase">
+      <div class="etitle">Your year before this app</div>
+      <div class="note" style="margin-bottom:12px">Copy the YTD line off your latest paystub. Earnings is
+      enough by itself; add hours and overtime if the stub shows them — that makes the overtime
+      tax-break cap accurate too.</div>
+      <div class="egrid">
+        <div class="f"><label for="yBaseGross">YTD earnings before tracking here</label>
+          <div class="prefixed"><span>$</span><input type="number" id="yBaseGross" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div></div>
+        <div class="f"><label for="yBaseHours">Hours so far (optional)</label>
+          <input type="number" id="yBaseHours" min="0" step="0.25" placeholder="unknown"></div>
+        <div class="f"><label for="yBaseOt">Of which overtime h (optional)</label>
+          <input type="number" id="yBaseOt" min="0" step="0.25" placeholder="unknown"></div>
+      </div>
+      <div class="eerr hide" id="yBaseErr"></div>
+      <div class="eactions">
+        <button class="btn go" id="yBaseSave">Save starting point</button>
+        <button class="btn ghost" id="yBaseCancel">Cancel</button>
+      </div>
+    </div>
     </div>
   </section>
 
@@ -1422,7 +1475,8 @@ var state = load();
 
 function load(){
   var base = { cfg: Object.assign({}, DEFAULTS), sessions: [], activeStart: null, activeAdj: null,
-               unit: 'sec', planOn: false, plannedHours: 8, sound: true, configured: false };
+               unit: 'sec', planOn: false, plannedHours: 8, sound: true, configured: false,
+               autoOn: false, autoAt: '', autoDays: null, autoLast: '' };
   try {
     var raw = localStorage.getItem(KEY);
     if (raw){
@@ -1576,6 +1630,64 @@ function resumeShift(){
       + (stoodDown ? ' Auto-stop was already past its target, so it is off.' : ''));
 }
 
+/* ---- auto clock-in ----
+   A home-screen app cannot wake itself; nothing runs while it is closed. So this works the
+   same way auto-stop already does, in reverse: the moment the app is next open, the shift
+   is started *at* the scheduled time rather than at the time you happened to look. Open the
+   app at 2:47 with a 2:00 start and the clock reads 47 minutes, not zero.
+
+   Two guards keep it honest. It will not start a shift the scheduled day is already past —
+   if more than a working day's worth of time has gone by, that shift is over, not starting.
+   And it stands down if a shift is already logged across the scheduled start, because then
+   the day was entered by hand and there is nothing to fill in. It fires once per day either
+   way, and it always says so with an undo. */
+function autoInCap(){
+  var usual = state.plannedHours > 0 ? state.plannedHours : 8;
+  return Math.min(12, Math.max(4, usual)) * HOUR_MS;
+}
+function autoDayOn(d){
+  var days = state.autoDays;
+  if (!days || days.length !== 7) return true;        // unset means every day
+  return !!days[d];
+}
+function autoInAt(now){
+  var m = hhmmToMin(state.autoAt);
+  if (m == null) return null;
+  var d0 = midnight(now);
+  return +d0 + m * 60000;
+}
+var autoNotice = '';
+function checkAutoIn(now){
+  if (!state.autoOn || state.activeStart) return false;
+  var at = autoInAt(now);
+  if (at == null || now < at) return false;
+  var d = new Date(at);
+  var key = dkey(d.getFullYear(), d.getMonth(), d.getDate());
+  if (state.autoLast === key) return false;           // today is already dealt with
+  if (!autoDayOn(d.getDay())){ state.autoLast = key; save(); return false; }
+  if (now - at > autoInCap()){ state.autoLast = key; save(); return false; }
+  for (var i = 0; i < state.sessions.length; i++){
+    var s = state.sessions[i];
+    if (s.end > at && s.start < now){ state.autoLast = key; save(); return false; }
+  }
+  state.activeStart = at;
+  state.activeAdj = null;
+  state.autoLast = key;
+  tickWhileActive = now;
+  var late = now - at;
+  autoNotice = late > 60000
+    ? 'Auto clock-in — the clock was started at ' + ftime(at) + ', so the '
+      + hhmmss(late) + ' before you opened the app is counted.'
+    : 'Auto clock-in — on the clock since ' + ftime(at) + '.';
+  save(); chime(true);
+  return true;
+}
+function undoAutoIn(){
+  state.activeStart = null; state.activeAdj = null; tickWhileActive = 0;
+  autoNotice = '';                                    // autoLast stays, so it will not fire again today
+  save(); render(); toast('Auto clock-in undone — you are clocked out.');
+}
+
 /* The shift running right now, as a session the ledger can price. Built in one place so
    a per-shift adjustment — a reopened holiday or differential shift — cannot be carried
    by one caller and quietly dropped by another. */
@@ -1597,6 +1709,9 @@ var lastMoney = '';
 var tickWhileActive = 0;
 function render(){
   var cfg = state.cfg, now = Date.now();
+  // auto clock-in runs first: if it starts a shift, everything below draws it straight away,
+  // and auto-stop gets a chance to end it in the same pass when both times are behind us.
+  if (checkAutoIn(now)) syncControls();
   var active = state.activeStart;
 
   // auto-stop fires before anything is drawn, so the frozen numbers are the honest ones
@@ -1735,6 +1850,24 @@ function render(){
       'Put the ' + ftime(re.start) + ' shift back on the clock? It ended ' + ftime(re.end)
       + ', so the <b>' + hhmmss(now - re.end) + '</b> since then counts as worked and the clock keeps running.';
   }
+
+  /* The notice stays up until it is dismissed or the shift ends, so a clock that started
+     itself is never something you have to go looking for an explanation of. */
+  show('autoConfirm', !!autoNotice && !!active);
+  if (autoNotice && active) document.getElementById('autoTxt').textContent = autoNotice;
+  if (!active) autoNotice = '';
+
+  var aeta = document.getElementById('autoEta');
+  if (state.autoOn && !active){
+    // `ad`, not `day` — render already has a `day` holding the day's totals, and var
+    // hoisting would quietly hand it a Date.
+    var nx = autoInAt(now), ad = new Date(nx == null ? now : nx);
+    var kk = nx == null ? '' : dkey(ad.getFullYear(), ad.getMonth(), ad.getDate());
+    if (nx == null) aeta.textContent = '';
+    else if (now < nx && autoDayOn(ad.getDay())) aeta.textContent = '→ starts in ' + countdown(nx - now);
+    else if (state.autoLast === kk) aeta.textContent = '→ next ' + ftime(nx) + ' tomorrow';
+    else aeta.textContent = '';
+  } else aeta.textContent = active && state.autoOn ? '→ on the clock' : '';
 
   var eta = document.getElementById('planEta');
   if (active && state.planOn){
@@ -2133,7 +2266,7 @@ function applyStage(){
 /* ============================ collapsible sections ============================
    Every section folds independently; nothing opens anything else. All collapsed by
    default — the header line carries a live summary so a folded section still reads. */
-var COLS = ['hero', 'totals', 'progress', 'period', 'ytd', 'log', 'extra', 'calc'];
+var COLS = ['hero', 'totals', 'period', 'progress', 'log', 'extra', 'ytd', 'calc'];
 function uiOpen(){ return state.ui || (state.ui = { open: {} }); }
 function applyCols(){
   var o = uiOpen().open || {};
@@ -2410,6 +2543,40 @@ function renderExtra(period, active, now){
 
   el('sum_extra').textContent = tot >= 0.005 ? tot.toFixed(2) + ' h extra' : '';
 }
+
+/* The printed minutes→decimal chart, generated rather than typed out. Every figure comes
+   from chartHours(), the same function that rounds the totals above and that matched the
+   payroll slip entry for entry — so what the chart says and what the app pays can never
+   disagree. Sixty rows in four columns of fifteen, quarter hours marked because those are
+   the ones anyone actually looks up. */
+function buildChart(){
+  var box = el('xChart');
+  if (!box || box.dataset.built) return;
+  var html = '<div class="charthd"><span>Min · Dec</span><span>Min · Dec</span>'
+           + '<span>Min · Dec</span><span>Min · Dec</span></div><div class="chartgrid">';
+  for (var c = 0; c < 4; c++){
+    html += '<div class="chartcol">';
+    for (var i = 1; i <= 15; i++){
+      var m = c * 15 + i;
+      html += '<div class="chartrow' + (m % 15 === 0 ? ' q' : '') + '">'
+            + '<span class="m">' + m + '</span>'
+            + '<span class="h">' + chartHours(m / 60).toFixed(2) + '</span></div>';
+    }
+    html += '</div>';
+  }
+  html += '</div><div class="note" style="margin-top:11px">Minutes divided by 60, rounded to two '
+        + 'places — 60 min = 1.00 h. On a slip each entry is rounded on its own and the rounded '
+        + 'figures are added, which is exactly how the totals above are worked out.</div>';
+  box.innerHTML = html;
+  box.dataset.built = '1';
+}
+function applyChart(){
+  var open = !!uiOpen().chart, box = el('xChart'), btn = el('xChartBtn');
+  if (open) buildChart();
+  box.classList.toggle('hide', !open);
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+function toggleChart(){ var u = uiOpen(); u.chart = !u.chart; save(); applyChart(); }
 
 /* ============================ the calendar ============================
    Real dates off the system clock, so the grid is correct this year and every year
@@ -3102,7 +3269,8 @@ function backup(){
   var payload = JSON.stringify({
     app: 'pay-clock', version: 1, savedAt: new Date().toISOString(),
     cfg: state.cfg, sessions: state.sessions, configured: state.configured, theme: state.theme, net: state.net, ui: state.ui,
-    unit: state.unit, planOn: state.planOn, plannedHours: state.plannedHours, sound: state.sound, calc: state.calc, calCal: state.calCal, activeAdj: state.activeAdj
+    unit: state.unit, planOn: state.planOn, plannedHours: state.plannedHours, sound: state.sound, calc: state.calc, calCal: state.calCal, activeAdj: state.activeAdj,
+    autoOn: state.autoOn, autoAt: state.autoAt, autoDays: state.autoDays
   }, null, 2);
   var name = 'pay-clock-backup-' + dateInput(new Date()) + '.json';
   if (download(name, payload, 'application/json')) toast('Backup saved — ' + state.sessions.length + ' shifts.');
@@ -3127,6 +3295,13 @@ function restoreFrom(text){
   state.unit = d.unit || 'sec';
   state.planOn = !!d.planOn;
   state.plannedHours = d.plannedHours || 8;
+  state.autoOn = !!d.autoOn;
+  state.autoAt = d.autoAt || '';
+  state.autoDays = Array.isArray(d.autoDays) && d.autoDays.length === 7 ? d.autoDays : null;
+  /* A restored backup must not retro-start today's shift from a file, so today counts
+     as already handled; auto clock-in picks up again tomorrow. */
+  var td = new Date();
+  state.autoLast = dkey(td.getFullYear(), td.getMonth(), td.getDate());
   state.sound = d.sound !== false;
   if (d.theme) state.theme = d.theme;
   if (d.net) state.net = d.net;
@@ -3134,7 +3309,7 @@ function restoreFrom(text){
   if (d.calc) state.calc = d.calc;
   if (d.calCal) state.calCal = d.calCal;
   state.activeStart = null; state.activeAdj = null;   // never restore a running clock from a file
-  save(); applyTheme(); renderThemeControls(); applyCols(); syncControls(); applyStage(); lastMoney = ''; render();
+  save(); applyTheme(); renderThemeControls(); applyCols(); applyChart(); syncControls(); applyStage(); lastMoney = ''; render();
   toast('Restored ' + clean.length + ' shifts at ' + money(state.cfg.rate) + '/hr.');
 }
 
@@ -3145,6 +3320,33 @@ document.getElementById('seg').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
   state.unit = b.dataset.u; lastMoney = ''; save(); syncControls(); render();
 });
+
+/* Switching auto clock-in on, or moving its time, never reaches back into a day that is
+   already underway — a time set at eight in the evening is for tomorrow morning, not an
+   invitation to backdate six hours nobody worked. Set it before the hour and it still
+   fires today, because then the time is genuinely ahead. */
+function armAuto(){
+  var now = Date.now(), at = autoInAt(now);
+  if (state.autoOn && at != null && now >= at){
+    var d = new Date(at);
+    state.autoLast = dkey(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+}
+document.getElementById('autoOn').onchange = function(e){
+  state.autoOn = e.target.checked; armAuto(); save(); syncControls(); render();
+};
+document.getElementById('autoAt').onchange = function(e){
+  state.autoAt = hhmmToMin(e.target.value) == null ? '' : e.target.value;
+  armAuto(); save(); syncControls(); render();
+};
+document.getElementById('autoDays').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  if (!state.autoDays || state.autoDays.length !== 7) state.autoDays = [1,1,1,1,1,1,1].map(Boolean);
+  var i = +b.dataset.d;
+  state.autoDays[i] = !state.autoDays[i];
+  save(); syncControls(); render();
+});
+document.getElementById('autoUndo').onclick = function(){ undoAutoIn(); };
 
 document.getElementById('planOn').onchange = function(e){ state.planOn = e.target.checked; save(); render(); };
 document.getElementById('planHrs').onchange = function(e){
@@ -3195,6 +3397,10 @@ document.getElementById('logBody').addEventListener('click', function(e){
     pendingDelete = null; save(); render(); toast('Shift deleted.');
   }
   if (b.dataset.delNo){ pendingDelete = null; render(); }
+});
+document.getElementById('xChartBtn').addEventListener('click', function(e){
+  e.stopPropagation();                                // the section header is not what was tapped
+  toggleChart();
 });
 COLS.forEach(function(id){
   if (id === 'hero') return;                          // hero folds via its chevron
@@ -3637,6 +3843,13 @@ function syncControls(){
     .join(' &nbsp;·&nbsp; ') : '';
   document.getElementById('planOn').checked = !!state.planOn;
   document.getElementById('planHrs').value = state.plannedHours;
+  document.getElementById('autoOn').checked = !!state.autoOn;
+  var aA = document.getElementById('autoAt');
+  if (document.activeElement !== aA) aA.value = state.autoAt || '';
+  show('autoDays', !!state.autoOn);
+  [].forEach.call(document.querySelectorAll('#autoDays button'), function(b){
+    b.classList.toggle('on', autoDayOn(+b.dataset.d));
+  });
   [].forEach.call(document.querySelectorAll('#seg button'), function(b){
     b.classList.toggle('on', b.dataset.u === state.unit);
   });
@@ -3672,6 +3885,7 @@ function syncCalc(){
 applyTheme();
 renderThemeControls();
 applyCols();
+applyChart();
 show('noStore', !STORAGE_OK);
 syncControls();
 applyStage();
