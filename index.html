@@ -861,6 +861,11 @@
         <div class="f"><label>Period start anchor</label><input type="date" id="cAnchor"></div>
         <div class="f"><label>Period length (days)</label><input type="number" id="cLen" min="1" step="1"></div>
         <div class="f"><label>Payday = period end + (days)</label><input type="number" id="cPayOff" min="0" step="1"></div>
+        <div class="f"><label>Time format</label>
+          <select id="cClock24">
+            <option value="0">12-hour — 2:30 PM</option>
+            <option value="1">24-hour — 14:30</option>
+          </select></div>
         <div class="f"><label>Sound</label>
           <select id="cSound"><option value="1">On</option><option value="0">Off</option></select></div>
         <div class="f"><label>Unpaid lunch per shift</label>
@@ -951,7 +956,8 @@ var DEFAULTS = {
   weekStartDay: 0,           // 0 = Sunday
   periodAnchor: '2026-01-04',// any Sunday; setup replaces it with your real period start
   periodLengthDays: 14,
-  payDateOffsetDays: 13      // payday = last day of the period + this many days
+  payDateOffsetDays: 13,     // payday = last day of the period + this many days
+  clock24: false             // print times as 14:30 rather than 2:30 PM
 };
 
 function ymd(s){ var p = String(s).split('-').map(Number); return new Date(p[0], p[1]-1, p[2]); }
@@ -1362,8 +1368,11 @@ var DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function fdate(d){ return DOW[d.getDay()] + ' ' + MON[d.getMonth()] + ' ' + d.getDate(); }
 function fdateY(d){ return fdate(d) + ', ' + d.getFullYear(); }
+/* Every clock time the app prints comes through here, so the 12/24-hour choice is made
+   once. 24-hour pads the leading zero — 07:00, not 7:00 — the way a duty roster reads. */
 function ftime(ms){
   var d = new Date(ms), h = d.getHours(), m = d.getMinutes();
+  if (state.cfg.clock24) return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
   var ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
   return h + ':' + String(m).padStart(2, '0') + ' ' + ap;
 }
@@ -2902,7 +2911,11 @@ function exportCsv(){
   state.sessions.slice().sort(function(a, b){ return a.start - b.start; }).forEach(function(s){
     var t = sumSession(ledger.parts, s.id), p = periodInfo(s.start, cfg);
     lines.push([p.start.toDateString(), p.lastDay.toDateString(), p.payDate.toDateString(),
-                new Date(s.start).toDateString(), new Date(s.start).toLocaleString(), new Date(s.end).toLocaleString(),
+                // Clock times follow the 12/24-hour setting, so an exported sheet reads
+                // the same way the app does rather than however the machine's locale does.
+                new Date(s.start).toDateString(),
+                new Date(s.start).toDateString() + ' ' + ftime(s.start),
+                new Date(s.end).toDateString() + ' ' + ftime(s.end),
                 t.hours.toFixed(4), t.regHours.toFixed(4), t.otHours.toFixed(4), t.gross.toFixed(2)]
                .map(function(v){ return '"' + String(v).replace(/"/g, '""') + '"'; }).join(','));
   });
@@ -3422,6 +3435,10 @@ function offerUndo(was, key){
   offerUndo.t = setTimeout(function(){ show('cfgUndo', false); }, 20000);
 }
 document.getElementById('cSound').onchange = function(e){ state.sound = e.target.value === '1'; save(); };
+document.getElementById('cClock24').onchange = function(e){
+  state.cfg.clock24 = e.target.value === '1';
+  save(); lastMoney = ''; render(); syncCalc();
+};
 
 document.getElementById('cfgUndoBtn').onclick = function(){
   if (!cfgUndo) return;
@@ -3445,6 +3462,7 @@ document.getElementById('restoreFile').onchange = function(e){
 function syncControls(){
   CFG_FIELDS.forEach(function(f){ document.getElementById(f[0]).value = state.cfg[f[1]]; });
   document.getElementById('cSound').value = state.sound ? '1' : '0';
+  document.getElementById('cClock24').value = state.cfg.clock24 ? '1' : '0';
   document.getElementById('cYtd').value = netCfg().ytdShow === false ? '0' : '1';
   document.getElementById('cLunch').value = String(state.cfg.lunchMins || 0);
   var xEl = document.getElementById('cLunchExtra');
