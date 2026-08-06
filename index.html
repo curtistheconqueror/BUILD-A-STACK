@@ -375,7 +375,13 @@
     color:var(--ink);padding:11px 20px;border-radius:12px;font-size:13.6px;font-weight:600;opacity:0;pointer-events:none;transition:.3s;z-index:20;
     box-shadow:0 10px 40px rgba(0,0,0,.6);max-width:88vw;text-align:center}
   .toast.show{opacity:1;transform:translate(-50%,0)}
-  @media(max-width:560px){.wrap{padding:18px 14px 80px}.card{padding:15px 14px}.timer{font-size:26px}th,td{font-size:12.3px}
+  @media(max-width:560px){
+    /* Keep the safe-area insets the wider layout already respects — a flat pixel padding
+       here threw them away on exactly the screens that have a notch, so the title sat
+       under the status bar. */
+    .wrap{padding:calc(18px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right))
+                 calc(80px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left))}
+    .card{padding:15px 14px}.timer{font-size:26px}th,td{font-size:12.3px}
     /* On a phone the OT column is the first thing to go — the row already turns amber
        when it has overtime, and the period's OT total still shows in the footer. */
     .otcol{display:none}td{padding-right:5px}
