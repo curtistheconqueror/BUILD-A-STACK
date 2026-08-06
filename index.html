@@ -1222,6 +1222,16 @@ function extraTime(startMs, endMs, schedStart, schedEnd){
   var after = Math.max(0, endMs - e) / HOUR_MS;
   return { before: before, after: after, total: before + after };
 }
+/* A payroll conversion chart is minutes ÷ 60 to two decimals, and a slip is added up from
+   the figures written on it — so each entry is rounded before anything is summed. Rounding
+   an exact total instead lands a hundredth away: two 47-minute entries are 0.78 + 0.78 =
+   1.56 on the slip, but 1.57 if you add the minutes first. The slip is what payroll keys
+   in, so the slip's arithmetic is the one to follow. Whole minutes first, the way a punch
+   clock stamps them. */
+function chartHours(hours){
+  return Math.round(Math.round(hours * 60) / 60 * 100) / 100;
+}
+
 function hhmmToMin(s){
   var m = /^(\d{1,2}):(\d{2})$/.exec(String(s || ''));
   if (!m) return null;
@@ -2338,16 +2348,19 @@ function renderExtra(period, active, now){
   if (active && active < period.endMs) rows.push({ id: '__active', start: active, end: now, live: true });
   rows.sort(function(a, b){ return a.start - b.start; });
 
-  var tb = 0, ta = 0, html = '';
+  var tb = 0, ta = 0, tmin = 0, html = '';
   rows.forEach(function(s){
     var x = extraTime(s.start, s.end, ss, se);
-    tb += x.before; ta += x.after;
-    if (x.total < 0.0001) return;                 // a shift inside its hours has nothing to claim
+    // Rounded per entry, the way the figure is written on the slip, and summed from there.
+    var bH = chartHours(x.before), aH = chartHours(x.after);
+    tb += bH; ta += aH;
+    tmin += Math.round(x.before * 60) + Math.round(x.after * 60);
+    if (bH < 0.005 && aH < 0.005) return;         // a shift inside its hours has nothing to claim
     html += '<div class="xrow"><span class="xd">' + fdate(new Date(s.start))
       + (s.live ? ' <span class="running">running</span>' : '') + '</span>'
       + '<span class="xt">' + ftime(s.start) + ' – ' + (s.live ? 'now' : ftime(s.end)) + '</span>'
-      + '<b class="xb">' + (x.before > 0.0001 ? x.before.toFixed(2) : '—') + '</b>'
-      + '<b class="xa">' + (x.after > 0.0001 ? x.after.toFixed(2) : '—') + '</b></div>';
+      + '<b class="xb">' + (bH >= 0.005 ? bH.toFixed(2) : '—') + '</b>'
+      + '<b class="xa">' + (aH >= 0.005 ? aH.toFixed(2) : '—') + '</b></div>';
   });
 
   var tot = tb + ta;
@@ -2359,12 +2372,13 @@ function renderExtra(period, active, now){
     + '<div class="qline"><span>Before the shift</span><b>' + tb.toFixed(2) + ' h</b></div>'
     + '<div class="qline"><span>After the shift</span><b>' + ta.toFixed(2) + ' h</b></div>'
     + '<div class="qline tot"><span>Extra time this period</span><b>' + tot.toFixed(2) + ' h</b></div>'
-    + (tot > 0.0001 ? '<div class="note" style="margin-top:8px">That is '
-        + Math.round(tot * 60) + ' minutes — worth ' + money(tot * cfg.rate * (cfg.otMultiplier || 1.5))
+    + (tot >= 0.005 ? '<div class="note" style="margin-top:8px">That is ' + tmin
+        + ' minutes, converted the way the chart does — each entry to two decimals, then added. '
+        + 'Worth ' + money(tot * cfg.rate * (cfg.otMultiplier || 1.5))
         + ' at the overtime rate, or ' + money(tot * cfg.rate) + ' straight.</div>' : '')
     + '</div>';
 
-  el('sum_extra').textContent = tot > 0.0001 ? tot.toFixed(2) + ' h extra' : '';
+  el('sum_extra').textContent = tot >= 0.005 ? tot.toFixed(2) + ' h extra' : '';
 }
 
 /* ============================ the calendar ============================
