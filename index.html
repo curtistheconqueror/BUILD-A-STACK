@@ -30,7 +30,10 @@
     border:1px solid var(--border);border-radius:10px;color:var(--muted);padding:6px 10px;
     font-size:12px;font-weight:700;text-decoration:none}
   :root{--bg0:#05080f;--bg1:#0a1020;--ink:#eaf1ff;--muted:#8ea0c4;--acc:#35d0e0;--acc2:#b78cff;--acc3:#ff6fb5;
-    --ok:#51e08a;--bad:#ff5d6c;--warn:#ffb454;--glass:rgba(22,30,50,.55);--border:rgba(130,155,200,.22);}
+    --ok:#51e08a;--bad:#ff5d6c;--warn:#ffb454;--glass:rgba(22,30,50,.55);--border:rgba(130,155,200,.22);
+    /* Calendar defaults: black paper, white rules, green once a day is filled in.
+       Overridable in Settings like every other colour. */
+    --cal-bg:#000000;--cal-grid:#ffffff;--cal-fill:#3ddc84;}
   *{box-sizing:border-box}
   .hide{display:none !important}
   /* Font is chosen in Settings — see --font on html,body below. All system stacks,
@@ -157,6 +160,41 @@
     background:rgba(81,224,138,.07);font-size:13px;line-height:1.7}
   .qbank b{color:var(--ok);font-variant-numeric:tabular-nums}
   .qbank .sub{color:var(--muted);font-size:12.4px;display:block;margin-top:3px}
+  /* ---- calendar ---- */
+  .calbar{display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-top:11px}
+  .calbar .seg{margin:0}
+  .calscroll{margin-top:12px;max-height:min(64vh,620px);overflow-y:auto;-webkit-overflow-scrolling:touch;
+    background:var(--cal-bg);border:1px solid var(--cal-grid);border-radius:12px}
+  .calmon{padding:13px 9px 9px}
+  .calmon h4{margin:0 0 10px;text-align:center;font-size:13.6px;letter-spacing:.6px;color:var(--ink)}
+  .caldow{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:4px}
+  .caldow span{text-align:center;font-size:10px;letter-spacing:.4px;color:var(--muted)}
+  .calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--cal-grid)}
+  .calcell{position:relative;background:var(--cal-bg);min-height:58px;display:flex;flex-direction:column;
+    align-items:stretch;padding:3px 1px 2px;overflow:hidden}
+  .calcell.pad{pointer-events:none}
+  .calcell.today{box-shadow:inset 0 0 0 2px var(--acc)}
+  .calcell .dnum{font-size:10px;line-height:1.1;text-align:center;color:var(--muted)}
+  .calcell.pstart .dnum{color:var(--acc);font-weight:800}
+  /* Typed as input[type=number] so this beats the app-wide field styling declared
+     further down — a calendar cell is paper, not a form box. */
+  .calcell input[type=number]{flex:1;width:100%;min-width:0;min-height:32px;border:0;border-radius:0;
+    padding:0;box-shadow:none;background:transparent;color:var(--cal-fill);text-align:center;
+    font-family:inherit;font-size:13px;font-weight:800;-moz-appearance:textfield}
+  .calcell input[type=number]::-webkit-outer-spin-button,
+  .calcell input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .calcell input[type=number]:focus{outline:1px solid var(--acc);outline-offset:-1px}
+  /* Money sits over the hours you typed, and steps aside the moment you tap back in. */
+  .calval{position:absolute;left:0;right:0;bottom:2px;top:14px;display:flex;align-items:center;
+    justify-content:center;background:var(--cal-bg);color:var(--cal-fill);font-size:11.5px;
+    font-weight:800;pointer-events:none;padding:0 1px}
+  .calcell:focus-within .calval{display:none}
+  .calpay{position:absolute;left:0;right:0;bottom:0;font-size:8.5px;line-height:1.35;text-align:center;
+    color:var(--cal-bg);background:var(--cal-fill);font-weight:800;pointer-events:none}
+  .calsums{margin-top:12px}
+  .calsum{display:flex;justify-content:space-between;gap:10px;font-size:13px;line-height:1.85}
+  .calsum span{color:var(--muted)}
+  .calsum b{color:var(--ok);font-variant-numeric:tabular-nums}
   .qsum{margin-top:13px;border-top:1px solid var(--border);padding-top:11px}
   .qline{display:flex;justify-content:space-between;gap:12px;font-size:13.2px;line-height:1.9}
   .qline span:first-child{color:var(--muted)}
@@ -315,6 +353,8 @@
     .seg button{min-height:44px;padding:0 22px}
     .emode button,.schoice button{min-height:44px}
     input[type=number],input[type=text],input[type=date],input[type=time],select{min-height:44px}
+    /* A calendar cell is the tap target, and it clears 44px on its own. */
+    .calcell input[type=number]{min-height:34px}
     .swrap input{width:22px;height:22px}
     .sw input[type=color]{width:44px;height:44px}
     .paymode button{min-height:44px;padding:0 18px}
@@ -702,6 +742,27 @@
       <span id="qNetBasis"></span>
       <button class="mini" id="qEditDed" style="margin-top:8px">Enter my real deductions</button>
     </div>
+
+    <div class="ngroup">
+      <b>Calendar</b>
+      <div class="note" style="margin-bottom:9px">Another way to the same answer — fill in the days you work
+      and see what each payday comes to. Keeps its own total, separate from the hours above.</div>
+      <label class="swrap"><input type="checkbox" id="qCalOn"> Show the calendar</label>
+
+      <div class="hide" id="qCalBody">
+        <div class="calbar">
+          <div class="seg" id="qCalShow"><button data-s="money" class="on">Show $</button><button data-s="hours">Show hours</button></div>
+          <div class="seg" id="qCalOt"><button data-s="accrue" class="on">My real rule</button><button data-s="daily">Past 8 h a day</button></div>
+        </div>
+        <div class="calbar">
+          <button class="mini" id="qCalToday">Jump to today</button>
+          <button class="mini danger" id="qCalClear">Clear the calendar</button>
+        </div>
+        <div class="note" id="qCalRule" style="margin-top:9px"></div>
+        <div class="calscroll" id="qCalScroll"></div>
+        <div class="calsums" id="qCalSums"></div>
+      </div>
+    </div>
     </div>
   </section>
 
@@ -918,6 +979,48 @@ function paidSpans(s, cfg){
 function lunchWindow(startMs, cfg){
   if (!(cfg.lunchMins || 0)) return null;
   return { start: startMs + LUNCH_AFTER, end: startMs + LUNCH_AFTER + cfg.lunchMins * 60000 };
+}
+
+/* Price a set of calendar days. `days` is [{ymd:'YYYY-MM-DD', hours}].
+     'accrue'  each day becomes a session and the real ledger prices it, so week and
+               pay-period thresholds, boundaries and rate history all land exactly as
+               the clock would have them.
+     'daily'   anything past `after` hours in a single day bills at overtime straight
+               away, with no accrual at all.
+   Unpaid lunch is deliberately not applied: you typed the hours you expect to be paid
+   for, and a calculator that quietly pays less than what you typed is a puzzle. */
+function calendarPay(days, cfg, style, after){
+  var flat = Object.assign({}, cfg, { lunchMins: 0 });
+  var byDay = {}, byPeriod = {};
+  var list = (days || []).filter(function(d){ return d.hours > 0; })
+                         .sort(function(a, b){ return a.ymd < b.ymd ? -1 : 1; });
+
+  if (style === 'daily'){
+    var lim = after > 0 ? after : 8;
+    list.forEach(function(d){
+      var reg = Math.min(lim, d.hours), ot = Math.max(0, d.hours - lim);
+      var r = rateAt(+ymd(d.ymd), flat);
+      byDay[d.ymd] = { hours: d.hours, regHours: reg, otHours: ot,
+                       gross: reg * r + ot * r * flat.otMultiplier };
+    });
+  } else {
+    var led = buildLedger(list.map(function(d){
+      var m = +ymd(d.ymd);
+      return { id: 'c' + d.ymd, start: m, end: m + d.hours * HOUR_MS };
+    }), flat);
+    list.forEach(function(d){
+      var t = sumSession(led.parts, 'c' + d.ymd);
+      byDay[d.ymd] = { hours: t.hours, regHours: t.regHours, otHours: t.otHours, gross: t.gross };
+    });
+  }
+
+  list.forEach(function(d){
+    var p = periodInfo(+ymd(d.ymd), cfg), k = 'p' + p.index, b = byDay[d.ymd];
+    if (!byPeriod[k]) byPeriod[k] = { index: p.index, start: p.start, lastDay: p.lastDay,
+                                      payDate: p.payDate, hours: 0, otHours: 0, gross: 0 };
+    byPeriod[k].hours += b.hours; byPeriod[k].otHours += b.otHours; byPeriod[k].gross += b.gross;
+  });
+  return { byDay: byDay, byPeriod: byPeriod };
 }
 
 function buildLedger(sessions, cfg){
@@ -1990,6 +2093,177 @@ function renderCalc(){
        : c.payday ? '.' : ' — your next payday. Change it to price a different one.');
 }
 
+/* ============================ the calendar ============================
+   Real dates off the system clock, so the grid is correct this year and every year
+   after with nothing to maintain. Months stack in a scroller and more are added at
+   either end as you reach them, the way any calendar behaves. Structure is redrawn
+   only when the months change; the per-day figures repaint on every keystroke, and
+   the two are kept apart so typing is never interrupted. */
+var DOW_MIN = ['S','M','T','W','T','F','S'];
+var MONTHS_FULL = ['January','February','March','April','May','June',
+                   'July','August','September','October','November','December'];
+
+function calCfg(){
+  if (!state.calCal) state.calCal = { on: false, show: 'money', otStyle: 'accrue', dailyAfter: 8, hours: {} };
+  if (!state.calCal.hours) state.calCal.hours = {};
+  return state.calCal;
+}
+function dkey(y, m, d){
+  return y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+}
+function shiftMonth(y, m, n){ var d = new Date(y, m + n, 1); return { y: d.getFullYear(), m: d.getMonth() }; }
+
+var calMonths = [];           // rendered window, oldest first — view state, never persisted
+var CAL_SPAN = 4;             // months rendered up front; two fit on screen at a time
+
+function calDays(){
+  var h = calCfg().hours, out = [];
+  Object.keys(h).forEach(function(k){
+    var v = parseFloat(h[k]);
+    if (isFinite(v) && v > 0) out.push({ ymd: k, hours: v });
+  });
+  return out;
+}
+/* The calculator's own rate applies here too, and a rate typed for another job must
+   not be overridden by this job's raise history. */
+function calPayCfg(){
+  var c = calcState(), cfg = state.cfg;
+  return c.myRate ? cfg : Object.assign({}, cfg, { rate: calcRate(), rateHistory: [] });
+}
+function calPriced(){
+  var cc = calCfg();
+  return calendarPay(calDays(), calPayCfg(), cc.otStyle, cc.dailyAfter);
+}
+
+function buildMonth(y, m){
+  var cc = calCfg(), cfg = state.cfg, ws = cfg.weekStartDay || 0;
+  var wrap = document.createElement('div');
+  wrap.className = 'calmon';
+  wrap.dataset.mk = y + '-' + m;
+
+  var dow = '';
+  for (var i = 0; i < 7; i++) dow += '<span>' + DOW_MIN[(ws + i) % 7] + '</span>';
+
+  var first = new Date(y, m, 1), lead = ((first.getDay() - ws) % 7 + 7) % 7;
+  var last = new Date(y, m + 1, 0).getDate();
+  var todayKey = dkey(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+
+  var cells = '';
+  for (var p = 0; p < lead; p++) cells += '<div class="calcell pad"></div>';
+  for (var d = 1; d <= last; d++){
+    var k = dkey(y, m, d);
+    var per = periodInfo(+new Date(y, m, d), cfg);
+    var isStart = +per.start === +new Date(y, m, d);
+    cells += '<div class="calcell' + (k === todayKey ? ' today' : '') + (isStart ? ' pstart' : '')
+      + '" data-d="' + k + '">'
+      + '<span class="dnum">' + d + '</span>'
+      + '<input type="number" min="0" max="24" step="0.25" inputmode="decimal" data-d="' + k + '"'
+      + ' value="' + (cc.hours[k] || '') + '" aria-label="Hours worked ' + k + '">'
+      + '<span class="calval" data-v="' + k + '"></span>'
+      + '<span class="calpay" data-p="' + k + '"></span>'
+      + '</div>';
+  }
+  // Fill out the last week so the grid never shows a hole where its lines run through.
+  var trail = (7 - ((lead + last) % 7)) % 7;
+  for (var q = 0; q < trail; q++) cells += '<div class="calcell pad"></div>';
+
+  wrap.innerHTML = '<h4>' + MONTHS_FULL[m] + ' ' + y + '</h4>'
+    + '<div class="caldow">' + dow + '</div><div class="calgrid">' + cells + '</div>';
+  return wrap;
+}
+
+/* Structural redraw. Skipped while a cell has focus so a repaint can never yank the
+   field out from under you mid-entry. */
+function drawCal(force){
+  var sc = el('qCalScroll');
+  if (!force && sc.contains(document.activeElement)) return;
+  var fresh = !calMonths.length, keep = sc.scrollTop;
+  if (fresh){
+    // One month behind today, so opening the calendar starts already scrolled a little
+    // and going back is there if you want it — not forced on you the moment it opens.
+    var n = new Date();
+    for (var i = -1; i < CAL_SPAN - 1; i++) calMonths.push(shiftMonth(n.getFullYear(), n.getMonth(), i));
+  }
+  sc.innerHTML = '';
+  calMonths.forEach(function(mm){ sc.appendChild(buildMonth(mm.y, mm.m)); });
+  paintCal();
+  if (fresh) calJumpToday(); else sc.scrollTop = keep;
+}
+
+/* Figures only — never touches an input's value, so this is safe on every keystroke. */
+function paintCal(){
+  var cc = calCfg(), priced = calPriced(), sc = el('qCalScroll');
+  var payTo = {};        // payday -> the period total landing on it
+  Object.keys(priced.byPeriod).forEach(function(k){
+    var pr = priced.byPeriod[k];
+    payTo[dateInput(pr.payDate)] = pr;
+  });
+
+  [].forEach.call(sc.querySelectorAll('.calval'), function(sp){
+    var b = priced.byDay[sp.dataset.v];
+    sp.textContent = (b && cc.show === 'money') ? money(b.gross, 0) : '';
+    sp.style.display = (b && cc.show === 'money') ? '' : 'none';
+  });
+  [].forEach.call(sc.querySelectorAll('.calpay'), function(sp){
+    var pr = payTo[sp.dataset.p];
+    sp.textContent = pr ? money(pr.gross, 0) : '';
+    sp.style.display = pr ? '' : 'none';
+  });
+  [].forEach.call(sc.querySelectorAll('.calcell input'), function(inp){
+    var has = !!priced.byDay[inp.dataset.d];
+    inp.style.color = has ? 'var(--cal-fill)' : 'var(--muted)';
+  });
+
+  var keys = Object.keys(priced.byPeriod).sort(function(a, b){
+    return priced.byPeriod[a].index - priced.byPeriod[b].index;
+  });
+  el('qCalSums').innerHTML = keys.length
+    ? keys.map(function(k){
+        var pr = priced.byPeriod[k];
+        return '<div class="calsum"><span>' + fdate(pr.start) + ' – ' + fdate(pr.lastDay)
+             + ' &nbsp;·&nbsp; ' + pr.hours.toFixed(2) + ' h'
+             + (pr.otHours > 0.004 ? ' (' + pr.otHours.toFixed(2) + ' OT)' : '')
+             + ' &nbsp;·&nbsp; paid ' + fdateY(pr.payDate) + '</span><b>' + money(pr.gross) + '</b></div>';
+      }).join('')
+    : '<div class="note">Type hours into any day and its pay period totals up here.</div>';
+
+  el('qCalRule').textContent = cc.otStyle === 'daily'
+    ? 'Anything past ' + (cc.dailyAfter || 8) + ' h in a day counts as overtime right away.'
+    : 'Overtime builds the way it really does — after ' + otThresholdOf(state.cfg) + ' h '
+      + (state.cfg.otMode === 'weekly' ? 'in a week' : 'in a pay period') + '.';
+}
+
+/* More months at either end as you reach them. Prepending shifts everything down, so
+   the scroll position is corrected by exactly the height that was added. */
+function calScrolled(){
+  var sc = el('qCalScroll');
+  if (sc.scrollTop + sc.clientHeight > sc.scrollHeight - 240){
+    var lastM = calMonths[calMonths.length - 1];
+    calMonths.push(shiftMonth(lastM.y, lastM.m, 1), shiftMonth(lastM.y, lastM.m, 2));
+    var addAfter = document.createDocumentFragment();
+    calMonths.slice(-2).forEach(function(mm){ addAfter.appendChild(buildMonth(mm.y, mm.m)); });
+    sc.appendChild(addAfter); paintCal();
+  } else if (sc.scrollTop < 240){
+    var firstM = calMonths[0];
+    var pre = [shiftMonth(firstM.y, firstM.m, -2), shiftMonth(firstM.y, firstM.m, -1)];
+    calMonths = pre.concat(calMonths);
+    var before = sc.scrollHeight;
+    var frag = document.createDocumentFragment();
+    pre.forEach(function(mm){ frag.appendChild(buildMonth(mm.y, mm.m)); });
+    sc.insertBefore(frag, sc.firstChild);
+    sc.scrollTop += sc.scrollHeight - before;      // stay where you were looking
+    paintCal();
+  }
+}
+
+function calJumpToday(){
+  var sc = el('qCalScroll'), n = new Date(), mk = n.getFullYear() + '-' + n.getMonth();
+  var t = sc.querySelector('[data-mk="' + mk + '"]');
+  if (!t){ calMonths = []; drawCal(true); return; }        // drawCal jumps once it rebuilds
+  // Measured, not derived from offsetParent, so nesting inside the card cannot skew it.
+  sc.scrollTop += t.getBoundingClientRect().top - sc.getBoundingClientRect().top;
+}
+
 /* This calendar year's totals from an already-built ledger, live. */
 function ytdSums(ledger, now){
   var y = new Date(now).getFullYear();
@@ -2118,7 +2392,12 @@ var THEME_KEYS = [
   ['warn',     'Overtime',          '--warn'],
   ['bad',      'Clock-out / stop',  '--bad'],
   ['border',   'Card edges',        '--border'],
-  ['card',     'Card background',   '--glass']
+  ['card',     'Card background',   '--glass'],
+  // No preset defines these, so applyTheme falls through to the :root defaults
+  // (black paper, white rules, green fill) until a colour is actually picked.
+  ['calbg',    'Calendar paper',    '--cal-bg'],
+  ['calgrid',  'Calendar grid',     '--cal-grid'],
+  ['calfill',  'Calendar hours',    '--cal-fill']
 ];
 
 var PRESETS = {
@@ -2482,7 +2761,7 @@ function backup(){
   var payload = JSON.stringify({
     app: 'pay-clock', version: 1, savedAt: new Date().toISOString(),
     cfg: state.cfg, sessions: state.sessions, configured: state.configured, theme: state.theme, net: state.net, ui: state.ui,
-    unit: state.unit, planOn: state.planOn, plannedHours: state.plannedHours, sound: state.sound, calc: state.calc
+    unit: state.unit, planOn: state.planOn, plannedHours: state.plannedHours, sound: state.sound, calc: state.calc, calCal: state.calCal
   }, null, 2);
   var name = 'pay-clock-backup-' + dateInput(new Date()) + '.json';
   if (download(name, payload, 'application/json')) toast('Backup saved — ' + state.sessions.length + ' shifts.');
@@ -2512,6 +2791,7 @@ function restoreFrom(text){
   if (d.net) state.net = d.net;
   if (d.ui) state.ui = d.ui;
   if (d.calc) state.calc = d.calc;
+  if (d.calCal) state.calCal = d.calCal;
   state.activeStart = null;              // never restore a running clock from a file
   save(); applyTheme(); renderThemeControls(); applyCols(); syncControls(); applyStage(); lastMoney = ''; render();
   toast('Restored ' + clean.length + ' shifts at ' + money(state.cfg.rate) + '/hr.');
@@ -2620,6 +2900,49 @@ el('qPayMode').addEventListener('click', function(e){
 el('qNetNote').addEventListener('click', function(e){
   if (e.target.closest('#qEditDed')) openNetSetup();
 });
+
+/* ---- calendar ---- */
+el('qCalOn').onchange = function(e){
+  calCfg().on = e.target.checked;
+  show('qCalBody', e.target.checked);
+  save();
+  if (e.target.checked){ drawCal(true); calJumpToday(); }
+};
+el('qCalShow').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  calCfg().show = b.dataset.s;
+  [].forEach.call(el('qCalShow').querySelectorAll('button'), function(x){ x.classList.toggle('on', x === b); });
+  save(); paintCal();
+});
+el('qCalOt').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  calCfg().otStyle = b.dataset.s;
+  [].forEach.call(el('qCalOt').querySelectorAll('button'), function(x){ x.classList.toggle('on', x === b); });
+  save(); paintCal();
+});
+el('qCalScroll').addEventListener('input', function(e){
+  var inp = e.target.closest('input[data-d]'); if (!inp) return;
+  var v = parseFloat(inp.value), h = calCfg().hours;
+  if (isFinite(v) && v > 0) h[inp.dataset.d] = Math.min(24, v); else delete h[inp.dataset.d];
+  save(); paintCal();                       // figures only — the field you are in is left alone
+});
+el('qCalScroll').addEventListener('scroll', calScrolled);
+el('qCalToday').onclick = calJumpToday;
+el('qCalClear').onclick = function(){
+  if (!Object.keys(calCfg().hours).length){ toast('The calendar is already empty.'); return; }
+  if (el('qCalClear').dataset.armed){
+    calCfg().hours = {}; delete el('qCalClear').dataset.armed;
+    el('qCalClear').textContent = 'Clear the calendar';
+    save(); drawCal(true); toast('Calendar cleared.');
+    return;
+  }
+  el('qCalClear').dataset.armed = '1';
+  el('qCalClear').textContent = 'Tap again to clear every day';
+  setTimeout(function(){
+    delete el('qCalClear').dataset.armed;
+    el('qCalClear').textContent = 'Clear the calendar';
+  }, 5000);
+};
 
 document.getElementById('nCancel').onclick = function(){
   closeNetSetup();
@@ -2929,6 +3252,13 @@ function syncCalc(){
   [].forEach.call(document.querySelectorAll('#qPayMode button'), function(b){ b.classList.toggle('on', b.dataset.p === cc.payMode); });
   if (!el('qRows').contains(document.activeElement)) renderCalcRows();
   renderCalc();
+
+  var cal = calCfg();
+  el('qCalOn').checked = !!cal.on;
+  show('qCalBody', !!cal.on);
+  [].forEach.call(document.querySelectorAll('#qCalShow button'), function(b){ b.classList.toggle('on', b.dataset.s === cal.show); });
+  [].forEach.call(document.querySelectorAll('#qCalOt button'), function(b){ b.classList.toggle('on', b.dataset.s === cal.otStyle); });
+  if (cal.on) drawCal();
 }
 
 /* Repaint fast enough that per-second stepping looks alive. Every figure is derived from
