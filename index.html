@@ -307,6 +307,12 @@
   td.num{text-align:right;white-space:nowrap}
   tr.otrow td.num.g{color:var(--warn)}
   tr.live td{background:rgba(81,224,138,.06)}
+  /* Edit and delete stay pinned to the right edge. The log is wider than a phone, and
+     leaving them past the end meant sideways-swiping a table inside a scrolling page
+     to reach them — findable only if you already knew they were there. */
+  th.act,td.act{position:sticky;right:0;z-index:1;padding-right:0;text-align:right;
+    background:var(--card-solid,var(--bg0));box-shadow:-11px 0 13px -9px rgba(0,0,0,.55)}
+  tr.live td.act,tr.pending td.act{background:var(--card-solid,var(--bg0))}
   .running{color:var(--ok);font-weight:800;font-size:11.4px;letter-spacing:1.4px;text-transform:uppercase}
   .running::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;
     margin-right:6px;animation:pulse 1.4s ease-in-out infinite}
@@ -346,7 +352,12 @@
     color:var(--ink);padding:11px 20px;border-radius:12px;font-size:13.6px;font-weight:600;opacity:0;pointer-events:none;transition:.3s;z-index:20;
     box-shadow:0 10px 40px rgba(0,0,0,.6);max-width:88vw;text-align:center}
   .toast.show{opacity:1;transform:translate(-50%,0)}
-  @media(max-width:560px){.wrap{padding:18px 14px 80px}.card{padding:15px 14px}.timer{font-size:26px}th,td{font-size:12.3px}}
+  @media(max-width:560px){.wrap{padding:18px 14px 80px}.card{padding:15px 14px}.timer{font-size:26px}th,td{font-size:12.3px}
+    /* On a phone the OT column is the first thing to go — the row already turns amber
+       when it has overtime, and the period's OT total still shows in the footer. */
+    .otcol{display:none}td{padding-right:5px}
+    .dow{display:none}
+    .act .mini{padding:10px 9px;font-size:12.6px}}
   /* Touch devices: every control needs a finger-sized target, not a cursor-sized one. */
   @media(pointer:coarse){
     button.mini{min-height:44px;padding:10px 15px;font-size:13.4px}
@@ -1850,21 +1861,22 @@ function renderLog(ledger, period, active, now){
     return;
   }
   var html = '<div style="overflow-x:auto"><table><thead><tr><th>Day</th><th>In</th><th>Out</th>'
-           + '<th class="num">Hours</th><th class="num">OT</th><th class="num">Gross</th><th></th></tr></thead><tbody>';
+           + '<th class="num">Hours</th><th class="num otcol">OT</th><th class="num">Gross</th>'
+           + '<th class="act"></th></tr></thead><tbody>';
   var tot = { hours: 0, otHours: 0, gross: 0 };
   rows.forEach(function(s){
     var t = sumSession(ledger.parts, s.id);
     tot.hours += t.hours; tot.otHours += t.otHours; tot.gross += t.gross;
     var asking = pendingDelete === s.id;
     html += '<tr class="' + (t.otHours > 0.0001 ? 'otrow ' : '') + (s.live ? 'live' : '') + (asking ? ' pending' : '') + '">'
-      + '<td>' + fdate(new Date(s.start))
+      + '<td>' + fdate(new Date(s.start)).replace(/^(\w{3}) /, '<span class="dow">$1 </span>')
       + (s.adj ? ' <span style="opacity:.65;font-size:10.5px">· ' + (s.adj.noOt ? 'PTO' : s.adj.mult ? '×' + s.adj.mult : s.adj.diff ? '+$' + s.adj.diff + '/h' : 'no lunch') + '</span>' : '')
       + '</td><td>' + ftime(s.start) + '</td>'
       + '<td>' + (s.live ? '<span class="running">running</span>' : ftime(s.end)) + '</td>'
       + '<td class="num">' + t.hours.toFixed(2) + '</td>'
-      + '<td class="num g">' + (t.otHours > 0.0001 ? t.otHours.toFixed(2) : '—') + '</td>'
+      + '<td class="num g otcol">' + (t.otHours > 0.0001 ? t.otHours.toFixed(2) : '—') + '</td>'
       + '<td class="num">' + money(t.gross) + '</td>'
-      + '<td class="num">' + (s.live ? ''
+      + '<td class="act">' + (s.live ? ''
           : asking
             ? 'Delete? <button class="mini danger" data-del-yes="' + s.id + '">yes</button> '
               + '<button class="mini" data-del-no="1">no</button>'
@@ -1873,8 +1885,8 @@ function renderLog(ledger, period, active, now){
   });
   html += '</tbody><tfoot><tr><td colspan="3"><b>Period total</b></td>'
        + '<td class="num"><b>' + tot.hours.toFixed(2) + '</b></td>'
-       + '<td class="num g"><b>' + (tot.otHours > 0.0001 ? tot.otHours.toFixed(2) : '—') + '</b></td>'
-       + '<td class="num"><b>' + money(tot.gross) + '</b></td><td></td></tr></tfoot></table></div>';
+       + '<td class="num g otcol"><b>' + (tot.otHours > 0.0001 ? tot.otHours.toFixed(2) : '—') + '</b></td>'
+       + '<td class="num"><b>' + money(tot.gross) + '</b></td><td class="act"></td></tr></tfoot></table></div>';
   box.innerHTML = html;
 }
 
@@ -2503,7 +2515,9 @@ function applyTheme(){
   THEME_KEYS.forEach(function(k){
     var v = (t[k[0]] !== undefined && t[k[0]] !== '') ? t[k[0]] : base[k[0]];
     if (!v){ root.style.removeProperty(k[2]); return; }
-    if (k[0] === 'card') v = glassFrom(v, t.flat !== undefined ? t.flat : base.flat) || v;
+    // The pinned log column needs a solid colour to sit on; the card's own is translucent.
+    if (k[0] === 'card'){ root.style.setProperty('--card-solid', v);
+      v = glassFrom(v, t.flat !== undefined ? t.flat : base.flat) || v; }
     if (k[0] === 'border') v = borderFrom(v) || v;
     root.style.setProperty(k[2], v);
   });
