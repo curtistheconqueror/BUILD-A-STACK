@@ -1373,8 +1373,10 @@ function clockOut(atMs, silent){
    worked — the whole point is that the shift was never really interrupted. Only the
    most recent shift qualifies, and only for a while after it ended; anything older
    belongs in the shift editor where the times are typed out in full. */
-/* How long after the accidental tap you can still be noticing it. */
-var RESUME_WINDOW = 4 * HOUR_MS;
+/* How long after the accidental tap you can still be noticing it. Generous on purpose:
+   a phone stays in a pocket for hours, and the span check below is what actually keeps
+   this honest. The confirmation always names the time about to be counted. */
+var RESUME_WINDOW = 8 * HOUR_MS;
 
 /* How long a shift can plausibly have been running and still be worth reopening,
    measured from its own start. Built from the day's target — the app's idea of a usual
