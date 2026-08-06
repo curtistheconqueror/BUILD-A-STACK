@@ -876,6 +876,7 @@
           <select id="cMode">
             <option value="weekly">Weekly — 40 h, resets each week</option>
             <option value="period">Pay period — 80 h cumulative</option>
+            <option value="daily">Daily — 8 h, resets each day</option>
           </select></div>
         <div class="f"><label>Week starts on</label>
           <select id="cWeekStart">
@@ -885,6 +886,7 @@
           </select></div>
         <div class="f"><label>Weekly OT threshold (h)</label><input type="number" id="cWeekThr" min="0" step="0.5"></div>
         <div class="f"><label>Period OT threshold (h)</label><input type="number" id="cPeriodThr" min="0" step="0.5"></div>
+        <div class="f"><label>Daily OT threshold (h)</label><input type="number" id="cDailyThr" min="0" step="0.5"></div>
         <div class="f"><label>Period start anchor</label><input type="date" id="cAnchor"></div>
         <div class="f"><label>Period length (days)</label><input type="number" id="cLen" min="1" step="1"></div>
         <div class="f"><label>Payday = period end + (days)</label><input type="number" id="cPayOff" min="0" step="1"></div>
@@ -977,9 +979,10 @@ var HOUR_MS = 3600000, DAY_MS = 86400000;
 var DEFAULTS = {
   rate: 0,
   otMultiplier: 1.5,
-  otMode: 'weekly',          // 'weekly' = 40 h per week | 'period' = 80 h per pay period
+  otMode: 'weekly',          // 'weekly' 40 h a week | 'period' 80 h a period | 'daily' 8 h a day
   weeklyThreshold: 40,
   periodThreshold: 80,
+  dailyThreshold: 8,
   weekStartDay: 0,           // 0 = Sunday
   periodAnchor: '2026-01-04',// any Sunday; setup replaces it with your real period start
   periodLengthDays: 14,
@@ -1033,7 +1036,19 @@ function splitSession(startMs, endMs, cfg){
   return parts;
 }
 
-function otThresholdOf(cfg){ return cfg.otMode === 'weekly' ? cfg.weeklyThreshold : cfg.periodThreshold; }
+function otThresholdOf(cfg){
+  return cfg.otMode === 'daily'  ? (cfg.dailyThreshold || 8)
+       : cfg.otMode === 'weekly' ? cfg.weeklyThreshold
+       : cfg.periodThreshold;
+}
+/* Which bucket an hour fills. Days, weeks and periods all begin at a midnight, and
+   splitSession already chops every shift there, so a part never straddles any of them —
+   which is why a daily rule needs nothing more than a different key. */
+function otBucketKey(part, cfg){
+  return cfg.otMode === 'daily'  ? 'd' + part.dayMs
+       : cfg.otMode === 'weekly' ? part.weekKey
+       : part.periodKey;
+}
 
 /* Quick Pay Calculator: a standalone what-if, independent of the real clock and log.
    Rows work like a paystub's earnings lines — a block of hours at a stated multiple of
@@ -1149,7 +1164,7 @@ function buildLedger(sessions, cfg){
     for (var j = 0; j < chunks.length; j++){
       var c = chunks[j], hours = (c.end - c.start) / HOUR_MS;
       var base = (rateAt(c.start, cfg) + (adj.diff || 0)) * (adj.mult || 1);
-      var key = cfg.otMode === 'weekly' ? c.weekKey : c.periodKey;
+      var key = otBucketKey(c, cfg);
       var before = bucket[key] || 0;
       var reg, ot;
       if (adj.noOt){ reg = hours; ot = 0; }            // never accrues toward the threshold
@@ -1190,7 +1205,8 @@ function sumSession(parts, id){
 
 /* Hours already banked in the OT bucket that `t` falls into — i.e. how close to OT you are. */
 function bucketHoursAt(ledger, t, cfg){
-  var key = cfg.otMode === 'weekly' ? 'w' + weekInfo(t, cfg).index : 'p' + periodInfo(t, cfg).index;
+  var key = otBucketKey({ dayMs: +midnight(t), weekKey: 'w' + weekInfo(t, cfg).index,
+                          periodKey: 'p' + periodInfo(t, cfg).index }, cfg);
   return ledger.bucket[key] || 0;
 }
 
@@ -1750,7 +1766,9 @@ function render(){
   document.getElementById('barReg').style.width = pctReg + '%';
   document.getElementById('barOt').style.width = Math.min(100 - pctReg, over / thr * 100) + '%';
   document.getElementById('otLbl').textContent =
-    cfg.otMode === 'weekly' ? 'This week toward ' + thr + ' h' : 'This period toward ' + thr + ' h';
+    cfg.otMode === 'daily'  ? 'Today toward ' + thr + ' h'
+  : cfg.otMode === 'weekly' ? 'This week toward ' + thr + ' h'
+  : 'This period toward ' + thr + ' h';
   document.getElementById('otNum').textContent = over > 0
     ? bucketH.toFixed(2) + ' h · ' + over.toFixed(2) + ' h in OT'
     : bucketH.toFixed(2) + ' / ' + thr + ' h · ' + (thr - bucketH).toFixed(2) + ' h to OT';
@@ -1981,11 +1999,17 @@ function renderProgress(ledger, period, now){
         + (worthNaming ? ' ' + over.toFixed(2) + ' h so far.' : '')
       : '<b>' + left.toFixed(2) + ' h</b> until every remaining hour this period bills at <b>' + otRate + '</b>.';
   } else {
-    // Weekly rule is active, so this bar is a milestone, not what drives the rate.
+    // Another rule drives the rate, so this bar is a milestone rather than the thing
+    // being measured. Name the rule that is actually in force, whichever it is.
+    var ruleName = cfg.otMode === 'daily'
+      ? '<b>' + otThresholdOf(cfg) + ' h daily</b> rule, so it resets every day'
+      : '<b>' + cfg.weeklyThreshold + ' h weekly</b> rule, so it resets each week';
     note.className = 'p80note';
     note.innerHTML = past
-      ? 'Past ' + thr + ' h for the period. Your overtime is set to the <b>40 h weekly</b> rule, so it is figured per week — switch to the ' + thr + ' h rule in Settings to bill every hour past here at ' + otRate + '.'
-      : '<b>' + left.toFixed(2) + ' h</b> to ' + thr + ' h for the period. Overtime is currently set to the <b>40 h weekly</b> rule, so it resets each week — switch in Settings to bill every hour past ' + thr + ' h at ' + otRate + '.';
+      ? 'Past ' + thr + ' h for the period. Your overtime is set to the ' + ruleName
+        + ' — switch to the ' + thr + ' h rule in Settings to bill every hour past here at ' + otRate + '.'
+      : '<b>' + left.toFixed(2) + ' h</b> to ' + thr + ' h for the period. Overtime is set to the '
+        + ruleName + ' — switch in Settings to bill every hour past ' + thr + ' h at ' + otRate + '.';
   }
 }
 
@@ -2073,7 +2097,7 @@ function previewSetup(){
   if (r.error){ box.innerHTML = '<span style="opacity:.6">' + r.error + '</span>'; return; }
   var cfg = Object.assign({}, DEFAULTS, r);
   var p = periodInfo(Date.now(), cfg);
-  var thr = r.otMode === 'weekly' ? cfg.weeklyThreshold : cfg.periodThreshold;
+  var thr = otThresholdOf(cfg);
   box.innerHTML = 'Current period <b>' + fdate(p.start) + ' → ' + fdateY(p.lastDay) + '</b>'
     + '<br>Payday <b>' + fdateY(p.payDate) + '</b>'
     + '<br>Overtime past ' + thr + ' h at <span class="pay">' + money(r.rate * cfg.otMultiplier) + '</span>/hr';
@@ -2272,7 +2296,7 @@ function renderCalc(){
           : '')
       + (bank.toOt > 0.004
           ? bank.toOt.toFixed(2) + ' h left before overtime starts (' + bank.threshold + ' h '
-            + (cfg.otMode === 'weekly' ? 'a week' : 'a period') + ').'
+            + (cfg.otMode === 'daily' ? 'a day' : cfg.otMode === 'weekly' ? 'a week' : 'a period') + ').'
           : 'You are past ' + bank.threshold + ' h — everything further bills at overtime.')
       + '</span>';
   }
@@ -2534,7 +2558,7 @@ function paintCalRule(){
   el('qCalRule').textContent = cc.otStyle === 'daily'
     ? 'Anything past ' + (cc.dailyAfter || 8) + ' h in a day counts as overtime right away.'
     : 'Overtime builds the way it really does — after ' + otThresholdOf(state.cfg) + ' h '
-      + (state.cfg.otMode === 'weekly' ? 'in a week' : 'in a pay period') + '.';
+      + (state.cfg.otMode === 'daily' ? 'in a day' : state.cfg.otMode === 'weekly' ? 'in a week' : 'in a pay period') + '.';
 }
 
 /* More months at either end as you reach them. Prepending shifts everything down, so
@@ -3500,7 +3524,8 @@ document.getElementById('wipe').onclick = function(){
 var CFG_FIELDS = [
   ['cRate', 'rate', 'float'], ['cMult', 'otMultiplier', 'float'], ['cMode', 'otMode', 'str'],
   ['cWeekStart', 'weekStartDay', 'int'], ['cWeekThr', 'weeklyThreshold', 'float'],
-  ['cPeriodThr', 'periodThreshold', 'float'], ['cAnchor', 'periodAnchor', 'str'],
+  ['cPeriodThr', 'periodThreshold', 'float'], ['cDailyThr', 'dailyThreshold', 'float'],
+  ['cAnchor', 'periodAnchor', 'str'],
   ['cLen', 'periodLengthDays', 'int'], ['cPayOff', 'payDateOffsetDays', 'int']
 ];
 /* Values that would make every figure read $0.00 while the shifts are still there.
@@ -3510,6 +3535,7 @@ var CFG_BOUNDS = {
   otMultiplier:      { min: 1,    max: 10,     why: 'Overtime pays at least the base rate.' },
   weeklyThreshold:   { min: 1,    max: 168,    why: 'A weekly overtime threshold has to be at least 1 hour.' },
   periodThreshold:   { min: 1,    max: 1000,   why: 'A period overtime threshold has to be at least 1 hour.' },
+  dailyThreshold:    { min: 1,    max: 24,     why: 'A daily overtime threshold has to be between 1 and 24 hours.' },
   periodLengthDays:  { min: 1,    max: 366,    why: 'A pay period has to be at least one day long.' },
   payDateOffsetDays: { min: 0,    max: 90,     why: 'Payday cannot fall before the period ends.' }
 };
