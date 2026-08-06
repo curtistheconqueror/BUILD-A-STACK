@@ -447,6 +447,12 @@
     </div>
     <div class="backrow" id="backrow">
       <button class="mini" id="backOpen">⏱ Already started earlier?</button>
+      <button class="mini hide" id="resumeOpen">↩ Clocked out by accident?</button>
+    </div>
+    <div class="confirm hide" id="resumeConfirm" style="border-color:var(--acc)">
+      <span id="resumeTxt"></span>
+      <button class="mini" id="resumeYes">Reopen the shift</button>
+      <button class="mini" id="resumeNo">Never mind</button>
     </div>
 
     <div class="editor hide" id="backdate">
@@ -1259,7 +1265,7 @@ var STORAGE_OK = (function(){
 var state = load();
 
 function load(){
-  var base = { cfg: Object.assign({}, DEFAULTS), sessions: [], activeStart: null,
+  var base = { cfg: Object.assign({}, DEFAULTS), sessions: [], activeStart: null, activeAdj: null,
                unit: 'sec', planOn: false, plannedHours: 8, sound: true, configured: false };
   try {
     var raw = localStorage.getItem(KEY);
@@ -1330,6 +1336,7 @@ function toast(msg){
 function clockIn(){
   if (state.activeStart) return;
   state.activeStart = Date.now();
+  state.activeAdj = null;
   save(); chime(true); render();
   toast('Clocked in at ' + ftime(state.activeStart));
 }
@@ -1340,12 +1347,61 @@ function clockOut(atMs, silent){
   // was actually worked instead.
   if (end <= state.activeStart) end = Date.now();
   if (end > state.activeStart){
-    state.sessions.push({ id: uid(), start: state.activeStart, end: end, note: '' });
+    state.sessions.push({ id: uid(), start: state.activeStart, end: end, note: '',
+                          adj: state.activeAdj || undefined });
   }
   var began = state.activeStart;
-  state.activeStart = null; tickWhileActive = 0;
+  state.activeStart = null; state.activeAdj = null; tickWhileActive = 0;
   save(); chime(false); render();
   if (!silent) toast('Clocked out — ' + hhmmss(end - began) + ' on the clock');
+}
+
+/* ---- reopening a shift that was ended by accident ----
+   A phone in a pocket can clock you out. Reopening puts the shift back on the clock
+   from its original start, so the minutes since the accidental tap are counted as
+   worked — the whole point is that the shift was never really interrupted. Only the
+   most recent shift qualifies, and only for a while after it ended; anything older
+   belongs in the shift editor where the times are typed out in full. */
+var RESUME_WINDOW = 8 * HOUR_MS;
+function resumableShift(){
+  if (state.activeStart) return null;
+  var best = null;
+  for (var i = 0; i < state.sessions.length; i++){
+    if (!best || state.sessions[i].end > best.end) best = state.sessions[i];
+  }
+  if (!best) return null;
+  var gap = Date.now() - best.end;
+  if (gap < 0 || gap > RESUME_WINDOW) return null;
+  return best;
+}
+
+function resumeShift(){
+  var s = resumableShift();
+  if (!s){ toast('No recent shift to reopen.'); return; }
+  state.sessions = state.sessions.filter(function(x){ return x.id !== s.id; });
+  state.activeStart = s.start;
+  state.activeAdj = s.adj || null;          // a holiday or differential shift stays one
+  tickWhileActive = Date.now();
+
+  /* If auto-stop's target is already behind us, leaving it armed would end the shift
+     the instant it reopens. Reopening is a deliberate "I am still working", so the
+     target gets switched off rather than fighting it. */
+  var stoodDown = false;
+  if (state.planOn){
+    var stop = plannedStopAt(state.activeStart, state.plannedHours, state.sessions, state.cfg);
+    if (stop && Date.now() >= stop){ state.planOn = false; stoodDown = true; }
+  }
+  save(); syncControls(); chime(true); render();
+  toast('Back on the clock since ' + ftime(s.start) + ' — the '
+      + hhmmss(Date.now() - s.end) + ' since you clocked out counts as worked.'
+      + (stoodDown ? ' Auto-stop was already past its target, so it is off.' : ''));
+}
+
+/* The shift running right now, as a session the ledger can price. Built in one place so
+   a per-shift adjustment — a reopened holiday or differential shift — cannot be carried
+   by one caller and quietly dropped by another. */
+function liveSession(id, end){
+  return { id: id, start: state.activeStart, end: end, adj: state.activeAdj || undefined };
 }
 
 var lastOtState = false;
@@ -1384,7 +1440,7 @@ function render(){
   tickWhileActive = active ? now : 0;
 
   var all = state.sessions.slice();
-  if (active) all.push({ id: '__active', start: active, end: now });
+  if (active) all.push(liveSession('__active', now));
   var ledger = buildLedger(all, cfg);
 
   var period = periodInfo(now, cfg), week = weekInfo(now, cfg);
@@ -1458,7 +1514,7 @@ function render(){
      numbers always agree on what "now" means. */
   var perShown = per.gross;
   if (active){
-    var perQ = buildLedger(state.sessions.concat([{ id: '__pq', start: active, end: Math.max(active, qEnd) }]), cfg);
+    var perQ = buildLedger(state.sessions.concat([liveSession('__pq', Math.max(active, qEnd))]), cfg);
     perShown = sumRange(perQ.parts, period.startMs, period.endMs).gross;
   }
   document.getElementById('permoney').textContent = money(perShown, dp);
@@ -1487,8 +1543,19 @@ function render(){
   punch.textContent = active ? '■ Clock Out' : '▶ Clock In';
   punch.className = 'btn ' + (active ? 'stop' : 'go');
   // "Started earlier" only makes sense before a shift is running.
-  if (active){ show('backrow', false); show('backdate', false); }
+  if (active){ show('backrow', false); show('backdate', false); show('resumeConfirm', false); }
   else if (document.getElementById('backdate').classList.contains('hide')) show('backrow', true);
+
+  /* Reopening is offered only while there is actually a recent shift to reopen, so the
+     button is never there tempting you to resurrect something from this morning. */
+  var re = resumableShift();
+  show('resumeOpen', !!re && !active);
+  if (!re) show('resumeConfirm', false);
+  if (re && !document.getElementById('resumeConfirm').classList.contains('hide')){
+    document.getElementById('resumeTxt').innerHTML =
+      'Put the ' + ftime(re.start) + ' shift back on the clock? It ended ' + ftime(re.end)
+      + ', so the <b>' + hhmmss(now - re.end) + '</b> since then counts as worked and the clock keeps running.';
+  }
 
   var eta = document.getElementById('planEta');
   if (active && state.planOn){
@@ -1767,7 +1834,7 @@ function renderProgress(ledger, period, now){
 function renderLog(ledger, period, active, now){
   var rows = state.sessions.filter(function(s){ return s.end > period.startMs && s.start < period.endMs; });
   // Show the shift in progress too, so the log's total always agrees with the period tile.
-  if (active && active < period.endMs) rows.push({ id: '__active', start: active, end: now, live: true });
+  if (active && active < period.endMs) rows.push(Object.assign(liveSession('__active', now), { live: true }));
   rows.sort(function(a, b){ return b.start - a.start; });
 
   var box = document.getElementById('logBody');
@@ -1969,7 +2036,7 @@ function calcBanked(){
   if (state.activeStart){
     var stop = state.planOn ? plannedStopAt(state.activeStart, state.plannedHours, state.sessions, cfg) : null;
     if (stop && stop > now){ through = stop; planned = true; }
-    sessions.push({ id: '__live', start: state.activeStart, end: through });
+    sessions.push(liveSession('__live', through));
   }
   var ledger = buildLedger(sessions, cfg);
   var per = periodInfo(now, cfg);
@@ -2575,6 +2642,7 @@ function startBackdated(){
   if (r.error){ el('bErr').textContent = r.error; show('bErr', true); return; }
   show('bErr', false);
   state.activeStart = r.start;
+  state.activeAdj = null;
   tickWhileActive = 0;
   save(); closeBackdate(); chime(true); lastMoney = ''; render();
   toast('Clock running from ' + ftime(r.start) + ' — ' +
@@ -2693,7 +2761,7 @@ function previewShift(){
   if (r.error){ p.innerHTML = '<span style="opacity:.6">' + r.error + '</span>'; return; }
   // Price it exactly as saving would, so the preview is the real number.
   var others = state.sessions.filter(function(s){ return s.id !== editing; });
-  if (state.activeStart) others.push({ id: '__a', start: state.activeStart, end: Date.now() });
+  if (state.activeStart) others.push(liveSession('__a', Date.now()));
   var t = sumSession(buildLedger(others.concat([{ id: '__p', start: r.start, end: r.end, adj: adjFromForm() }]), state.cfg).parts, '__p');
   p.innerHTML = '<b>' + fdate(new Date(r.start)) + '</b> · ' + ftime(r.start) + ' → ' + ftime(r.end)
     + (r.overnight ? ' <b>(next morning)</b>' : '')
@@ -2761,7 +2829,7 @@ function backup(){
   var payload = JSON.stringify({
     app: 'pay-clock', version: 1, savedAt: new Date().toISOString(),
     cfg: state.cfg, sessions: state.sessions, configured: state.configured, theme: state.theme, net: state.net, ui: state.ui,
-    unit: state.unit, planOn: state.planOn, plannedHours: state.plannedHours, sound: state.sound, calc: state.calc, calCal: state.calCal
+    unit: state.unit, planOn: state.planOn, plannedHours: state.plannedHours, sound: state.sound, calc: state.calc, calCal: state.calCal, activeAdj: state.activeAdj
   }, null, 2);
   var name = 'pay-clock-backup-' + dateInput(new Date()) + '.json';
   if (download(name, payload, 'application/json')) toast('Backup saved — ' + state.sessions.length + ' shifts.');
@@ -2792,7 +2860,7 @@ function restoreFrom(text){
   if (d.ui) state.ui = d.ui;
   if (d.calc) state.calc = d.calc;
   if (d.calCal) state.calCal = d.calCal;
-  state.activeStart = null;              // never restore a running clock from a file
+  state.activeStart = null; state.activeAdj = null;   // never restore a running clock from a file
   save(); applyTheme(); renderThemeControls(); applyCols(); syncControls(); applyStage(); lastMoney = ''; render();
   toast('Restored ' + clean.length + ' shifts at ' + money(state.cfg.rate) + '/hr.');
 }
@@ -3069,6 +3137,12 @@ document.getElementById('themeReset').onclick = function(){
 };
 
 document.getElementById('backOpen').onclick = openBackdate;
+document.getElementById('resumeOpen').onclick = function(){
+  if (!resumableShift()){ toast('No recent shift to reopen.'); return; }
+  show('resumeConfirm', true); render();
+};
+document.getElementById('resumeNo').onclick = function(){ show('resumeConfirm', false); };
+document.getElementById('resumeYes').onclick = function(){ show('resumeConfirm', false); resumeShift(); };
 document.getElementById('bCancel').onclick = closeBackdate;
 document.getElementById('bStart').onclick = startBackdated;
 document.getElementById('bMode').addEventListener('click', function(e){
