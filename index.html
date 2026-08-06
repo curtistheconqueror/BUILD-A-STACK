@@ -110,7 +110,8 @@
   button.mini{cursor:pointer;font-family:inherit;background:rgba(130,155,200,.1);color:var(--muted);border:1px solid var(--border);
     border-radius:9px;padding:6px 12px;font-size:12.4px;font-weight:700;transition:.2s}
   button.mini:hover{color:var(--ink);border-color:var(--acc)}
-  button.mini.danger:hover{color:var(--bad);border-color:var(--bad)}
+  button.mini.danger{color:var(--bad);border-color:rgba(255,93,108,.42)}
+  button.mini.danger:hover{color:var(--bad);border-color:var(--bad);background:rgba(255,93,108,.13)}
   button.btn.add{border-color:var(--ok);background:linear-gradient(180deg,rgba(81,224,138,.22),rgba(81,224,138,.06));
     box-shadow:0 0 24px -8px var(--ok);padding:11px 24px;font-size:14.6px}
   button.btn.ghost{padding:11px 22px;font-size:14.6px;color:var(--muted)}
@@ -311,6 +312,16 @@
      leaving them past the end meant sideways-swiping a table inside a scrolling page
      to reach them — findable only if you already knew they were there. */
   .logscroll{overflow-x:auto}
+  /* While picking, every finished shift has to read as a target at a glance — and in
+     the colour of what is about to happen to it. */
+  #logBody.picking tbody tr[data-row]:not(.live){cursor:pointer;outline:1.5px solid var(--acc);
+    outline-offset:-3px;border-radius:9px}
+  #logBody.picking tbody tr[data-row]:not(.live) td{background:rgba(53,208,224,.15);cursor:pointer}
+  #logBody.picking tbody tr[data-row]:not(.live):hover td{background:rgba(53,208,224,.26)}
+  #logBody.picking-delete tbody tr[data-row]:not(.live){outline-color:var(--bad)}
+  #logBody.picking-delete tbody tr[data-row]:not(.live) td{background:rgba(255,93,108,.15)}
+  #logBody.picking-delete tbody tr[data-row]:not(.live):hover td{background:rgba(255,93,108,.26)}
+  #logBody.picking tbody tr.live td{opacity:.4}
   th.act,td.act{position:sticky;right:0;z-index:1;padding-right:0;text-align:right;
     background:var(--card-solid,var(--bg0));box-shadow:-11px 0 13px -9px rgba(0,0,0,.55)}
   tr.live td.act,tr.pending td.act{background:var(--card-solid,var(--bg0))}
@@ -734,8 +745,14 @@
 
     <div class="actions" style="justify-content:flex-start;margin-top:15px" id="logActions">
       <button class="btn add" id="addShift">+ Add a shift</button>
+      <button class="mini" id="pickEdit">✎ Edit a shift</button>
+      <button class="mini danger" id="pickDelete">✕ Delete a shift</button>
       <button class="mini" id="exportCsv">⇩ Export CSV</button>
       <button class="mini danger" id="clearPeriod">Clear this period</button>
+    </div>
+    <div class="confirm hide" id="pickBar" style="border-color:var(--acc)">
+      <span id="pickTxt"></span>
+      <button class="mini" id="pickCancel">Cancel</button>
     </div>
     <div class="confirm hide" id="clearConfirm">
       Delete every shift in this pay period? This can't be undone.
@@ -1920,7 +1937,8 @@ function renderLog(ledger, period, active, now){
     var t = sumSession(ledger.parts, s.id);
     tot.hours += t.hours; tot.otHours += t.otHours; tot.gross += t.gross;
     var asking = pendingDelete === s.id;
-    html += '<tr class="' + (t.otHours > 0.0001 ? 'otrow ' : '') + (s.live ? 'live' : '') + (asking ? ' pending' : '') + '">'
+    html += '<tr data-row="' + s.id + '" class="' + (t.otHours > 0.0001 ? 'otrow ' : '')
+      + (s.live ? 'live' : '') + (asking ? ' pending' : '') + '">'
       + '<td class="c-day">' + fdate(new Date(s.start)).replace(/^(\w{3}) /, '<span class="dow">$1 </span>')
       + (s.adj ? ' <span style="opacity:.65;font-size:10.5px">· ' + (s.adj.noOt ? 'PTO' : s.adj.mult ? '×' + s.adj.mult : s.adj.diff ? '+$' + s.adj.diff + '/h' : 'no lunch') + '</span>' : '')
       + '</td><td class="c-in">' + ftime(s.start) + '</td>'
@@ -1929,12 +1947,13 @@ function renderLog(ledger, period, active, now){
       + '<td class="num g otcol' + (t.otHours > 0.0001 ? '' : ' noot') + '">'
       + (t.otHours > 0.0001 ? t.otHours.toFixed(2) : '—') + '</td>'
       + '<td class="num c-gross">' + money(t.gross) + '</td>'
-      + '<td class="act">' + (s.live ? ''
-          : asking
+      /* Nothing but the shift itself sits in a row. Editing and deleting are started
+         from the buttons under the log and finished by tapping the row you mean, so
+         no control ever has to share space with the figures. */
+      + '<td class="act">' + (!s.live && asking
             ? 'Delete? <button class="mini danger" data-del-yes="' + s.id + '">yes</button> '
               + '<button class="mini" data-del-no="1">no</button>'
-            : '<button class="mini" data-edit="' + s.id + '">edit</button> '
-              + '<button class="mini danger" data-del="' + s.id + '">✕</button>') + '</td></tr>';
+            : '') + '</td></tr>';
   });
   html += '</tbody><tfoot><tr><td colspan="3"><b>Period total</b></td>'
        + '<td class="num"><b>' + tot.hours.toFixed(2) + '</b></td>'
@@ -2948,10 +2967,43 @@ document.getElementById('planHrs').onchange = function(e){
   e.target.value = state.plannedHours; save(); render();
 };
 
+/* ---- picking a shift to edit or delete ----
+   Start from a button under the log, then tap the shift itself. A row carries only its
+   own figures now, so no control has to share space with them or be reached past. */
+var pickMode = null;
+function setPickMode(mode){
+  pickMode = mode;
+  pendingDelete = null;
+  var lb = document.getElementById('logBody');
+  lb.classList.toggle('picking', !!mode);
+  lb.classList.toggle('picking-delete', mode === 'delete');
+  show('pickBar', !!mode);
+  if (mode) document.getElementById('pickTxt').textContent =
+    mode === 'edit' ? 'Tap the shift you want to edit.' : 'Tap the shift you want to delete.';
+  render();
+}
+function startPick(mode){
+  if (!document.querySelectorAll('#logBody tbody tr[data-row]:not(.live)').length){
+    toast('No finished shifts in this period yet.'); return;
+  }
+  setPickMode(mode);
+}
+document.getElementById('pickEdit').onclick = function(){ startPick('edit'); };
+document.getElementById('pickDelete').onclick = function(){ startPick('delete'); };
+document.getElementById('pickCancel').onclick = function(){ setPickMode(null); };
+
 document.getElementById('logBody').addEventListener('click', function(e){
+  if (pickMode){
+    var row = e.target.closest('tr[data-row]');
+    if (row && !row.classList.contains('live')){
+      var id = row.dataset.row, mode = pickMode;
+      setPickMode(null);
+      if (mode === 'edit') openEditor(id);
+      else { pendingDelete = id; render(); }     // the row itself asks to confirm
+      return;
+    }
+  }
   var b = e.target.closest('button'); if (!b) return;
-  if (b.dataset.edit) openEditor(b.dataset.edit);
-  if (b.dataset.del){ pendingDelete = b.dataset.del; render(); }        // row asks to confirm
   if (b.dataset.delYes){
     state.sessions = state.sessions.filter(function(s){ return s.id !== b.dataset.delYes; });
     pendingDelete = null; save(); render(); toast('Shift deleted.');
