@@ -1374,6 +1374,7 @@ function clockOut(atMs, silent){
    most recent shift qualifies, and only for a while after it ended; anything older
    belongs in the shift editor where the times are typed out in full. */
 var RESUME_WINDOW = 8 * HOUR_MS;
+var RESUME_OVERNIGHT_GRACE = 4 * HOUR_MS;
 function resumableShift(){
   if (state.activeStart) return null;
   var best = null;
@@ -1381,8 +1382,14 @@ function resumableShift(){
     if (!best || state.sessions[i].end > best.end) best = state.sessions[i];
   }
   if (!best) return null;
-  var gap = Date.now() - best.end;
+  var now = Date.now(), gap = now - best.end;
   if (gap < 0 || gap > RESUME_WINDOW) return null;
+  /* Never a shift from an earlier day. By the next morning it is not a shift to pick
+     back up — it is one to correct in the editor — and reopening it would quietly bill
+     the whole night in between. The exception is working past midnight: a shift that
+     ended just before the date rolled over is still the same night's work, so it stays
+     offered for a few hours after. */
+  if (+midnight(best.end) !== +midnight(now) && gap > RESUME_OVERNIGHT_GRACE) return null;
   return best;
 }
 
