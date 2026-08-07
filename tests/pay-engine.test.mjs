@@ -28,7 +28,8 @@ const E = new Function(m[1] + `
   return { DEFAULTS, periodInfo, weekInfo, splitSession, buildLedger,
            sumRange, sumSession, bucketHoursAt, plannedStopAt, quantize, HOUR_MS,
            HOLIDAY_DEFAULTS, nthDow, holidayDate, holidaysInYear, holidayOn,
-           isWorkDay, anyWorkDay, adjacentWorkDay, dkey };
+           isWorkDay, anyWorkDay, adjacentWorkDay, dkey,
+           workedOn, holidayEligibility, holidayYears, holidayCredits, holidayOutlook };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -334,6 +335,134 @@ group('Robustness');
      key(E.adjacentWorkDay(sundays, +new Date(2026, 8, 9), -1)) === '2026-09-06');
   ok('an empty roster has no adjacent shift',
      E.adjacentWorkDay({ workDays: [false,false,false,false,false,false,false] }, +mon, -1) === null);
+}
+
+
+/* ---------------- holiday pay ---------------- */
+{
+  // $38/hr, weekly 40 h overtime, Sunday-start weeks, Curtis's Sun-Thu roster.
+  const hcfg = { ...E.DEFAULTS, rate: 38, periodAnchor: '2026-11-22',
+                 workDays: [true, true, true, true, true, false, false] };
+  const at = (y, mo, d, h) => new Date(y, mo, d, h).getTime();
+  const sh = (id, mo, d, from, to) => ({ id, start: at(2026, mo, d, from), end: at(2026, mo, d, to) });
+  const H = 3600000;
+
+  // Thanksgiving 2026 is Thu Nov 26. Roster Sun-Thu, so either side means Wed 25 and Sun 29.
+  const wed = sh('wed', 10, 25, 9, 17);          // 8 h
+  const sun = sh('sun', 10, 29, 9, 17);          // 8 h
+  const thu = sh('thu', 10, 26, 9, 17);          // 8 h worked ON the holiday
+
+  const credits = s => E.holidayCredits(s, hcfg);
+  const thxOnly = c => c.filter(x => x.id === '__hol:2026-11-26');
+
+  ok('no credit with neither side worked', thxOnly(credits([])).length === 0);
+  ok('no credit with only the day before', thxOnly(credits([wed])).length === 0);
+  ok('no credit with only the day after',  thxOnly(credits([sun])).length === 0);
+  ok('both sides worked earns it',         thxOnly(credits([wed, sun])).length === 1);
+
+  const c = thxOnly(credits([wed, sun]))[0];
+  ok('worth 8 hours',   Math.abs((c.end - c.start) / H - 8) < 1e-9, (c.end - c.start) / H);
+  ok('placed on the holiday itself', E.dkey(new Date(c.start).getFullYear(),
+     new Date(c.start).getMonth(), new Date(c.start).getDate()) === '2026-11-26');
+  ok('flagged straight so it never pays overtime on itself', c.adj.straight === true);
+  ok('and carries no lunch deduction', c.adj.noLunch === true);
+
+  // Not working it: 16 h worked + 8 h holiday = 24 h, all straight. 24 * 38 = 912.
+  const off = E.buildLedger([wed, sun], hcfg);
+  const offT = off.parts.reduce((t, p) => ({ hours: t.hours + p.hours, gross: t.gross + p.gross,
+                                             ot: t.ot + p.otHours }), { hours: 0, gross: 0, ot: 0 });
+  near('not working it: 24 h banked', offT.hours, 24);
+  near('paid $912.00', offT.gross, 912);
+  near('none of it overtime', offT.ot, 0);
+
+  // Working it: 24 h worked + 8 h holiday = 32 h. 32 * 38 = 1216.
+  const on = E.buildLedger([wed, thu, sun], hcfg);
+  const onT = on.parts.reduce((t, p) => ({ hours: t.hours + p.hours, gross: t.gross + p.gross,
+                                           ot: t.ot + p.otHours }), { hours: 0, gross: 0, ot: 0 });
+  near('working it: 32 h banked', onT.hours, 32);
+  near('the worked hours are paid on top — $1,216.00', onT.gross, 1216);
+  ok('which is exactly 8 h more than not working it', Math.abs((onT.gross - offT.gross) - 8 * 38) < 1e-6);
+
+  /* The 8 holiday hours push worked hours into overtime sooner. Sun 22 - Wed 25 at 9 h
+     banks 36 h straight. The credit sits at midnight opening Thursday, taking the bucket
+     to 44 — past the 40 h line — so every one of Thursday's 9 worked hours is overtime.
+     Without the credit Thursday would have had 4 h of headroom left, so 4 straight and
+     5 over. The holiday therefore turns 5 h of overtime into 9. */
+  const week = [sh('w22', 10, 22, 9, 18), sh('w23', 10, 23, 9, 18),   // 9 h each
+                sh('w24', 10, 24, 9, 18), sh('w25', 10, 25, 9, 18),   // 36 h by Wed
+                sh('w26', 10, 26, 9, 18)];                            // 9 h on the holiday
+  const withHol = E.buildLedger(week.concat([sun]), hcfg);
+  const wk = withHol.parts.filter(p => p.weekKey === withHol.parts.find(x => x.sessionId === 'w22').weekKey);
+  const wkOt = wk.reduce((s, p) => s + p.otHours, 0);
+  const wkHours = wk.reduce((s, p) => s + p.hours, 0);
+  near('the holiday week banks 45 h + 8 h holiday = 53 h', wkHours, 53);
+  near('9 h of it is overtime once the holiday counts', wkOt, 9);
+  const noHol = E.buildLedger(week, { ...hcfg, holidayCredit: false });
+  near('without the holiday counting it would be 5 h', noHol.parts.reduce((s, p) => s + p.otHours, 0), 5);
+  // The holiday is paid straight even though the bucket was already past the line.
+  const hp = withHol.parts.filter(p => p.sessionId === '__hol:2026-11-26');
+  near('and the holiday itself is still straight time', hp.reduce((s, p) => s + p.otHours, 0), 0);
+  near('worth 8 x $38 = $304.00', hp.reduce((s, p) => s + p.gross, 0), 304);
+
+  // A holiday whose own flag says it does not count stays out of the bucket entirely.
+  const noOtCfg = { ...hcfg, holidays: hcfg.holidays.map(h =>
+                    h.id === 'thanks' ? { ...h, ot: false } : h) };
+  const nc = E.holidayCredits([wed, sun], noOtCfg).filter(x => x.id === '__hol:2026-11-26')[0];
+  ok('an OT-exempt holiday is flagged noOt', nc.adj.noOt === true && !nc.adj.straight);
+
+  // Switching the rule off pays it regardless of what was worked.
+  ok('with the either-side rule off it pays on its own',
+     E.holidayCredits([], { ...hcfg, holidayNeedsAdjacent: false, holidays: hcfg.holidays })
+      .filter(x => x.id === '__hol:2026-11-26').length === 1);
+
+  // A holiday on a day off: July 4 2026 is a Saturday. Either side = Thu Jul 2, Sun Jul 5.
+  const jcfg = { ...hcfg, periodAnchor: '2026-06-28' };
+  const thu2 = sh('j2', 6, 2, 9, 17), sun5 = sh('j5', 6, 5, 9, 17);
+  const j4 = cc => E.holidayCredits(cc, jcfg).filter(x => x.id === '__hol:2026-07-04').length;
+  ok('a Saturday holiday still pays when either side is worked', j4([thu2, sun5]) === 1);
+  ok('and does not when the Thursday is missed',                 j4([sun5]) === 0);
+  ok('nor when the Sunday is missed',                            j4([thu2]) === 0);
+  ok('set to not pay on a day off, it does not',
+     E.holidayCredits([thu2, sun5], { ...jcfg, holidayOffDayPays: false })
+      .filter(x => x.id === '__hol:2026-07-04').length === 0);
+
+  // The outlook: what the app shows about each holiday.
+  const look = E.holidayOutlook([wed], hcfg, at(2026, 10, 27, 12));   // the Friday after
+  const thx = look.find(h => h.key === '2026-11-26');
+  ok('Thanksgiving is still pending on the Friday', thx.status === 'pending', thx.status);
+  ok('and names the Sunday as what is still needed',
+     thx.need.length === 1 && E.dkey(thx.need[0].getFullYear(), thx.need[0].getMonth(),
+                                     thx.need[0].getDate()) === '2026-11-29');
+  const late = E.holidayOutlook([wed], hcfg, at(2026, 11, 5, 12)).find(h => h.key === '2026-11-26');
+  ok('by the following week it is lost', late.status === 'lost', late.status);
+  const got = E.holidayOutlook([wed, sun], hcfg, at(2026, 11, 5, 12)).find(h => h.key === '2026-11-26');
+  ok('and earned once both are in', got.paid === true && got.status === 'paid');
+  ok('the outlook prices it', Math.abs(got.pay - 8 * 38) < 1e-6, got.pay);
+
+  /* A holiday from before the first shift on file was not missed — nothing was being
+     tracked yet. Saying "missed" there would put four red badges on a new user's screen
+     for days they may well have been paid for. */
+  const early = E.holidayOutlook([wed, sun], hcfg, at(2026, 11, 5, 12));
+  const ny = early.find(h => h.key === '2026-01-01');
+  ok('a holiday before the first shift reads as untracked', ny.status === 'untracked', ny.status);
+  ok('and claims nothing is owed for it', ny.paid === false && ny.need.length === 0);
+  const xmas = early.find(h => h.key === '2026-12-25');
+  ok('while one still ahead stays pending', xmas.status === 'pending', xmas.status);
+  ok('an untracked holiday is still never credited',
+     E.holidayCredits([wed, sun], hcfg).some(c => c.id === '__hol:2026-01-01') === false);
+  ok('and knows whether it was worked', got.worked === false &&
+     E.holidayOutlook([wed, thu, sun], hcfg, at(2026, 11, 5, 12))
+      .find(h => h.key === '2026-11-26').worked === true);
+
+  // Nothing is credited twice, however many times the ledger is built.
+  const twice = E.buildLedger([wed, sun], hcfg);
+  ok('one credit per holiday, not one per rebuild',
+     twice.parts.filter(p => p.sessionId === '__hol:2026-11-26').length === 1);
+
+  ok('an empty roster earns nothing rather than throwing',
+     E.holidayCredits([wed, sun], { ...hcfg, workDays: [false,false,false,false,false,false,false] }).length === 0);
+  ok('zero holiday hours credits nothing', E.holidayCredits([wed, sun], { ...hcfg, holidayHours: 0 }).length === 0);
+  ok('no holidays configured credits nothing', E.holidayCredits([wed, sun], { ...hcfg, holidays: [] }).length === 0);
 }
 
 /* ------------------------------------------------------------------ */

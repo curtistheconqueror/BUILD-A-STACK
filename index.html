@@ -308,6 +308,19 @@
   .holrow .hwhen{color:var(--muted);font-size:12.4px;text-align:right;font-variant-numeric:tabular-nums}
   .holrow .hotf{color:var(--warn);font-size:10.6px;letter-spacing:1px;font-weight:800}
   .holnone{color:var(--muted);font-size:13px;padding:10px 0}
+  /* a holiday's own line in the shift log */
+  .hollbl{color:var(--cal-hol);font-size:10.5px;font-weight:800}
+  .holpill{color:var(--cal-hol);border:1px solid var(--cal-hol);border-radius:5px;
+    padding:1px 5px;font-size:9.5px;letter-spacing:.8px;font-weight:800}
+  tr.holrowlog td{background:rgba(255,180,84,.07)}
+  /* where each holiday stands, under the calendar */
+  .calhol .s{font-size:9.6px;letter-spacing:.9px;font-weight:800;padding:1px 5px;border-radius:5px}
+  .calhol .s.paid{color:var(--cal-fill);border:1px solid var(--cal-fill)}
+  .calhol .s.pending{color:var(--acc);border:1px solid var(--acc)}
+  .calhol .s.lost{color:var(--bad);border:1px solid var(--bad)}
+  .calhol .s.notrostered,.calhol .s.untracked{color:var(--muted);border:1px solid var(--border)}
+  .calhol{align-items:center}
+  .calhol .r{display:flex;align-items:center;gap:7px}
 
   /* ---- period ---- */
   #period{--ca:var(--acc2)}
@@ -1301,7 +1314,11 @@ function lunchWindow(startMs, cfg){
    Unpaid lunch is deliberately not applied: you typed the hours you expect to be paid
    for, and a calculator that quietly pays less than what you typed is a puzzle. */
 function calendarPay(days, cfg, style, after){
-  var flat = Object.assign({}, cfg, { lunchMins: 0 });
+  /* No holiday credits here. This prices the hours you typed and nothing else — a
+     what-if built out of hypothetical days has no shifts for the work-either-side rule
+     to judge, so a credit would be invented rather than earned. Real holiday pay shows
+     in the period and year totals, which are built from actual shifts. */
+  var flat = Object.assign({}, cfg, { lunchMins: 0, holidayCredit: false });
   var byDay = {}, byPeriod = {};
   var list = (days || []).filter(function(d){ return d.hours > 0; })
                          .sort(function(a, b){ return a.ymd < b.ymd ? -1 : 1; });
@@ -1337,7 +1354,13 @@ function calendarPay(days, cfg, style, after){
 function buildLedger(sessions, cfg){
   var threshold = otThresholdOf(cfg), otRate = cfg.rate * cfg.otMultiplier;
   var bucket = {}, parts = [];
-  var sorted = sessions.filter(function(s){ return s.end > s.start; })
+  /* Earned holidays join the walk as ordinary sessions. Doing it here rather than at each
+     call site means the shift log, the period totals, the year to date and the earnings
+     bar cannot disagree about whether a holiday counted — there is one answer, computed
+     from the same shifts every caller already passed in. Eligibility is a fact about
+     those shifts, so this stays pure and the tests stay honest. */
+  var withHols = sessions.concat(holidayCredits(sessions, cfg));
+  var sorted = withHols.filter(function(s){ return s.end > s.start; })
                        .slice().sort(function(a,b){ return a.start - b.start; });
   for (var i = 0; i < sorted.length; i++){
     var s = sorted[i];
@@ -1357,6 +1380,10 @@ function buildLedger(sessions, cfg){
       var before = bucket[key] || 0;
       var reg, ot;
       if (adj.noOt){ reg = hours; ot = 0; }            // never accrues toward the threshold
+      /* Accrues toward the threshold but is never itself paid at the overtime rate —
+         holiday pay, which pushes the hours you actually worked into overtime sooner
+         while staying straight time itself. */
+      else if (adj.straight){ reg = hours; ot = 0; bucket[key] = before + hours; }
       else {
         reg = Math.max(0, Math.min(threshold - before, hours));
         ot = hours - reg;
@@ -1657,6 +1684,105 @@ function adjacentWorkDay(cfg, t, step){
     if (isWorkDay(cfg, c.getDay())) return c;
   }
   return null;
+}
+
+/* ---- holiday pay ----
+   A holiday you qualify for is worth its hours whether or not you turn up. Work it and
+   the hours you worked are paid on top, exactly as if the holiday credit were a separate
+   entry on the stub — which is what it is here: a synthetic session the ledger prices
+   alongside real work. It is flagged `straight`, so it fills the overtime bucket (pushing
+   worked hours over the threshold sooner) without ever being paid at the overtime rate
+   itself. A holiday whose own `ot` flag is off uses `noOt` instead and stays out of the
+   bucket entirely. */
+
+/* Was any work logged on a given calendar day? */
+function workedOn(sessions, dayMs){
+  var end = dayMs + DAY_MS;
+  for (var i = 0; i < (sessions || []).length; i++){
+    var s = sessions[i];
+    if (s.end > s.start && s.end > dayMs && s.start < end) return true;
+  }
+  return false;
+}
+
+/* Whether a holiday is earned, and if not, what is still missing. Pure: `paid` depends
+   only on the sessions, so the ledger never needs to know what time it is. `nowMs` is
+   only used to tell "not yet" from "missed", which is a thing to say, not to pay. */
+function holidayEligibility(h, sessions, cfg, nowMs){
+  if (cfg.holidayOffDayPays === false && !isWorkDay(cfg, h.date.getDay()))
+    return { paid: false, status: 'notrostered', need: [] };
+  if (cfg.holidayNeedsAdjacent === false) return { paid: true, status: 'paid', need: [] };
+
+  var before = adjacentWorkDay(cfg, h.ms, -1);
+  var after  = adjacentWorkDay(cfg, h.ms,  1);
+  if (!before || !after) return { paid: false, status: 'noroster', need: [] };
+
+  var need = [];
+  if (!workedOn(sessions, +before)) need.push(before);
+  if (!workedOn(sessions, +after))  need.push(after);
+  if (!need.length) return { paid: true, status: 'paid', need: [] };
+
+  // Anything still ahead of us can still be worked; anything behind us cannot.
+  var today = nowMs == null ? -Infinity : +midnight(nowMs);
+  var stillPossible = need.every(function(d){ return +d >= today; });
+  return { paid: false, status: stillPossible ? 'pending' : 'lost', need: need };
+}
+
+/* Which years the holiday calendar needs to be worked out for. Driven by the shifts on
+   file so a first-year user is not paying for a walk through 1970. */
+function holidayYears(sessions, nowMs){
+  var years = {}, any = false;
+  (sessions || []).forEach(function(s){
+    if (!(s.end > s.start)) return;
+    years[new Date(s.start).getFullYear()] = true;
+    years[new Date(s.end).getFullYear()] = true;
+    any = true;
+  });
+  if (!any) years[new Date(nowMs == null ? Date.now() : nowMs).getFullYear()] = true;
+  return Object.keys(years).map(Number).sort();
+}
+
+/* The synthetic sessions for every holiday earned. Placed at the start of their day so a
+   holiday's hours fill the overtime bucket ahead of the hours worked that day. */
+function holidayCredits(sessions, cfg, nowMs){
+  if (cfg.holidayCredit === false) return [];
+  var hours = cfg.holidayHours == null ? 8 : cfg.holidayHours;
+  if (!(hours > 0) || !(cfg.holidays || []).length) return [];
+  var out = [];
+  holidayYears(sessions, nowMs).forEach(function(y){
+    holidaysInYear(cfg, y).forEach(function(h){
+      if (!holidayEligibility(h, sessions, cfg, nowMs).paid) return;
+      out.push({ id: '__hol:' + h.key, start: h.ms, end: h.ms + hours * HOUR_MS,
+                 holiday: h.name, holidayId: h.id,
+                 adj: h.ot === false ? { noOt: true, noLunch: true }
+                                     : { straight: true, noLunch: true } });
+    });
+  });
+  return out;
+}
+
+/* Every holiday in the years on file with what it is worth and where it stands. The
+   listing the app shows; the ledger uses holidayCredits above. */
+function holidayOutlook(sessions, cfg, nowMs){
+  var hours = cfg.holidayHours == null ? 8 : cfg.holidayHours;
+  /* A holiday that fell before you started using this app was not missed — there was
+     simply nothing on file to judge it by. Saying "missed" there is both wrong and
+     alarming, so anything earlier than the first shift is reported as untracked. */
+  var first = Infinity;
+  (sessions || []).forEach(function(s){ if (s.end > s.start && s.start < first) first = s.start; });
+  var firstDay = first === Infinity ? Infinity : +midnight(first);
+  var out = [];
+  holidayYears(sessions, nowMs).forEach(function(y){
+    holidaysInYear(cfg, y).forEach(function(h){
+      var e = holidayEligibility(h, sessions, cfg, nowMs);
+      var status = (!e.paid && h.ms < firstDay) ? 'untracked' : e.status;
+      out.push({ id: h.id, name: h.name, date: h.date, ms: h.ms, key: h.key, ot: h.ot,
+                 hours: hours, pay: hours * rateAt(h.ms, cfg),
+                 worked: workedOn(sessions, h.ms),
+                 paid: e.paid, status: status, need: status === 'untracked' ? [] : e.need });
+    });
+  });
+  return out.sort(function(a, b){ return a.ms - b.ms; });
 }
 
 /* ==ENGINE-END== */
@@ -2480,6 +2606,13 @@ function renderLog(ledger, period, active, now){
   var rows = state.sessions.filter(function(s){ return s.end > period.startMs && s.start < period.endMs; });
   // Show the shift in progress too, so the log's total always agrees with the period tile.
   if (active && active < period.endMs) rows.push(Object.assign(liveSession('__active', now), { live: true }));
+  /* Earned holidays are in the ledger, so they are already in the period total. They get
+     a row of their own too — a total that includes eight hours nobody can point at is a
+     total nobody trusts. Built from the same credits the ledger used, so the rows and the
+     footer cannot disagree. */
+  holidayCredits(state.sessions, state.cfg).forEach(function(h){
+    if (h.end > period.startMs && h.start < period.endMs) rows.push(Object.assign({}, h, { hol: true }));
+  });
   rows.sort(function(a, b){ return b.start - a.start; });
 
   var box = document.getElementById('logBody');
@@ -2502,12 +2635,16 @@ function renderLog(ledger, period, active, now){
     var t = sumSession(ledger.parts, s.id);
     tot.hours += t.hours; tot.otHours += t.otHours; tot.gross += t.gross;
     var asking = pendingDelete === s.id;
-    html += '<tr data-row="' + s.id + '" class="' + (t.otHours > 0.0001 ? 'otrow ' : '')
-      + (s.live ? 'live' : '') + (asking ? ' pending' : '') + '">'
+    /* A holiday is not a shift: it has no clock times, and it cannot be edited or deleted
+       from here — it is earned by the shifts either side of it, and those are the rows to
+       change. So it carries no data-row and drops out of pick mode entirely. */
+    html += '<tr' + (s.hol ? ' class="holrowlog"' : ' data-row="' + s.id + '" class="'
+      + (t.otHours > 0.0001 ? 'otrow ' : '') + (s.live ? 'live' : '') + (asking ? ' pending' : '') + '"') + '>'
       + '<td class="c-day">' + fdate(new Date(s.start)).replace(/^(\w{3}) /, '<span class="dow">$1 </span>')
-      + (s.adj ? ' <span style="opacity:.65;font-size:10.5px">· ' + (s.adj.noOt ? 'PTO' : s.adj.mult ? '×' + s.adj.mult : s.adj.diff ? '+$' + s.adj.diff + '/h' : 'no lunch') + '</span>' : '')
-      + '</td><td class="c-in">' + ftime(s.start) + '</td>'
-      + '<td class="c-out">' + (s.live ? '<span class="running">running</span>' : ftime(s.end)) + '</td>'
+      + (s.hol ? ' <span class="hollbl">· ' + esc(s.holiday) + '</span>' : '')
+      + (!s.hol && s.adj ? ' <span style="opacity:.65;font-size:10.5px">· ' + (s.adj.noOt ? 'PTO' : s.adj.mult ? '×' + s.adj.mult : s.adj.diff ? '+$' + s.adj.diff + '/h' : 'no lunch') + '</span>' : '')
+      + '</td><td class="c-in">' + (s.hol ? '<span class="holpill">HOLIDAY</span>' : ftime(s.start)) + '</td>'
+      + '<td class="c-out">' + (s.hol ? '' : s.live ? '<span class="running">running</span>' : ftime(s.end)) + '</td>'
       + '<td class="num c-hours">' + t.hours.toFixed(2) + '</td>'
       + '<td class="num g otcol' + (t.otHours > 0.0001 ? '' : ' noot') + '">'
       + (t.otHours > 0.0001 ? t.otHours.toFixed(2) : '—') + '</td>'
@@ -2515,7 +2652,7 @@ function renderLog(ledger, period, active, now){
       /* Nothing but the shift itself sits in a row. Editing and deleting are started
          from the buttons under the log and finished by tapping the row you mean, so
          no control ever has to share space with the figures. */
-      + '<td class="act">' + (!s.live && asking
+      + '<td class="act">' + (!s.hol && !s.live && asking
             ? 'Delete? <button class="mini danger" data-del-yes="' + s.id + '">yes</button> '
               + '<button class="mini" data-del-no="1">no</button>'
             : '') + '</td></tr>';
@@ -3049,15 +3186,29 @@ function paintCal(){
    it produces, so the dates get shown plainly where they can be checked against a
    contract rather than left implied by a dot on a cell. */
 function paintCalHols(){
-  var cfg = state.cfg, y = new Date().getFullYear();
-  var list = holidaysInYear(cfg, y);
+  var cfg = state.cfg, now = Date.now(), y = new Date(now).getFullYear();
+  var list = holidayOutlook(state.sessions, cfg, now).filter(function(h){
+    return h.date.getFullYear() === y;
+  });
   show('qCalHols', list.length > 0);
   if (!list.length) return;
-  var today = +midnight(Date.now());
+  var today = +midnight(now);
+  var WORD = { paid: 'EARNED', pending: 'PENDING', lost: 'MISSED', notrostered: 'DAY OFF',
+               untracked: 'BEFORE TRACKING', noroster: '—' };
   el('qCalHols').innerHTML = '<h5>Paid holidays ' + y + '</h5>' + list.map(function(h){
-    return '<div class="calhol' + (h.ms < today ? ' past' : '') + '">'
-         + '<span class="n">' + esc(h.name) + '</span>'
-         + '<span class="d">' + fdate(h.date) + '</span></div>';
+    /* "Pending" says what is still needed rather than just that something is. A holiday
+       you have not qualified for yet and one you can no longer qualify for look the same
+       on a calendar and are not the same thing at all. */
+    var why = h.status === 'pending' && h.need.length
+      ? ' — needs ' + h.need.map(function(d){ return fdate(d); }).join(' and ')
+      : h.status === 'lost' && h.need.length
+      ? ' — ' + h.need.map(function(d){ return fdate(d); }).join(' and ') + ' not worked'
+      : '';
+    return '<div class="calhol' + (h.ms < today && !h.paid ? ' past' : '') + '">'
+         + '<span class="r"><span class="n">' + esc(h.name) + '</span>'
+         + '<span class="s ' + h.status + '">' + (WORD[h.status] || '') + '</span></span>'
+         + '<span class="d">' + fdate(h.date) + (h.paid ? ' · ' + money(h.pay) : '')
+         + '<span style="color:var(--muted);font-weight:400">' + esc(why) + '</span></span></div>';
   }).join('');
 }
 
