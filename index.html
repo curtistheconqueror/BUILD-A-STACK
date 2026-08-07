@@ -33,7 +33,7 @@
     --ok:#51e08a;--bad:#ff5d6c;--warn:#ffb454;--glass:rgba(22,30,50,.55);--border:rgba(130,155,200,.22);
     /* Calendar defaults: black paper, white rules, green once a day is filled in.
        Overridable in Settings like every other colour. */
-    --cal-bg:#000000;--cal-grid:#ffffff;--cal-fill:#3ddc84;}
+    --cal-bg:#000000;--cal-grid:#ffffff;--cal-fill:#3ddc84;--cal-hol:#ffb454;}
   *{box-sizing:border-box}
   .hide{display:none !important}
   /* Font is chosen in Settings — see --font on html,body below. All system stacks,
@@ -177,6 +177,19 @@
   .calcell.today{box-shadow:inset 0 0 0 2px var(--acc)}
   .calcell .dnum{font-size:10px;line-height:1.1;text-align:center;color:var(--muted)}
   .calcell.pstart .dnum{color:var(--acc);font-weight:800}
+  /* A paid holiday. Marked on the day number and with a corner dot rather than a
+     background wash, because the money overlay already paints most of the cell and the
+     two would fight over it. */
+  .calcell.hol .dnum{color:var(--cal-hol);font-weight:800}
+  .calcell .holdot{position:absolute;top:2px;right:3px;width:5px;height:5px;border-radius:50%;
+    background:var(--cal-hol);pointer-events:none;z-index:2}
+  .calhols{margin-top:11px;border-top:1px solid var(--border);padding-top:10px}
+  .calhols h5{margin:0 0 7px;font-size:10.6px;letter-spacing:1.5px;text-transform:uppercase;
+    color:var(--muted);font-weight:800}
+  .calhol{display:flex;justify-content:space-between;gap:10px;font-size:12.8px;line-height:1.9}
+  .calhol .n{color:var(--ink);font-weight:600}
+  .calhol .d{color:var(--cal-hol);font-weight:700;font-variant-numeric:tabular-nums}
+  .calhol.past .n,.calhol.past .d{opacity:.45}
   /* Typed as input[type=number] so this beats the app-wide field styling declared
      further down — a calendar cell is paper, not a form box. */
   .calcell input[type=number]{flex:1;width:100%;min-width:0;min-height:32px;border:0;border-radius:0;
@@ -286,6 +299,15 @@
     border-radius:8px;padding:6px 9px;font:inherit;font-size:12.4px;font-weight:700;cursor:pointer;
     -webkit-tap-highlight-color:transparent}
   .autodays button.on{border-color:var(--acc);color:var(--acc);background:rgba(53,208,224,.12)}
+  /* the editable holiday list */
+  .holrow{display:grid;grid-template-columns:auto 1fr auto auto auto;gap:9px;align-items:center;
+    padding:9px 0;border-top:1px solid var(--border);font-size:13.2px}
+  .holrow .hon{width:17px;height:17px;accent-color:var(--acc);cursor:pointer}
+  .holrow .hnm{font-weight:700;color:var(--ink)}
+  .holrow.off .hnm{color:var(--muted);text-decoration:line-through}
+  .holrow .hwhen{color:var(--muted);font-size:12.4px;text-align:right;font-variant-numeric:tabular-nums}
+  .holrow .hotf{color:var(--warn);font-size:10.6px;letter-spacing:1px;font-weight:800}
+  .holnone{color:var(--muted);font-size:13px;padding:10px 0}
 
   /* ---- period ---- */
   #period{--ca:var(--acc2)}
@@ -919,6 +941,7 @@
         <div class="note" id="qCalRule" style="margin-top:9px"></div>
         <div class="calscroll" id="qCalScroll"></div>
         <div class="calsums" id="qCalSums"></div>
+        <div class="calhols hide" id="qCalHols"></div>
       </div>
     </div>
     </div>
@@ -972,6 +995,74 @@
           <button class="mini" id="rApply">Apply raise — history keeps its old rate</button></div>
         <div class="f"><label>Year-to-date section</label>
           <select id="cYtd"><option value="1">Show</option><option value="0">Hide</option></select></div>
+      </div>
+
+      <div class="f" style="margin-top:18px"><label>Days you are scheduled to work</label>
+        <div class="note">The roster the app judges everything else against. "The day before a
+        holiday" means the shift before it, not whatever date happens to sit there — so a
+        Monday holiday looks at Sunday and Tuesday, and one on a Friday reaches back to
+        Thursday and forward to Sunday.</div>
+      </div>
+      <div class="autodays" id="cWorkDays" style="justify-content:flex-start">
+        <button data-w="0">Sun</button><button data-w="1">Mon</button><button data-w="2">Tue</button>
+        <button data-w="3">Wed</button><button data-w="4">Thu</button><button data-w="5">Fri</button>
+        <button data-w="6">Sat</button>
+      </div>
+      <div class="note" id="cWorkNote" style="margin-top:8px"></div>
+
+      <div class="f" style="margin-top:18px"><label>Paid holidays</label>
+        <div class="note">Days off that still pay. Each one is a rule rather than a date, so
+        the calendar is right every year without anyone editing it. Switch one off if your
+        contract does not have it, rename it, or add your own.</div>
+      </div>
+      <div class="cfgrid">
+        <div class="f"><label for="cHolHours">A holiday is worth (h)</label>
+          <input type="number" id="cHolHours" min="0" max="24" step="0.5"></div>
+        <div class="f"><label for="cHolAdj">Must work either side of it</label>
+          <select id="cHolAdj">
+            <option value="1">Yes — the shift before and after</option>
+            <option value="0">No — it pays regardless</option>
+          </select></div>
+        <div class="f"><label for="cHolOffDay">Lands on a day you are off</label>
+          <select id="cHolOffDay">
+            <option value="1">Still pays</option>
+            <option value="0">Does not pay</option>
+          </select></div>
+      </div>
+      <div id="cHolList" style="margin-top:12px"></div>
+      <div class="actions" style="justify-content:flex-start;margin-top:10px">
+        <button class="mini" id="cHolAdd">+ Add a holiday</button>
+        <button class="mini" id="cHolReset">↺ Back to the standard six</button>
+      </div>
+      <div class="editor hide" id="holEdit">
+        <div class="etitle" id="holTitle">Add a holiday</div>
+        <div class="egrid">
+          <div class="f"><label for="hName">Name</label><input type="text" id="hName" placeholder="e.g. Good Friday"></div>
+          <div class="f"><label for="hKind">Falls on</label>
+            <select id="hKind">
+              <option value="md">The same date every year</option>
+              <option value="nth">A weekday of a month</option>
+              <option value="on">One specific date</option>
+            </select></div>
+          <div class="f" id="fhMonth"><label for="hMonth">Month</label><select id="hMonth"></select></div>
+          <div class="f" id="fhDay"><label for="hDay">Day of month</label>
+            <input type="number" id="hDay" min="1" max="31" step="1" value="1"></div>
+          <div class="f hide" id="fhNth"><label for="hNth">Which one</label>
+            <select id="hNth">
+              <option value="1">1st</option><option value="2">2nd</option><option value="3">3rd</option>
+              <option value="4">4th</option><option value="-1">Last</option>
+            </select></div>
+          <div class="f hide" id="fhDow"><label for="hDow">Weekday</label><select id="hDow"></select></div>
+          <div class="f hide" id="fhDate"><label for="hDate">Date</label><input type="date" id="hDate"></div>
+          <div class="f"><label for="hOt">Counts toward overtime</label>
+            <select id="hOt"><option value="1">Yes</option><option value="0">No</option></select></div>
+        </div>
+        <div class="epreview" id="hPreview"></div>
+        <div class="eerr hide" id="hErr"></div>
+        <div class="eactions">
+          <button class="btn go" id="hSave">Save</button>
+          <button class="btn ghost" id="hCancel">Cancel</button>
+        </div>
       </div>
       <div class="f" style="margin-top:18px"><label>Look &amp; feel</label>
         <div class="note">Pick a preset, then change any individual colour. Applies everywhere, saved on this device.</div>
@@ -1035,6 +1126,29 @@ var HOUR_MS = 3600000, DAY_MS = 86400000;
 
 /* Neutral placeholders only — no real wage or pay schedule ships in this file.
    First run collects the real values and stores them in your browser alone. */
+/* ---- the holiday calendar ----
+   A holiday is a rule, not a date, so the app is right every year without anyone
+   editing it. Three kinds of rule cover every holiday anyone has asked for:
+
+     {kind:'md',  month, day}          a fixed date          — Christmas, Dec 25
+     {kind:'nth', month, dow, n}       the nth weekday       — Labor Day, 1st Mon of Sep
+                                       n = -1 means the last — Memorial Day, last Mon of May
+     {kind:'on',  date:'YYYY-MM-DD'}   one specific date     — a one-off a contract adds
+
+   Months and weekdays are zero-based, matching Date. `paid` is what the day is worth
+   when you do not work it; `ot` is whether those hours count toward the overtime
+   threshold. Both live per holiday because contracts do not treat them all alike. */
+function HOLIDAY_DEFAULTS(){
+  return [
+    { id: 'newyear', name: "New Year's Day",    rule: { kind: 'md',  month: 0,  day: 1 },            on: true, ot: true },
+    { id: 'memorial',name: 'Memorial Day',      rule: { kind: 'nth', month: 4,  dow: 1, n: -1 },     on: true, ot: true },
+    { id: 'july4',   name: 'Independence Day',  rule: { kind: 'md',  month: 6,  day: 4 },            on: true, ot: true },
+    { id: 'labor',   name: 'Labor Day',         rule: { kind: 'nth', month: 8,  dow: 1, n: 1 },      on: true, ot: true },
+    { id: 'thanks',  name: 'Thanksgiving Day',  rule: { kind: 'nth', month: 10, dow: 4, n: 4 },      on: true, ot: true },
+    { id: 'xmas',    name: 'Christmas Day',     rule: { kind: 'md',  month: 11, day: 25 },           on: true, ot: true }
+  ];
+}
+
 var DEFAULTS = {
   rate: 0,
   otMultiplier: 1.5,
@@ -1048,10 +1162,26 @@ var DEFAULTS = {
   payDateOffsetDays: 13,     // payday = last day of the period + this many days
   clock24: false,            // print times as 14:30 rather than 2:30 PM
   schedStart: '09:00',       // the scheduled shift, for working out extra time
-  schedEnd: '17:00'
+  schedEnd: '17:00',
+  /* Which days of the week you are rostered for, Sunday first. Holiday eligibility is
+     judged against these, not against the calendar week, so "the day before and the day
+     after" means the shifts either side of the holiday rather than whatever dates happen
+     to sit next to it. */
+  workDays: [true, true, true, true, true, false, false],
+  holidayHours: 8,           // what a paid holiday is worth when you do not work it
+  /* Most contracts only pay the holiday if you turned up either side of it. */
+  holidayNeedsAdjacent: true,
+  /* Whether a holiday landing on a day you are not rostered for still pays. */
+  holidayOffDayPays: true,
+  holidays: HOLIDAY_DEFAULTS()
 };
 
 function ymd(s){ var p = String(s).split('-').map(Number); return new Date(p[0], p[1]-1, p[2]); }
+/* A date as YYYY-MM-DD, the key everything day-shaped is filed under. Lives in the
+   engine because the holiday functions below build keys and the tests read them. */
+function dkey(y, m, d){
+  return y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+}
 function midnight(t){ var d = new Date(t); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
 function addDays(t, n){ var d = new Date(t); return new Date(d.getFullYear(), d.getMonth(), d.getDate()+n); }
 // Calendar-day difference. Rounded, so a DST shift inside the span can't drop or add a day.
@@ -1453,6 +1583,82 @@ function periodNetView(gross, hours, items, n, cfg, mode, otHours, otPremYtdBefo
   return bd;
 }
 
+/* ============================ holidays and the roster ============================ */
+
+/* The nth `dow` of a month, or the last one when n is -1. Returns a Date at local
+   midnight. An n past the end of the month (a 5th Thursday that does not exist) comes
+   back null rather than silently rolling into the next month. */
+function nthDow(y, month, dow, n){
+  if (n === -1){
+    var last = new Date(y, month + 1, 0);                 // final day of the month
+    return addDays(last, -(((last.getDay() - dow) % 7 + 7) % 7));
+  }
+  var first = new Date(y, month, 1);
+  var offset = ((dow - first.getDay()) % 7 + 7) % 7;
+  var d = addDays(first, offset + (n - 1) * 7);
+  return d.getMonth() === month ? d : null;
+}
+
+/* When a given holiday falls in a given year. Null if its rule cannot produce a date
+   that year — a one-off pinned to another year, or an nth weekday that does not exist. */
+function holidayDate(h, y){
+  var r = h && h.rule;
+  if (!r) return null;
+  if (r.kind === 'md')  return new Date(y, r.month, r.day);
+  if (r.kind === 'nth') return nthDow(y, r.month, r.dow, r.n);
+  if (r.kind === 'on'){
+    var d = ymd(r.date);
+    return d.getFullYear() === y ? d : null;
+  }
+  return null;
+}
+
+/* Every switched-on holiday in a year, earliest first, each with the date it lands on. */
+function holidaysInYear(cfg, y){
+  var out = [];
+  (cfg.holidays || []).forEach(function(h){
+    if (h.on === false) return;
+    var d = holidayDate(h, y);
+    if (d) out.push({ id: h.id, name: h.name, ot: h.ot !== false, date: d, ms: +d,
+                      key: dkey(d.getFullYear(), d.getMonth(), d.getDate()) });
+  });
+  return out.sort(function(a, b){ return a.ms - b.ms; });
+}
+
+/* The holiday falling on a date, or null. Checks the neighbouring years too so a
+   December date is still found when the calendar is showing into January. */
+function holidayOn(cfg, t){
+  var d = midnight(t), y = d.getFullYear(), ms = +d;
+  var list = holidaysInYear(cfg, y);
+  for (var i = 0; i < list.length; i++) if (list[i].ms === ms) return list[i];
+  return null;
+}
+
+/* ---- the roster ---- */
+function isWorkDay(cfg, dow){
+  var w = cfg.workDays;
+  if (!w || w.length !== 7) return true;                  // unset means every day counts
+  return !!w[dow];
+}
+function anyWorkDay(cfg){
+  var w = cfg.workDays;
+  if (!w || w.length !== 7) return true;
+  for (var i = 0; i < 7; i++) if (w[i]) return true;
+  return false;                                            // a roster with nothing on it
+}
+/* The rostered day either side of a date. `step` is -1 for the shift before and +1 for
+   the shift after. Walks at most a fortnight so a roster of one day a week still
+   resolves, and returns null rather than looping forever on an empty roster. */
+function adjacentWorkDay(cfg, t, step){
+  if (!anyWorkDay(cfg)) return null;
+  var d = midnight(t);
+  for (var i = 1; i <= 14; i++){
+    var c = addDays(d, i * step);
+    if (isWorkDay(cfg, c.getDay())) return c;
+  }
+  return null;
+}
+
 /* ==ENGINE-END== */
 
 /* ============================ state ============================ */
@@ -1628,6 +1834,124 @@ function resumeShift(){
   toast('Back on the clock since ' + ftime(s.start) + ' — the '
       + hhmmss(Date.now() - s.end) + ' since you clocked out counts as worked.'
       + (stoodDown ? ' Auto-stop was already past its target, so it is off.' : ''));
+}
+
+/* ============================ holidays in Settings ============================ */
+var MON_FULL_LIST = ['January','February','March','April','May','June','July','August',
+                     'September','October','November','December'];
+var DOW_FULL_LIST = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+var NTH_WORD = { '1': '1st', '2': '2nd', '3': '3rd', '4': '4th', '-1': 'last' };
+
+/* A rule in words — what the list shows so a date can be checked without opening it. */
+function holidayRuleText(h){
+  var r = h && h.rule;
+  if (!r) return '—';
+  if (r.kind === 'md')  return MON_FULL_LIST[r.month] + ' ' + r.day;
+  if (r.kind === 'nth') return NTH_WORD[String(r.n)] + ' ' + DOW_FULL_LIST[r.dow] + ' of ' + MON_FULL_LIST[r.month];
+  if (r.kind === 'on')  return fdateY(ymd(r.date));
+  return '—';
+}
+
+function renderWorkDays(){
+  var cfg = state.cfg;
+  [].forEach.call(document.querySelectorAll('#cWorkDays button'), function(b){
+    b.classList.toggle('on', isWorkDay(cfg, +b.dataset.w));
+  });
+  var on = [];
+  for (var i = 0; i < 7; i++) if (isWorkDay(cfg, i)) on.push(DOW_FULL_LIST[i]);
+  el('cWorkNote').textContent = on.length === 7 ? 'Every day counts as a scheduled day.'
+    : on.length === 0 ? 'No scheduled days — holiday eligibility cannot be worked out.'
+    : 'Scheduled ' + on.length + ' days a week: ' + on.join(', ') + '.';
+}
+
+function renderHolidayList(){
+  var cfg = state.cfg, list = cfg.holidays || [], y = new Date().getFullYear();
+  el('cHolList').innerHTML = list.length ? list.map(function(h, i){
+    var d = holidayDate(h, y);
+    return '<div class="holrow' + (h.on === false ? ' off' : '') + '">'
+      + '<input type="checkbox" class="hon" data-hon="' + i + '"' + (h.on === false ? '' : ' checked')
+      + ' aria-label="' + esc(h.name) + ' switched on">'
+      + '<span class="hnm">' + esc(h.name) + '</span>'
+      + '<span class="hotf">' + (h.ot === false ? '' : 'OT') + '</span>'
+      + '<span class="hwhen">' + esc(holidayRuleText(h))
+      + (d ? '<br>' + fdate(d) + ' ' + y : '') + '</span>'
+      + '<span><button class="mini" data-hedit="' + i + '">✎</button> '
+      + '<button class="mini danger" data-hdel="' + i + '">✕</button></span>'
+      + '</div>';
+  }).join('') : '<div class="holnone">No paid holidays. Add one, or put the standard six back.</div>';
+}
+
+/* The editor. `holEditing` is the index being changed, or -1 for a new one. */
+var holEditing = -1;
+function fillHolSelects(){
+  var m = el('hMonth'), w = el('hDow');
+  if (m.options.length) return;
+  m.innerHTML = MON_FULL_LIST.map(function(n, i){ return '<option value="' + i + '">' + n + '</option>'; }).join('');
+  w.innerHTML = DOW_FULL_LIST.map(function(n, i){ return '<option value="' + i + '">' + n + '</option>'; }).join('');
+}
+function syncHolKind(){
+  var k = el('hKind').value;
+  show('fhMonth', k === 'md' || k === 'nth');
+  show('fhDay',   k === 'md');
+  show('fhNth',   k === 'nth');
+  show('fhDow',   k === 'nth');
+  show('fhDate',  k === 'on');
+  paintHolPreview();
+}
+function holFromForm(){
+  var k = el('hKind').value, rule;
+  if (k === 'md')  rule = { kind: 'md',  month: +el('hMonth').value, day: Math.min(31, Math.max(1, parseInt(el('hDay').value, 10) || 1)) };
+  if (k === 'nth') rule = { kind: 'nth', month: +el('hMonth').value, dow: +el('hDow').value, n: parseInt(el('hNth').value, 10) };
+  if (k === 'on')  rule = { kind: 'on',  date: el('hDate').value };
+  return { name: (el('hName').value || '').trim(), rule: rule, ot: el('hOt').value === '1' };
+}
+function paintHolPreview(){
+  var h = holFromForm(), y = new Date().getFullYear(), lines = [];
+  for (var i = 0; i < 3; i++){
+    var d = holidayDate(h, y + i);
+    lines.push(d ? fdateY(d) : (y + i) + ' — does not fall');
+  }
+  el('hPreview').innerHTML = '<b>' + esc(h.name || 'Untitled') + '</b> — ' + esc(holidayRuleText(h))
+    + '<br><span style="color:var(--muted)">' + lines.join(' &nbsp;·&nbsp; ') + '</span>';
+}
+function openHolEditor(i){
+  fillHolSelects();
+  holEditing = i;
+  var h = i >= 0 ? state.cfg.holidays[i] : null;
+  el('holTitle').textContent = h ? 'Edit ' + h.name : 'Add a holiday';
+  var r = (h && h.rule) || { kind: 'md', month: new Date().getMonth(), day: new Date().getDate() };
+  el('hName').value = h ? h.name : '';
+  el('hKind').value = r.kind;
+  el('hMonth').value = r.month != null ? r.month : new Date().getMonth();
+  el('hDay').value = r.day || 1;
+  el('hNth').value = r.n != null ? r.n : 1;
+  el('hDow').value = r.dow != null ? r.dow : 1;
+  el('hDate').value = r.date || dateInput(new Date());
+  el('hOt').value = (h && h.ot === false) ? '0' : '1';
+  show('hErr', false);
+  syncHolKind();
+  show('holEdit', true);
+  el('holEdit').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function saveHoliday(){
+  var h = holFromForm();
+  if (!h.name){ el('hErr').textContent = 'Give it a name.'; show('hErr', true); return; }
+  if (h.rule.kind === 'on' && !/^\d{4}-\d{2}-\d{2}$/.test(h.rule.date || '')){
+    el('hErr').textContent = 'Pick a date.'; show('hErr', true); return;
+  }
+  if (h.rule.kind === 'md' && !holidayDate(h, new Date().getFullYear())){
+    el('hErr').textContent = 'That date does not exist in every month.'; show('hErr', true); return;
+  }
+  var list = state.cfg.holidays || (state.cfg.holidays = []);
+  if (holEditing >= 0 && list[holEditing]){
+    list[holEditing] = Object.assign({}, list[holEditing], h);
+  } else {
+    list.push(Object.assign({ id: uid(), on: true }, h));
+  }
+  show('holEdit', false);
+  save(); renderHolidayList(); drawCal(true); render();
+  toast(holEditing >= 0 ? 'Holiday updated.' : 'Holiday added.');
+  holEditing = -1;
 }
 
 /* ---- auto clock-in ----
@@ -2593,9 +2917,6 @@ function calCfg(){
   if (!state.calCal.hours) state.calCal.hours = {};
   return state.calCal;
 }
-function dkey(y, m, d){
-  return y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
-}
 function shiftMonth(y, m, n){ var d = new Date(y, m + n, 1); return { y: d.getFullYear(), m: d.getMonth() }; }
 
 var calMonths = [];           // rendered window, oldest first — view state, never persisted
@@ -2633,14 +2954,22 @@ function buildMonth(y, m){
   var last = new Date(y, m + 1, 0).getDate();
   var todayKey = dkey(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
 
+  // One lookup for the month rather than one per cell — holidaysInYear walks the whole
+  // list each time it is asked.
+  var hols = {};
+  holidaysInYear(cfg, y).forEach(function(h){ hols[h.key] = h; });
+
   var cells = '';
   for (var p = 0; p < lead; p++) cells += '<div class="calcell pad"></div>';
   for (var d = 1; d <= last; d++){
     var k = dkey(y, m, d);
     var per = periodInfo(+new Date(y, m, d), cfg);
     var isStart = +per.start === +new Date(y, m, d);
+    var hol = hols[k];
     cells += '<div class="calcell' + (k === todayKey ? ' today' : '') + (isStart ? ' pstart' : '')
-      + '" data-d="' + k + '">'
+      + (hol ? ' hol' : '') + '" data-d="' + k + '"'
+      + (hol ? ' data-hol="' + esc(hol.name) + '"' : '') + '>'
+      + (hol ? '<span class="holdot"></span>' : '')
       + '<span class="dnum">' + d + '</span>'
       + '<input type="number" min="0" max="24" step="0.25" inputmode="decimal" data-d="' + k + '"'
       + ' value="' + (cc.hours[k] || '') + '" aria-label="Hours worked ' + k + '">'
@@ -2713,6 +3042,23 @@ function paintCal(){
     : '<div class="note">Type hours into any day and its pay period totals up here.</div>';
 
   paintCalRule();
+  paintCalHols();
+}
+
+/* This year's paid holidays, listed under the grid. A rule is only as good as the dates
+   it produces, so the dates get shown plainly where they can be checked against a
+   contract rather than left implied by a dot on a cell. */
+function paintCalHols(){
+  var cfg = state.cfg, y = new Date().getFullYear();
+  var list = holidaysInYear(cfg, y);
+  show('qCalHols', list.length > 0);
+  if (!list.length) return;
+  var today = +midnight(Date.now());
+  el('qCalHols').innerHTML = '<h5>Paid holidays ' + y + '</h5>' + list.map(function(h){
+    return '<div class="calhol' + (h.ms < today ? ' past' : '') + '">'
+         + '<span class="n">' + esc(h.name) + '</span>'
+         + '<span class="d">' + fdate(h.date) + '</span></div>';
+  }).join('');
 }
 
 /* The line above the grid. While a day is open it names that day and what it is worth,
@@ -2724,7 +3070,10 @@ function paintCalRule(){
     ? document.activeElement.closest('input[data-d]') : null;
   if (inp){
     var b = calPriced().byDay[inp.dataset.d];
+    var cell = inp.closest('.calcell');
+    var hn = cell && cell.dataset.hol;
     el('qCalRule').innerHTML = '<b style="color:var(--acc)">Editing ' + fdateY(ymd(inp.dataset.d)) + '</b>'
+      + (hn ? ' <b style="color:var(--cal-hol)">· ' + esc(hn) + '</b>' : '')
       + (b ? ' — ' + b.hours.toFixed(2) + ' h · ' + money(b.gross) : ' — no hours yet');
     return;
   }
@@ -3095,6 +3444,14 @@ var pendingDelete = null;
 var el = function(id){ return document.getElementById(id); };
 function show(id, on){ el(id).classList.toggle('hide', !on); }
 
+/* Holiday names are typed by you and land in innerHTML and in attributes, so they get
+   escaped on the way through rather than trusted. */
+function esc(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
 function dateValue(ms){
   var d = new Date(ms);
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
@@ -3347,6 +3704,58 @@ document.getElementById('autoDays').addEventListener('click', function(e){
   save(); syncControls(); render();
 });
 document.getElementById('autoUndo').onclick = function(){ undoAutoIn(); };
+
+/* ---- the roster and the holiday list ---- */
+document.getElementById('cWorkDays').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  var w = state.cfg.workDays;
+  if (!w || w.length !== 7) w = state.cfg.workDays = [true,true,true,true,true,true,true];
+  var i = +b.dataset.w;
+  w[i] = !w[i];
+  save(); renderWorkDays(); render();
+});
+document.getElementById('cHolHours').onchange = function(e){
+  var v = parseFloat(e.target.value);
+  state.cfg.holidayHours = isFinite(v) && v >= 0 ? Math.min(24, v) : 8;
+  e.target.value = state.cfg.holidayHours; save(); render();
+};
+document.getElementById('cHolAdj').onchange = function(e){
+  state.cfg.holidayNeedsAdjacent = e.target.value === '1'; save(); render();
+};
+document.getElementById('cHolOffDay').onchange = function(e){
+  state.cfg.holidayOffDayPays = e.target.value === '1'; save(); render();
+};
+document.getElementById('cHolList').addEventListener('change', function(e){
+  var t = e.target;
+  if (t.dataset.hon == null) return;
+  var h = state.cfg.holidays[+t.dataset.hon];
+  if (h){ h.on = t.checked; save(); renderHolidayList(); drawCal(true); render(); }
+});
+document.getElementById('cHolList').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.hedit != null) openHolEditor(+b.dataset.hedit);
+  if (b.dataset.hdel != null){
+    var i = +b.dataset.hdel, h = state.cfg.holidays[i];
+    if (!h) return;
+    state.cfg.holidays.splice(i, 1);
+    save(); renderHolidayList(); drawCal(true); render();
+    toast('Removed ' + h.name + '.');
+  }
+});
+document.getElementById('cHolAdd').onclick = function(){ openHolEditor(-1); };
+document.getElementById('cHolReset').onclick = function(){
+  state.cfg.holidays = HOLIDAY_DEFAULTS();
+  save(); renderHolidayList(); drawCal(true); render();
+  toast('Back to the standard six.');
+};
+document.getElementById('hKind').onchange = syncHolKind;
+['hName','hMonth','hDay','hNth','hDow','hDate','hOt'].forEach(function(id){
+  var e2 = document.getElementById(id);
+  e2.addEventListener('input', paintHolPreview);
+  e2.addEventListener('change', paintHolPreview);
+});
+document.getElementById('hSave').onclick = saveHoliday;
+document.getElementById('hCancel').onclick = function(){ show('holEdit', false); holEditing = -1; };
 
 document.getElementById('planOn').onchange = function(e){ state.planOn = e.target.checked; save(); render(); };
 document.getElementById('planHrs').onchange = function(e){
@@ -3843,6 +4252,11 @@ function syncControls(){
     .join(' &nbsp;·&nbsp; ') : '';
   document.getElementById('planOn').checked = !!state.planOn;
   document.getElementById('planHrs').value = state.plannedHours;
+  el('cHolHours').value = state.cfg.holidayHours != null ? state.cfg.holidayHours : 8;
+  el('cHolAdj').value = state.cfg.holidayNeedsAdjacent === false ? '0' : '1';
+  el('cHolOffDay').value = state.cfg.holidayOffDayPays === false ? '0' : '1';
+  renderWorkDays();
+  renderHolidayList();
   document.getElementById('autoOn').checked = !!state.autoOn;
   var aA = document.getElementById('autoAt');
   if (document.activeElement !== aA) aA.value = state.autoAt || '';

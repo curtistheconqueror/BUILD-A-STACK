@@ -26,7 +26,9 @@ console.log(`engine source: ${widget}`);
 
 const E = new Function(m[1] + `
   return { DEFAULTS, periodInfo, weekInfo, splitSession, buildLedger,
-           sumRange, sumSession, bucketHoursAt, plannedStopAt, quantize, HOUR_MS };
+           sumRange, sumSession, bucketHoursAt, plannedStopAt, quantize, HOUR_MS,
+           HOLIDAY_DEFAULTS, nthDow, holidayDate, holidaysInYear, holidayOn,
+           isWorkDay, anyWorkDay, adjacentWorkDay, dkey };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -246,6 +248,92 @@ group('Robustness');
   // Marathon shift: must terminate and stay exact.
   const long = [shift('L', at(2026, 7, 27, 0), at(2026, 8, 3, 0))]; // 168 h
   near('7-day shift = 168 h', E.sumSession(E.buildLedger(long, cfg).parts, 'L').hours, 168);
+}
+
+
+/* ---------------- holidays and the roster ---------------- */
+{
+  const H = E.HOLIDAY_DEFAULTS();
+  const by = id => H.find(h => h.id === id);
+  const on = (h, y) => { const d = E.holidayDate(h, y); return d && E.dkey(d.getFullYear(), d.getMonth(), d.getDate()); };
+
+  // Fixed dates are the easy half.
+  ok("New Year's 2026 is Jan 1",  on(by('newyear'), 2026) === '2026-01-01');
+  ok('July 4th 2026 is Jul 4',    on(by('july4'),   2026) === '2026-07-04');
+  ok('Christmas 2026 is Dec 25',  on(by('xmas'),    2026) === '2026-12-25');
+  ok('and they move year to year without editing',
+     on(by('xmas'), 2031) === '2031-12-25' && on(by('july4'), 2044) === '2044-07-04');
+
+  // The weekday rules are where a calendar goes wrong. Checked against real almanac dates.
+  ok('Labor Day 2026 = Mon Sep 7',        on(by('labor'),    2026) === '2026-09-07');
+  ok('Labor Day 2027 = Mon Sep 6',        on(by('labor'),    2027) === '2027-09-06');
+  ok('Memorial Day 2026 = Mon May 25',    on(by('memorial'), 2026) === '2026-05-25');
+  ok('Memorial Day 2027 = Mon May 31',    on(by('memorial'), 2027) === '2027-05-31');
+  ok('Memorial Day 2032 = Mon May 31',    on(by('memorial'), 2032) === '2032-05-31');
+  ok('Thanksgiving 2026 = Thu Nov 26',    on(by('thanks'),   2026) === '2026-11-26');
+  ok('Thanksgiving 2027 = Thu Nov 25',    on(by('thanks'),   2027) === '2027-11-25');
+  ok('Thanksgiving 2028 = Thu Nov 23',    on(by('thanks'),   2028) === '2028-11-23');
+
+  // A month whose 1st IS the weekday in question — the classic off-by-one.
+  // Sep 1 2025 was a Monday, so the 1st Monday is the 1st itself, not the 8th.
+  ok('a month starting on the weekday counts that day as the first',
+     on(by('labor'), 2025) === '2025-09-01');
+  // May 31 2027 is a Monday, so "last Monday" is the final day of the month.
+  ok('"last" reaches the final day when it lands there', on(by('memorial'), 2027) === '2027-05-31');
+
+  // n past the end of the month has no date rather than spilling into the next one.
+  ok('a 5th weekday that does not exist returns null',
+     E.nthDow(2026, 1, 1, 5) === null);                       // no 5th Monday in Feb 2026
+  ok('but a 5th weekday that does exist is found',
+     E.dkey(2026, 2, E.nthDow(2026, 2, 1, 5).getDate()) === '2026-03-30');
+
+  // One-off dates belong to their own year only.
+  const once = { id: 'x', name: 'Contract day', rule: { kind: 'on', date: '2026-04-10' } };
+  ok('a one-off lands on its date',      on(once, 2026) === '2026-04-10');
+  ok('and does not repeat next year',    E.holidayDate(once, 2027) === null);
+
+  const cfg = { holidays: H, workDays: [true, true, true, true, true, false, false] };
+  const list = E.holidaysInYear(cfg, 2026);
+  ok('six holidays in a year', list.length === 6, list.length);
+  ok('in date order', list.every((h, i) => i === 0 || h.ms >= list[i - 1].ms));
+  ok('and each carries the day it falls on', list[0].key === '2026-01-01');
+
+  // Switching one off removes it without disturbing the rest.
+  const off = H.map(h => h.id === 'july4' ? Object.assign({}, h, { on: false }) : h);
+  ok('a holiday switched off drops out', E.holidaysInYear({ holidays: off }, 2026).length === 5);
+
+  ok('a date with a holiday is recognised',
+     E.holidayOn(cfg, new Date(2026, 8, 7).getTime()).id === 'labor');
+  ok('and an ordinary day is not', E.holidayOn(cfg, new Date(2026, 8, 8).getTime()) === null);
+
+  // The roster: Curtis works Sunday through Thursday.
+  ok('Sunday is a work day',   E.isWorkDay(cfg, 0));
+  ok('Thursday is a work day', E.isWorkDay(cfg, 4));
+  ok('Friday is not',         !E.isWorkDay(cfg, 5));
+  ok('Saturday is not',       !E.isWorkDay(cfg, 6));
+  ok('an unset roster counts every day', E.isWorkDay({}, 6));
+
+  // "The day before and the day after" means the shifts either side, not the dates.
+  const key = d => E.dkey(d.getFullYear(), d.getMonth(), d.getDate());
+  const mon = new Date(2026, 8, 7);                            // Labor Day 2026, a Monday
+  ok('the shift before a Monday holiday is the Sunday',
+     key(E.adjacentWorkDay(cfg, +mon, -1)) === '2026-09-06');
+  ok('and the shift after is the Tuesday',
+     key(E.adjacentWorkDay(cfg, +mon,  1)) === '2026-09-08');
+
+  // A holiday on a day off has to skip the weekend to find the shifts either side.
+  const fri = new Date(2026, 6, 3);                            // Fri Jul 3 2026
+  ok('from a Friday, the shift before is the Thursday',
+     key(E.adjacentWorkDay(cfg, +fri, -1)) === '2026-07-02');
+  ok('and the shift after skips the weekend to Sunday',
+     key(E.adjacentWorkDay(cfg, +fri,  1)) === '2026-07-05');
+
+  // A one-day roster still resolves rather than spinning.
+  const sundays = { workDays: [true, false, false, false, false, false, false] };
+  ok('a one-day roster still finds the shift before',
+     key(E.adjacentWorkDay(sundays, +new Date(2026, 8, 9), -1)) === '2026-09-06');
+  ok('an empty roster has no adjacent shift',
+     E.adjacentWorkDay({ workDays: [false,false,false,false,false,false,false] }, +mon, -1) === null);
 }
 
 /* ------------------------------------------------------------------ */
