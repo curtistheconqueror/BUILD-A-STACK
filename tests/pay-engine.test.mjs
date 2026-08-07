@@ -29,7 +29,9 @@ const E = new Function(m[1] + `
            sumRange, sumSession, bucketHoursAt, plannedStopAt, quantize, HOUR_MS,
            HOLIDAY_DEFAULTS, nthDow, holidayDate, holidaysInYear, holidayOn,
            isWorkDay, anyWorkDay, adjacentWorkDay, dkey,
-           workedOn, holidayEligibility, holidayYears, holidayCredits, holidayOutlook };
+           workedOn, holidayEligibility, holidayYears, holidayCredits, holidayOutlook,
+           BANK_DEFAULTS, bankById, daysOffUsed, bankLeft, bankSlots, dayOffName,
+           bankCredits, daysOffOutlook };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -463,6 +465,121 @@ group('Robustness');
      E.holidayCredits([wed, sun], { ...hcfg, workDays: [false,false,false,false,false,false,false] }).length === 0);
   ok('zero holiday hours credits nothing', E.holidayCredits([wed, sun], { ...hcfg, holidayHours: 0 }).length === 0);
   ok('no holidays configured credits nothing', E.holidayCredits([wed, sun], { ...hcfg, holidays: [] }).length === 0);
+}
+
+
+/* ---------------- floaters and sick days ---------------- */
+{
+  const B = E.BANK_DEFAULTS();
+  ok('two banks ship', B.length === 2, B.length);
+  const fl = E.bankById({ banks: B }, 'float'), sk = E.bankById({ banks: B }, 'sick');
+  ok('four floaters',  fl.count === 4, fl.count);
+  ok('five sick days', sk.count === 5, sk.count);
+  ok('both worth 8 h', fl.hours === 8 && sk.hours === 8);
+  ok('floaters count toward overtime', fl.ot === true);
+  ok('sick days do not',               sk.ot === false);
+  ok('the floater slots are named',
+     JSON.stringify(fl.slots) === JSON.stringify(['Birthday','Anniversary','MLK Day','Extra floater']),
+     JSON.stringify(fl.slots));
+
+  const cfg3 = { ...E.DEFAULTS, rate: 38, periodAnchor: '2026-01-04', banks: B,
+                 workDays: [true,true,true,true,true,false,false], daysOff: [] };
+
+  ok('a fresh year has all four floaters', E.bankLeft(cfg3, 'float', 2026) === 4);
+  ok('and all five sick days',             E.bankLeft(cfg3, 'sick',  2026) === 5);
+
+  // Spend the MLK floater on MLK day 2026 (Mon Jan 19) and a sick day in March.
+  const spent = { ...cfg3, daysOff: [
+    { id: 'a', bank: 'float', slot: 2, date: '2026-01-19' },
+    { id: 'b', bank: 'sick',  slot: null, date: '2026-03-10' }
+  ]};
+  ok('spending a floater leaves three', E.bankLeft(spent, 'float', 2026) === 3, E.bankLeft(spent, 'float', 2026));
+  ok('spending a sick day leaves four', E.bankLeft(spent, 'sick',  2026) === 4, E.bankLeft(spent, 'sick', 2026));
+  ok('and it is named by its slot', E.dayOffName(spent, spent.daysOff[0]) === 'MLK Day',
+     E.dayOffName(spent, spent.daysOff[0]));
+  ok('a slotless bank falls back to the bank name',
+     E.dayOffName(spent, spent.daysOff[1]) === 'Sick day', E.dayOffName(spent, spent.daysOff[1]));
+
+  const slots = E.bankSlots(spent, 'float', 2026);
+  ok('four slots are reported', slots.length === 4);
+  ok('MLK Day shows as taken', slots[2].used && slots[2].used.date === '2026-01-19');
+  ok('the birthday is still free', slots[0].name === 'Birthday' && !slots[0].used);
+
+  // Allowances run by calendar year, so next year starts full without anything being cleared.
+  ok('next year is full again', E.bankLeft(spent, 'float', 2027) === 4);
+  ok('and last year is too',    E.bankLeft(spent, 'float', 2025) === 4);
+  ok('the used list is per year', E.daysOffUsed(spent, 'float', 2026).length === 1 &&
+                                  E.daysOffUsed(spent, 'float', 2027).length === 0);
+
+  // Pricing.
+  const cr = E.bankCredits(spent);
+  ok('two credits', cr.length === 2, cr.length);
+  const flc = cr.find(c => c.bank === 'float'), skc = cr.find(c => c.bank === 'sick');
+  near('a floater is worth 8 h', (flc.end - flc.start) / 3600000, 8);
+  ok('a floater fills the overtime bucket', flc.adj.straight === true && !flc.adj.noOt);
+  ok('a sick day does not',                 skc.adj.noOt === true && !skc.adj.straight);
+  ok('neither has lunch taken off', flc.adj.noLunch === true && skc.adj.noLunch === true);
+  ok('a floater is named on its credit', flc.dayOff === 'MLK Day', flc.dayOff);
+
+  // In the ledger, next to real work. Week of Mon Jan 19 2026 (Sun Jan 18 starts it).
+  const d = (day, from, to) => ({ id: 'w' + day, start: +new Date(2026, 0, day, from),
+                                                 end: +new Date(2026, 0, day, to) });
+  // Sun 18 - Thu 22 at 9 h = 45 h. Add the MLK floater on the Monday.
+  const wk = [d(18,9,18), d(19,9,18), d(20,9,18), d(21,9,18), d(22,9,18)];
+  /* Just the floater for this one — `spent` also holds a sick day in March, and the
+     ledger prices everything it is given; the period windows come later, in sumRange. */
+  const floatOnly = { ...spent, daysOff: [spent.daysOff[0]] };
+  const led = E.buildLedger(wk, floatOnly);
+  const tot = led.parts.reduce((t, p) => ({ h: t.h + p.hours, ot: t.ot + p.otHours, g: t.g + p.gross }),
+                               { h: 0, ot: 0, g: 0 });
+  near('45 h worked plus an 8 h floater = 53 h', tot.h, 53);
+  const noFloat = E.buildLedger(wk, { ...spent, daysOff: [] });
+  near('the March sick day is priced too, just outside this week',
+       E.buildLedger(wk, spent).parts.reduce((s, p) => s + p.hours, 0), 61);
+  near('without it, 45 h gives 5 h of overtime',
+       noFloat.parts.reduce((s, p) => s + p.otHours, 0), 5);
+  // The floater sits at midnight opening Monday: 9 h banked, +8 = 17, so the line is
+  // reached 8 h sooner and overtime rises by 8.
+  near('with it, 13 h of overtime', tot.ot, 13);
+  const fp = led.parts.filter(p => p.sessionId === '__off:a');
+  near('the floater itself is straight time', fp.reduce((s, p) => s + p.otHours, 0), 0);
+  near('worth 8 x $38 = $304.00',             fp.reduce((s, p) => s + p.gross, 0), 304);
+
+  // A sick day is paid but never moves the overtime line.
+  const sickWeek = { ...cfg3, daysOff: [{ id: 's', bank: 'sick', slot: null, date: '2026-01-19' }] };
+  const sl = E.buildLedger(wk, sickWeek);
+  near('a sick day pays its 8 h', sl.parts.filter(p => p.sessionId === '__off:s')
+       .reduce((s, p) => s + p.gross, 0), 304);
+  near('but overtime stays where it was', sl.parts.reduce((s, p) => s + p.otHours, 0), 5);
+  near('53 h all the same', sl.parts.reduce((s, p) => s + p.hours, 0), 53);
+
+  // The outlook the app lists.
+  const look = E.daysOffOutlook(spent, 2026);
+  ok('both spent days are listed', look.length === 2, look.length);
+  ok('earliest first', look[0].key === '2026-01-19');
+  ok('named', look[0].name === 'MLK Day' && look[1].name === 'Sick day');
+  ok('priced', Math.abs(look[0].pay - 304) < 1e-6);
+  ok('and flagged for overtime correctly', look[0].ot === true && look[1].ot === false);
+
+  // Robustness.
+  ok('an unknown bank is skipped', E.bankCredits({ banks: B, daysOff: [{ id: 'x', bank: 'nope', date: '2026-01-01' }] }).length === 0);
+  ok('a broken date is skipped',   E.bankCredits({ banks: B, daysOff: [{ id: 'x', bank: 'sick', date: 'not-a-date' }] }).length === 0);
+  ok('zero hours credits nothing', E.bankCredits({ banks: [{ id: 'z', name: 'Z', count: 1, hours: 0 }],
+                                                   daysOff: [{ id: 'x', bank: 'z', date: '2026-01-01' }] }).length === 0);
+  ok('the calculator opts out entirely',
+     E.bankCredits({ ...spent, holidayCredit: false }).length === 0);
+  ok('spending more than the allowance cannot push the balance below zero',
+     E.bankLeft({ ...cfg3, daysOff: [1,2,3,4,5,6].map(i => ({ id: 'f' + i, bank: 'float', slot: i - 1, date: '2026-0' + i + '-01' })) },
+                'float', 2026) === 0);
+
+  // A floater and a paid holiday on the same day are two separate entries, not one.
+  const both = { ...spent, daysOff: [{ id: 'x', bank: 'float', slot: 0, date: '2026-12-25' }] };
+  const dec = E.buildLedger([{ id: 'w1', start: +new Date(2026, 11, 24, 9), end: +new Date(2026, 11, 24, 17) },
+                             { id: 'w2', start: +new Date(2026, 11, 27, 9), end: +new Date(2026, 11, 27, 17) }], both);
+  ok('Christmas pays as a holiday', dec.parts.some(p => p.sessionId === '__hol:2026-12-25'));
+  ok('and the floater pays as well', dec.parts.some(p => p.sessionId === '__off:x'));
+  near('16 h worked + 8 h holiday + 8 h floater = 32 h',
+       dec.parts.reduce((s, p) => s + p.hours, 0), 32);
 }
 
 /* ------------------------------------------------------------------ */

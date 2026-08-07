@@ -308,6 +308,28 @@
   .holrow .hwhen{color:var(--muted);font-size:12.4px;text-align:right;font-variant-numeric:tabular-nums}
   .holrow .hotf{color:var(--warn);font-size:10.6px;letter-spacing:1px;font-weight:800}
   .holnone{color:var(--muted);font-size:13px;padding:10px 0}
+  /* the floater and sick-day balances */
+  .bank{border-top:1px solid var(--border);padding:13px 0}
+  .bank:first-child{border-top:0;padding-top:0}
+  .bankhd{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .bankhd b{font-size:14.5px}
+  .bankhd .left{font-variant-numeric:tabular-nums;font-weight:800;color:var(--cal-fill)}
+  .bankhd .left.none{color:var(--muted)}
+  .bankdots{display:flex;gap:5px;flex-wrap:wrap;margin-top:9px}
+  .bankdot{border:1px solid var(--border);border-radius:8px;padding:5px 9px;font-size:12.2px;
+    color:var(--muted);display:flex;align-items:center;gap:6px}
+  .bankdot.free{border-color:var(--cal-fill);color:var(--cal-fill);font-weight:700}
+  .bankdot .when{color:var(--muted);font-size:11.2px;font-weight:400}
+  .bankdot button{background:none;border:0;color:var(--bad);font:inherit;font-size:12px;
+    cursor:pointer;padding:0 0 0 2px}
+  .banknote{color:var(--muted);font-size:12.4px;margin-top:8px}
+  .offlbl{color:var(--acc);font-size:10.5px;font-weight:800}
+  .offpill{color:var(--acc);border:1px solid var(--acc);border-radius:5px;padding:1px 5px;
+    font-size:9.5px;letter-spacing:.8px;font-weight:800}
+  tr.offrowlog td{background:rgba(53,208,224,.06)}
+  .calcell.off .dnum{color:var(--acc);font-weight:800}
+  .calcell .offdot{position:absolute;top:2px;left:3px;width:5px;height:5px;border-radius:50%;
+    background:var(--acc);pointer-events:none;z-index:2}
   /* a holiday's own line in the shift log */
   .hollbl{color:var(--cal-hol);font-size:10.5px;font-weight:800}
   .holpill{color:var(--cal-hol);border:1px solid var(--cal-hol);border-radius:5px;
@@ -818,6 +840,36 @@
     </div>
   </section>
 
+  <!-- ================= PAID DAYS OFF ================= -->
+  <section class="card col" id="banks">
+    <h2>Floaters &amp; sick days<span class="colsum" id="sum_banks"></span></h2>
+    <div class="colbody">
+    <div class="note" style="margin-bottom:12px">Days you spend rather than days that arrive.
+    Book one against any date — including one still to come — and it lands in that date's pay
+    period, paid at your rate.</div>
+    <div id="bankBody"></div>
+    <div class="actions" style="justify-content:flex-start;margin-top:14px">
+      <button class="mini" id="offAdd">+ Book a day off</button>
+    </div>
+    <div class="editor hide" id="offEdit">
+      <div class="etitle" id="offTitle">Book a day off</div>
+      <div class="egrid">
+        <div class="f"><label for="oBank">Take it from</label><select id="oBank"></select></div>
+        <div class="f" id="foSlot"><label for="oSlot">Which one</label><select id="oSlot"></select></div>
+        <div class="f"><label for="oDate">Date</label><input type="date" id="oDate"></div>
+        <div class="f"><label for="oHours">Hours</label>
+          <input type="number" id="oHours" min="0.5" max="24" step="0.5" value="8"></div>
+      </div>
+      <div class="epreview" id="oPreview"></div>
+      <div class="eerr hide" id="oErr"></div>
+      <div class="eactions">
+        <button class="btn go" id="oSave">Book it</button>
+        <button class="btn ghost" id="oCancel">Cancel</button>
+      </div>
+    </div>
+    </div>
+  </section>
+
   <!-- ================= DECIMAL TIME CONVERSION ================= -->
   <section class="card col" id="extra">
     <h2>Decimal Time Conversion <span class="hsub">(OT sheets)</span><span class="colsum" id="sum_extra"></span></h2>
@@ -1162,6 +1214,17 @@ function HOLIDAY_DEFAULTS(){
   ];
 }
 
+/* The named slots exist so a bank is not four anonymous tokens: knowing you still have
+   your birthday but have spent MLK is the point of tracking them at all. A bank with no
+   slots — sick days — is a plain count. */
+function BANK_DEFAULTS(){
+  return [
+    { id: 'float', name: 'Floating holiday', count: 4, hours: 8, ot: true,
+      slots: ['Birthday', 'Anniversary', 'MLK Day', 'Extra floater'] },
+    { id: 'sick',  name: 'Sick day',        count: 5, hours: 8, ot: false, slots: [] }
+  ];
+}
+
 var DEFAULTS = {
   rate: 0,
   otMultiplier: 1.5,
@@ -1186,7 +1249,13 @@ var DEFAULTS = {
   holidayNeedsAdjacent: true,
   /* Whether a holiday landing on a day you are not rostered for still pays. */
   holidayOffDayPays: true,
-  holidays: HOLIDAY_DEFAULTS()
+  holidays: HOLIDAY_DEFAULTS(),
+  /* Days you have to spend rather than days that arrive. Each bank is an allowance of
+     whole days a year, and using one files it against a date. Floaters count toward
+     overtime the way a paid holiday does; sick days do not. Both are editable, because
+     a new contract can change the count, the hours, or either answer. */
+  banks: BANK_DEFAULTS(),
+  daysOff: []                // [{id, bank, slot, date:'YYYY-MM-DD'}] — the ones spent
 };
 
 function ymd(s){ var p = String(s).split('-').map(Number); return new Date(p[0], p[1]-1, p[2]); }
@@ -1359,7 +1428,7 @@ function buildLedger(sessions, cfg){
      bar cannot disagree about whether a holiday counted — there is one answer, computed
      from the same shifts every caller already passed in. Eligibility is a fact about
      those shifts, so this stays pure and the tests stay honest. */
-  var withHols = sessions.concat(holidayCredits(sessions, cfg));
+  var withHols = sessions.concat(holidayCredits(sessions, cfg), bankCredits(cfg));
   var sorted = withHols.filter(function(s){ return s.end > s.start; })
                        .slice().sort(function(a,b){ return a.start - b.start; });
   for (var i = 0; i < sorted.length; i++){
@@ -1785,6 +1854,79 @@ function holidayOutlook(sessions, cfg, nowMs){
   return out.sort(function(a, b){ return a.ms - b.ms; });
 }
 
+/* ---- floaters and sick days ----
+   A spent day is priced exactly like an earned holiday: a synthetic session the ledger
+   walks alongside real work, straight time, no lunch. Whether it fills the overtime
+   bucket is the bank's own answer — floaters do, sick days do not — so a week with a
+   sick day in it does not reach overtime any sooner, while a floater does. */
+function bankById(cfg, id){
+  var list = cfg.banks || [];
+  for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+  return null;
+}
+/* The days spent from a bank in a year. Allowances run by calendar year, so the year is
+   how a balance resets — nothing has to be cleared out by hand each January. */
+function daysOffUsed(cfg, bankId, year){
+  return (cfg.daysOff || []).filter(function(d){
+    return d.bank === bankId && (year == null || +String(d.date).slice(0, 4) === year);
+  }).sort(function(a, b){ return a.date < b.date ? -1 : 1; });
+}
+function bankLeft(cfg, bankId, year){
+  var b = bankById(cfg, bankId);
+  if (!b) return 0;
+  return Math.max(0, (b.count || 0) - daysOffUsed(cfg, bankId, year).length);
+}
+/* Which slots of a bank are still unspent this year, as {index, name, usedOn}. */
+function bankSlots(cfg, bankId, year){
+  var b = bankById(cfg, bankId);
+  if (!b) return [];
+  var used = daysOffUsed(cfg, bankId, year), out = [];
+  for (var i = 0; i < (b.count || 0); i++){
+    var name = (b.slots && b.slots[i]) || (b.name + ' ' + (i + 1));
+    var taken = null;
+    for (var j = 0; j < used.length; j++) if (used[j].slot === i) taken = used[j];
+    out.push({ index: i, name: name, used: taken });
+  }
+  return out;
+}
+/* A spent day's name, for the log and the calendar. */
+function dayOffName(cfg, d){
+  var b = bankById(cfg, d.bank);
+  if (!b) return 'Paid day off';
+  var slot = b.slots && d.slot != null ? b.slots[d.slot] : null;
+  return slot || b.name;
+}
+function bankCredits(cfg){
+  if (cfg.holidayCredit === false) return [];   // the what-if calculator prices typed hours only
+  var out = [];
+  (cfg.daysOff || []).forEach(function(d){
+    var b = bankById(cfg, d.bank);
+    if (!b) return;
+    var hours = d.hours != null ? d.hours : (b.hours == null ? 8 : b.hours);
+    if (!(hours > 0)) return;
+    var day = ymd(d.date);
+    if (isNaN(+day)) return;
+    out.push({ id: '__off:' + d.id, start: +day, end: +day + hours * HOUR_MS,
+               dayOff: dayOffName(cfg, d), bank: b.id, dayOffId: d.id,
+               adj: b.ot ? { straight: true, noLunch: true } : { noOt: true, noLunch: true } });
+  });
+  return out;
+}
+/* Every spent day in a year with what it cost the balance and what it paid. */
+function daysOffOutlook(cfg, year){
+  var out = [];
+  (cfg.banks || []).forEach(function(b){
+    daysOffUsed(cfg, b.id, year).forEach(function(d){
+      var hours = d.hours != null ? d.hours : (b.hours == null ? 8 : b.hours);
+      var day = ymd(d.date);
+      out.push({ id: d.id, bank: b.id, bankName: b.name, name: dayOffName(cfg, d),
+                 date: day, ms: +day, key: d.date, hours: hours, ot: !!b.ot,
+                 pay: hours * rateAt(+day, cfg) });
+    });
+  });
+  return out.sort(function(a, b){ return a.ms - b.ms; });
+}
+
 /* ==ENGINE-END== */
 
 /* ============================ state ============================ */
@@ -1960,6 +2102,130 @@ function resumeShift(){
   toast('Back on the clock since ' + ftime(s.start) + ' — the '
       + hhmmss(Date.now() - s.end) + ' since you clocked out counts as worked.'
       + (stoodDown ? ' Auto-stop was already past its target, so it is off.' : ''));
+}
+
+/* ============================ floaters and sick days ============================ */
+function renderBanks(){
+  var cfg = state.cfg, y = new Date().getFullYear();
+  var banks = cfg.banks || [];
+  el('bankBody').innerHTML = banks.length ? banks.map(function(b){
+    var left = bankLeft(cfg, b.id, y), used = daysOffUsed(cfg, b.id, y);
+    var dots;
+    if (b.slots && b.slots.length){
+      /* Named slots, because knowing you still have your birthday but have spent MLK is
+         the whole point of tracking these rather than counting them. */
+      dots = bankSlots(cfg, b.id, y).map(function(sl){
+        return '<span class="bankdot' + (sl.used ? '' : ' free') + '">' + esc(sl.name)
+          + (sl.used ? '<span class="when">' + fdate(ymd(sl.used.date)) + '</span>'
+                     + '<button data-offdel="' + esc(sl.used.id) + '" aria-label="Give back ' + esc(sl.name) + '">✕</button>'
+                     : '') + '</span>';
+      }).join('');
+    } else {
+      dots = used.map(function(d){
+        return '<span class="bankdot">' + esc(b.name) + '<span class="when">'
+          + fdate(ymd(d.date)) + '</span><button data-offdel="' + esc(d.id) + '">✕</button></span>';
+      }).join('');
+      for (var i = 0; i < left; i++) dots += '<span class="bankdot free">available</span>';
+    }
+    return '<div class="bank"><div class="bankhd"><b>' + esc(b.name) + 's</b>'
+      + '<span class="left' + (left ? '' : ' none') + '">' + left + ' of ' + (b.count || 0) + ' left</span></div>'
+      + '<div class="bankdots">' + dots + '</div>'
+      + '<div class="banknote">' + (b.hours == null ? 8 : b.hours) + ' h at your rate · '
+      + (b.ot ? 'counts toward overtime' : 'does not count toward overtime')
+      + ' · allowance resets each January</div></div>';
+  }).join('') : '<div class="holnone">No allowances set up.</div>';
+
+  var spent = (cfg.banks || []).reduce(function(n, b){ return n + daysOffUsed(cfg, b.id, y).length; }, 0);
+  var total = (cfg.banks || []).reduce(function(n, b){ return n + (b.count || 0); }, 0);
+  el('sum_banks').textContent = total ? (total - spent) + ' of ' + total + ' left' : '';
+}
+
+var offEditing = null;
+function syncOffForm(){
+  var cfg = state.cfg, y = +(el('oDate').value || '').slice(0, 4) || new Date().getFullYear();
+  var b = bankById(cfg, el('oBank').value);
+  var hasSlots = !!(b && b.slots && b.slots.length);
+  show('foSlot', hasSlots);
+  if (hasSlots){
+    var slots = bankSlots(cfg, b.id, y), cur = el('oSlot').value;
+    el('oSlot').innerHTML = slots.map(function(sl){
+      // A slot already spent this year is shown but not offered.
+      return '<option value="' + sl.index + '"' + (sl.used && sl.used.id !== offEditing ? ' disabled' : '') + '>'
+        + esc(sl.name) + (sl.used && sl.used.id !== offEditing ? ' — already used' : '') + '</option>';
+    }).join('');
+    var free = slots.filter(function(sl){ return !sl.used || sl.used.id === offEditing; });
+    el('oSlot').value = (cur && !el('oSlot').querySelector('option[value="' + cur + '"]:disabled')) ? cur
+                      : (free.length ? free[0].index : '');
+  }
+  if (b && el('oHours').value === '') el('oHours').value = b.hours == null ? 8 : b.hours;
+  paintOffPreview();
+}
+function paintOffPreview(){
+  var cfg = state.cfg, b = bankById(cfg, el('oBank').value);
+  var d = el('oDate').value, hours = parseFloat(el('oHours').value) || 0;
+  if (!b || !/^\d{4}-\d{2}-\d{2}$/.test(d)){ el('oPreview').textContent = 'Pick a date.'; return; }
+  var day = ymd(d), p = periodInfo(+day, cfg);
+  var y = day.getFullYear();
+  var left = bankLeft(cfg, b.id, y) - (offEditing ? 0 : 1);
+  el('oPreview').innerHTML = '<b>' + fdateY(day) + '</b> — ' + hours.toFixed(2) + ' h · '
+    + money(hours * rateAt(+day, cfg))
+    + '<br><span style="color:var(--muted)">Pay period ' + fdate(p.start) + ' – ' + fdate(p.lastDay)
+    + ', paid ' + fdateY(p.payDate) + ' &nbsp;·&nbsp; '
+    + (b.ot ? 'counts toward overtime' : 'does not count toward overtime')
+    + ' &nbsp;·&nbsp; ' + Math.max(0, left) + ' left after this in ' + y + '</span>';
+}
+function openOffEditor(id){
+  var cfg = state.cfg;
+  offEditing = id || null;
+  var cur = (cfg.daysOff || []).filter(function(d){ return d.id === offEditing; })[0];
+  el('offTitle').textContent = cur ? 'Change this day off' : 'Book a day off';
+  el('oBank').innerHTML = (cfg.banks || []).map(function(b){
+    return '<option value="' + esc(b.id) + '">' + esc(b.name) + '</option>';
+  }).join('');
+  el('oBank').value = cur ? cur.bank : ((cfg.banks || [])[0] || {}).id || '';
+  el('oDate').value = cur ? cur.date : dateInput(new Date());
+  var b0 = bankById(cfg, el('oBank').value);
+  el('oHours').value = cur && cur.hours != null ? cur.hours : (b0 ? (b0.hours == null ? 8 : b0.hours) : 8);
+  show('oErr', false);
+  syncOffForm();
+  if (cur && cur.slot != null) el('oSlot').value = cur.slot;
+  paintOffPreview();
+  show('offEdit', true);
+  el('offEdit').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function saveDayOff(){
+  var cfg = state.cfg, b = bankById(cfg, el('oBank').value);
+  var date = el('oDate').value, hours = parseFloat(el('oHours').value);
+  if (!b){ el('oErr').textContent = 'Pick which allowance it comes from.'; show('oErr', true); return; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)){ el('oErr').textContent = 'Pick a date.'; show('oErr', true); return; }
+  if (!(hours > 0) || hours > 24){ el('oErr').textContent = 'Hours must be between 0 and 24.'; show('oErr', true); return; }
+  var y = +date.slice(0, 4);
+  var hasSlots = !!(b.slots && b.slots.length);
+  var slot = hasSlots ? parseInt(el('oSlot').value, 10) : null;
+  if (hasSlots && !(slot >= 0)){ el('oErr').textContent = 'Every ' + b.name.toLowerCase() + ' for ' + y + ' is already used.'; show('oErr', true); return; }
+  /* The allowance is the point of the feature, so it is enforced rather than warned about.
+     Editing an existing day does not count against itself. */
+  var used = daysOffUsed(cfg, b.id, y).filter(function(d){ return d.id !== offEditing; });
+  if (used.length >= (b.count || 0)){
+    el('oErr').textContent = 'All ' + (b.count || 0) + ' ' + b.name.toLowerCase() + 's for ' + y
+      + ' are already booked. Give one back first, or raise the allowance in Settings.';
+    show('oErr', true); return;
+  }
+  if (hasSlots && used.some(function(d){ return d.slot === slot; })){
+    el('oErr').textContent = 'That one is already used this year.'; show('oErr', true); return;
+  }
+  cfg.daysOff = cfg.daysOff || [];
+  if (offEditing){
+    cfg.daysOff = cfg.daysOff.map(function(d){
+      return d.id === offEditing ? { id: d.id, bank: b.id, slot: slot, date: date, hours: hours } : d;
+    });
+  } else {
+    cfg.daysOff.push({ id: uid(), bank: b.id, slot: slot, date: date, hours: hours });
+  }
+  show('offEdit', false);
+  var was = offEditing; offEditing = null;
+  save(); renderBanks(); drawCal(true); render();
+  toast(was ? 'Day off updated.' : dayOffName(cfg, cfg.daysOff[cfg.daysOff.length - 1]) + ' booked for ' + fdate(ymd(date)) + '.');
 }
 
 /* ============================ holidays in Settings ============================ */
@@ -2613,6 +2879,11 @@ function renderLog(ledger, period, active, now){
   holidayCredits(state.sessions, state.cfg).forEach(function(h){
     if (h.end > period.startMs && h.start < period.endMs) rows.push(Object.assign({}, h, { hol: true }));
   });
+  // Floaters and sick days the same way — booked, so already in the total; shown, so the
+  // total can be read line by line.
+  bankCredits(state.cfg).forEach(function(o){
+    if (o.end > period.startMs && o.start < period.endMs) rows.push(Object.assign({}, o, { off: true }));
+  });
   rows.sort(function(a, b){ return b.start - a.start; });
 
   var box = document.getElementById('logBody');
@@ -2638,13 +2909,17 @@ function renderLog(ledger, period, active, now){
     /* A holiday is not a shift: it has no clock times, and it cannot be edited or deleted
        from here — it is earned by the shifts either side of it, and those are the rows to
        change. So it carries no data-row and drops out of pick mode entirely. */
-    html += '<tr' + (s.hol ? ' class="holrowlog"' : ' data-row="' + s.id + '" class="'
+    var synth = s.hol || s.off;
+    html += '<tr' + (synth ? ' class="' + (s.hol ? 'holrowlog' : 'offrowlog') + '"'
+      : ' data-row="' + s.id + '" class="'
       + (t.otHours > 0.0001 ? 'otrow ' : '') + (s.live ? 'live' : '') + (asking ? ' pending' : '') + '"') + '>'
       + '<td class="c-day">' + fdate(new Date(s.start)).replace(/^(\w{3}) /, '<span class="dow">$1 </span>')
       + (s.hol ? ' <span class="hollbl">· ' + esc(s.holiday) + '</span>' : '')
-      + (!s.hol && s.adj ? ' <span style="opacity:.65;font-size:10.5px">· ' + (s.adj.noOt ? 'PTO' : s.adj.mult ? '×' + s.adj.mult : s.adj.diff ? '+$' + s.adj.diff + '/h' : 'no lunch') + '</span>' : '')
-      + '</td><td class="c-in">' + (s.hol ? '<span class="holpill">HOLIDAY</span>' : ftime(s.start)) + '</td>'
-      + '<td class="c-out">' + (s.hol ? '' : s.live ? '<span class="running">running</span>' : ftime(s.end)) + '</td>'
+      + (s.off ? ' <span class="offlbl">· ' + esc(s.dayOff) + '</span>' : '')
+      + (!synth && s.adj ? ' <span style="opacity:.65;font-size:10.5px">· ' + (s.adj.noOt ? 'PTO' : s.adj.mult ? '×' + s.adj.mult : s.adj.diff ? '+$' + s.adj.diff + '/h' : 'no lunch') + '</span>' : '')
+      + '</td><td class="c-in">' + (s.hol ? '<span class="holpill">HOLIDAY</span>'
+          : s.off ? '<span class="offpill">DAY OFF</span>' : ftime(s.start)) + '</td>'
+      + '<td class="c-out">' + (synth ? '' : s.live ? '<span class="running">running</span>' : ftime(s.end)) + '</td>'
       + '<td class="num c-hours">' + t.hours.toFixed(2) + '</td>'
       + '<td class="num g otcol' + (t.otHours > 0.0001 ? '' : ' noot') + '">'
       + (t.otHours > 0.0001 ? t.otHours.toFixed(2) : '—') + '</td>'
@@ -2652,7 +2927,7 @@ function renderLog(ledger, period, active, now){
       /* Nothing but the shift itself sits in a row. Editing and deleting are started
          from the buttons under the log and finished by tapping the row you mean, so
          no control ever has to share space with the figures. */
-      + '<td class="act">' + (!s.hol && !s.live && asking
+      + '<td class="act">' + (!synth && !s.live && asking
             ? 'Delete? <button class="mini danger" data-del-yes="' + s.id + '">yes</button> '
               + '<button class="mini" data-del-no="1">no</button>'
             : '') + '</td></tr>';
@@ -2727,7 +3002,7 @@ function applyStage(){
 /* ============================ collapsible sections ============================
    Every section folds independently; nothing opens anything else. All collapsed by
    default — the header line carries a live summary so a folded section still reads. */
-var COLS = ['hero', 'totals', 'period', 'progress', 'log', 'extra', 'ytd', 'calc'];
+var COLS = ['hero', 'totals', 'period', 'progress', 'log', 'banks', 'extra', 'ytd', 'calc'];
 function uiOpen(){ return state.ui || (state.ui = { open: {} }); }
 function applyCols(){
   var o = uiOpen().open || {};
@@ -3095,6 +3370,8 @@ function buildMonth(y, m){
   // list each time it is asked.
   var hols = {};
   holidaysInYear(cfg, y).forEach(function(h){ hols[h.key] = h; });
+  var offs = {};
+  (cfg.daysOff || []).forEach(function(d){ offs[d.date] = dayOffName(cfg, d); });
 
   var cells = '';
   for (var p = 0; p < lead; p++) cells += '<div class="calcell pad"></div>';
@@ -3102,11 +3379,13 @@ function buildMonth(y, m){
     var k = dkey(y, m, d);
     var per = periodInfo(+new Date(y, m, d), cfg);
     var isStart = +per.start === +new Date(y, m, d);
-    var hol = hols[k];
+    var hol = hols[k], off = offs[k];
     cells += '<div class="calcell' + (k === todayKey ? ' today' : '') + (isStart ? ' pstart' : '')
-      + (hol ? ' hol' : '') + '" data-d="' + k + '"'
-      + (hol ? ' data-hol="' + esc(hol.name) + '"' : '') + '>'
+      + (hol ? ' hol' : '') + (off ? ' off' : '') + '" data-d="' + k + '"'
+      + (hol ? ' data-hol="' + esc(hol.name) + '"' : '')
+      + (off ? ' data-off="' + esc(off) + '"' : '') + '>'
       + (hol ? '<span class="holdot"></span>' : '')
+      + (off ? '<span class="offdot"></span>' : '')
       + '<span class="dnum">' + d + '</span>'
       + '<input type="number" min="0" max="24" step="0.25" inputmode="decimal" data-d="' + k + '"'
       + ' value="' + (cc.hours[k] || '') + '" aria-label="Hours worked ' + k + '">'
@@ -3222,9 +3501,10 @@ function paintCalRule(){
   if (inp){
     var b = calPriced().byDay[inp.dataset.d];
     var cell = inp.closest('.calcell');
-    var hn = cell && cell.dataset.hol;
+    var hn = cell && cell.dataset.hol, on = cell && cell.dataset.off;
     el('qCalRule').innerHTML = '<b style="color:var(--acc)">Editing ' + fdateY(ymd(inp.dataset.d)) + '</b>'
       + (hn ? ' <b style="color:var(--cal-hol)">· ' + esc(hn) + '</b>' : '')
+      + (on ? ' <b style="color:var(--acc)">· ' + esc(on) + '</b>' : '')
       + (b ? ' — ' + b.hours.toFixed(2) + ' h · ' + money(b.gross) : ' — no hours yet');
     return;
   }
@@ -3893,6 +4173,24 @@ document.getElementById('cHolList').addEventListener('click', function(e){
     toast('Removed ' + h.name + '.');
   }
 });
+document.getElementById('offAdd').onclick = function(){ openOffEditor(null); };
+document.getElementById('oCancel').onclick = function(){ show('offEdit', false); offEditing = null; };
+document.getElementById('oSave').onclick = saveDayOff;
+document.getElementById('oBank').onchange = function(){ el('oHours').value = ''; syncOffForm(); };
+document.getElementById('oDate').onchange = syncOffForm;
+['oSlot','oHours'].forEach(function(id){
+  document.getElementById(id).addEventListener('change', paintOffPreview);
+  document.getElementById(id).addEventListener('input', paintOffPreview);
+});
+document.getElementById('bankBody').addEventListener('click', function(e){
+  var btn = e.target.closest('button[data-offdel]'); if (!btn) return;
+  var id = btn.dataset.offdel, cfg = state.cfg;
+  var gone = (cfg.daysOff || []).filter(function(d){ return d.id === id; })[0];
+  cfg.daysOff = (cfg.daysOff || []).filter(function(d){ return d.id !== id; });
+  save(); renderBanks(); drawCal(true); render();
+  if (gone) toast(dayOffName(cfg, gone) + ' given back — it is available again.');
+});
+
 document.getElementById('cHolAdd').onclick = function(){ openHolEditor(-1); };
 document.getElementById('cHolReset').onclick = function(){
   state.cfg.holidays = HOLIDAY_DEFAULTS();
@@ -4408,6 +4706,7 @@ function syncControls(){
   el('cHolOffDay').value = state.cfg.holidayOffDayPays === false ? '0' : '1';
   renderWorkDays();
   renderHolidayList();
+  renderBanks();
   document.getElementById('autoOn').checked = !!state.autoOn;
   var aA = document.getElementById('autoAt');
   if (document.activeElement !== aA) aA.value = state.autoAt || '';
