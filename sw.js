@@ -7,7 +7,7 @@
    with "a problem repeatedly occurred").
 
    Static assets (icons, manifest) stay cache-first; they effectively never change. */
-const CACHE = 'pay-clock-v15';
+const CACHE = 'pay-clock-v16';
 const ASSETS = ['./', './index.html', './manifest.webmanifest',
                 './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 
@@ -30,17 +30,27 @@ self.addEventListener('fetch', e => {
                  /(\/|index\.html)$/.test(new URL(e.request.url).pathname);
 
   if (isPage) {
-    // Network first: fresh app every open; cache is purely the offline fallback.
+    /* Network first, and explicitly past the browser's own HTTP cache.
+
+       GitHub Pages serves HTML with max-age=600. Chromium turns out to revalidate here
+       anyway — a test that serves the page with that header and changes it mid-flight
+       passes with or without the no-store below — so this is a precaution, not a fix for
+       any bug reproduced in this repo. It is kept because WebKit cannot be tested in this
+       sandbox and is the stricter HTTP cache of the two, and because "always ask the
+       origin" is what this branch is meant to mean. If it ever needs removing, the
+       plain fetch(e.request) form behaves identically under test. */
     e.respondWith(
-      fetch(e.request)
+      fetch(e.request.url, { cache: 'no-store' })
         .then(res => {
           if (res && res.ok) {
             const copy = res.clone();
-            caches.open(CACHE).then(c => c.put(e.request, copy));
+            // Stored under the canonical key so the offline fallback below always finds
+            // the newest copy, whichever URL form the launch used.
+            caches.open(CACHE).then(c => c.put('./index.html', copy));
           }
           return res;
         })
-        .catch(() => caches.match(e.request).then(hit => hit || caches.match('./index.html')))
+        .catch(() => caches.match('./index.html').then(hit => hit || caches.match(e.request)))
     );
     return;
   }
