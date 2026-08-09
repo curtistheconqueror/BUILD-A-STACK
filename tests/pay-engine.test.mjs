@@ -33,7 +33,8 @@ const E = new Function(m[1] + `
            BANK_DEFAULTS, bankById, daysOffUsed, bankLeft, bankSlots, dayOffName,
            bankCredits, daysOffOutlook, periodHistory, timeCardRows, timeCardTotals,
            extraTime, chartHours, otThresholdOf, otBucketKey, sumSessionRange,
-           payMonths, currentPayMonth, shiftDayMs, toMinute };
+           payMonths, currentPayMonth, shiftDayMs, toMinute,
+           skewMs, shopTime, phoneTime, shopSession };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -1118,6 +1119,82 @@ group('Robustness');
   near('five days at 1.75 is 8.75, not 8.65', t.before, 8.75);
   near('with nothing late',                   t.after, 0);
   near('and 8.75 to claim',                   t.extra, 8.75);
+}
+
+
+/* ---------------- the shop clock runs behind the phone ---------------- */
+{
+  /* The machine at work prints the card, and it is a couple of minutes behind the phone.
+     With the offset on, the app shows the machine's times — which lengthens the run-up to a
+     scheduled start, and must leave hours and pay exactly where they were. */
+  const base = { ...E.DEFAULTS, rate: 38, schedStart: '14:00', schedEnd: '22:30', lunchMins: 30,
+                 workDays: [true, true, true, true, true, false, false],
+                 holidays: [], banks: [], daysOff: [], periodAnchor: '2026-08-09' };
+  const off   = { ...base, skewOn: false, skewMins: 2 };
+  const ahead = { ...base, skewOn: true,  skewMins: 2 };    // phone 2 min ahead of the machine
+  const behind= { ...base, skewOn: true,  skewMins: -2 };   // phone 2 min behind
+  const at = (h, mi, sec = 0) => +new Date(2026, 7, 9, h, mi, sec);
+
+  near('with it off the offset is zero even when minutes are set', E.skewMs(off), 0);
+  near('two minutes is 120000 ms',            E.skewMs(ahead), 120000);
+  near('and it counts backwards too',         E.skewMs(behind), -120000);
+  near('a fractional setting is held to whole minutes',
+       E.skewMs({ skewOn: true, skewMins: 2.4 }), 120000);
+  near('the machine reads earlier than the phone', E.shopTime(at(12, 15), ahead), at(12, 13));
+  near('and converting back lands where it started',
+       E.phoneTime(E.shopTime(at(12, 15), ahead), ahead), at(12, 15));
+
+  // The figure Curtis reads off the screen and writes on the slip.
+  const exAt = (cfg, h, mi, sec = 0) => {
+    const sh = E.shopSession({ id: 'x', start: at(h, mi, sec), end: at(22, 30) }, cfg);
+    return E.chartHours(E.extraTime(sh.start, sh.end, 14 * 60, 22 * 60 + 30).before);
+  };
+  near('untouched, a 12:15 punch is 1.75 early', exAt(off, 12, 15), 1.75);
+  near('on the shop clock it is 12:13, so 1.78', exAt(ahead, 12, 15), 1.78);
+  near('and the seconds still do not show through', exAt(ahead, 12, 15, 40), 1.78);
+  near('a phone running slow claims less, not more', exAt(behind, 12, 15), 1.72);
+
+  /* The safety property, and the reason this is a lens and not an edit: shifting both ends
+     of a shift cannot change how long it is. If this ever fails, the offset is stealing
+     hours. */
+  const week = [
+    { id: 'a', start: at(9, 12, 15), end: at(9, 22, 30) },
+    { id: 'b', start: +new Date(2026, 7, 10, 13, 58, 20), end: +new Date(2026, 7, 10, 23, 5) },
+    { id: 'c', start: +new Date(2026, 7, 11, 14, 0), end: +new Date(2026, 7, 11, 22, 30) }
+  ];
+  const from = +new Date(2026, 7, 9), to = +new Date(2026, 7, 23);
+  const paidOff    = E.timeCardRows(week, off,    from, to).map(r => r.paid);
+  const paidAhead  = E.timeCardRows(week, ahead,  from, to).map(r => r.paid);
+  const paidBehind = E.timeCardRows(week, behind, from, to).map(r => r.paid);
+  ok('paid hours are identical with the offset on',  JSON.stringify(paidOff) === JSON.stringify(paidAhead),
+     JSON.stringify(paidOff) + ' vs ' + JSON.stringify(paidAhead));
+  ok('and identical in the other direction too',     JSON.stringify(paidOff) === JSON.stringify(paidBehind),
+     JSON.stringify(paidOff) + ' vs ' + JSON.stringify(paidBehind));
+
+  // Pay is built from the stored stamps and never sees the offset at all.
+  const grossOf = cfg => E.sumRange(E.buildLedger(week, cfg).parts, from, to).gross;
+  near('gross pay does not move', grossOf(ahead), grossOf(off));
+  near('nor does it the other way', grossOf(behind), grossOf(off));
+
+  // What does move is the claim, which is the point.
+  const tcOff   = E.timeCardTotals(E.timeCardRows(week, off,   from, to));
+  const tcAhead = E.timeCardTotals(E.timeCardRows(week, ahead, from, to));
+  ok('the time to claim goes up when the machine runs behind', tcAhead.before > tcOff.before,
+     tcOff.before + ' → ' + tcAhead.before);
+  near('by two minutes a shift, three shifts — 0.10 h', E.chartHours(tcAhead.before - tcOff.before), 0.1);
+
+  // A punch either side of midnight is filed by the machine's date.
+  const nightCfg = { ...ahead, schedStart: '22:00', schedEnd: '06:00', shiftDayRule: 'majority' };
+  const justAfter = { id: 'm', start: +new Date(2026, 7, 10, 0, 1, 0), end: +new Date(2026, 7, 10, 8, 0) };
+  near('a 00:01 punch on a phone 2 min fast is 23:59 the day before',
+       E.shopTime(justAfter.start, nightCfg), +new Date(2026, 7, 9, 23, 59));
+
+  const plain = { id: 'p', start: at(14, 0), end: at(22, 30), adj: { noOt: true } };
+  ok('with no offset the session is passed straight through', E.shopSession(plain, off) === plain);
+  ok('and with one, its adjustments survive the shift',
+     E.shopSession(plain, ahead).adj.noOt === true);
+  near('while both ends move together',
+       E.shopSession(plain, ahead).end - E.shopSession(plain, ahead).start, plain.end - plain.start);
 }
 
 /* ------------------------------------------------------------------ */

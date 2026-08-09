@@ -1285,6 +1285,21 @@
             <option value="end">The day it finished</option>
           </select></div>
       </div>
+
+      <div class="f" style="margin-top:18px"><label for="cSkewOn">If the shop clock is off</label>
+        <div class="note">Time clocks drift, and the machine at work is the one that prints
+        your card. If it reads a minute or two off your phone, turn this on and the app shows
+        the times the machine would stamp — so what you copy onto a slip matches what it
+        printed. Your hours and your pay do not change: both ends of a shift move together.
+        Leave it off until you have watched the difference hold for a few days.</div>
+      </div>
+      <div class="cfgrid">
+        <div class="f"><label for="cSkewOn">Match the shop clock</label>
+          <select id="cSkewOn"><option value="0">Off</option><option value="1">On</option></select></div>
+        <div class="f"><label for="cSkewMins">This phone runs ahead by (min)</label>
+          <input type="number" id="cSkewMins" min="-30" max="30" step="1"></div>
+      </div>
+      <div class="note" id="cSkewNote" style="margin-top:8px"></div>
       <div class="note" id="cShiftDayNote" style="margin-top:8px"></div>
 
       <div class="f" style="margin-top:18px"><label>Days you are scheduled to work</label>
@@ -1480,6 +1495,11 @@ var DEFAULTS = {
   periodLengthDays: 14,
   payDateOffsetDays: 13,     // payday = last day of the period + this many days
   clock24: false,            // print times as 14:30 rather than 2:30 PM
+  /* The shop clock. Off until you have watched the machine disagree with your phone for
+     long enough to be sure of it — see skewMs() for what turning it on does and does not
+     move. Positive minutes mean this phone runs ahead of the machine. */
+  skewOn: false,
+  skewMins: 0,
   schedStart: '09:00',       // the scheduled shift, for working out extra time
   schedEnd: '17:00',
   /* Which days of the week you are rostered for, Sunday first. Holiday eligibility is
@@ -1808,6 +1828,45 @@ function plannedStopAt(activeStart, plannedHours, completed, cfg){
    out 1.73 where anyone reading the punch off the screen would write 1.75. Everything that
    produces a slip figure works from the minute it shows, not the second underneath it. */
 function toMinute(ms){ return Math.floor(ms / 60000) * 60000; }
+
+/* ---- the shop clock ----
+   The machine at work and the phone in your pocket rarely agree, and the machine is the one
+   that prints your card. When it runs a minute or two behind, a punch stamped 12:15 here is
+   12:13 there, and every figure copied off this screen onto a slip is a minute wrong in the
+   same direction every day.
+
+   Switching the offset on puts the times you READ and the times you TYPE on the shop's
+   clock, so what the app shows is what the machine stamped. Three things it deliberately
+   does not do:
+
+     · It never moves a duration. Both ends of a shift shift together, so hours and pay come
+       out identical whether it is on or off. What does move is time measured against the
+       roster — clocking in 12:13 by the machine is further before a 2 PM start than 12:15
+       is, and that difference is the whole point.
+     · It never changes what is stored. Stamps stay as the phone recorded them and the
+       offset is applied on the way out, so turning it off restores every figure exactly and
+       changing two minutes to three just redraws.
+     · It never touches the pay ledger. Period and week boundaries stay on real stamps.
+       Skewing those could only matter for a punch within a minute or two of midnight on a
+       period edge, and moving money to a different paycheque is a far worse failure than
+       the rounding it would fix.
+
+   Minutes only, whole ones: a punch clock prints minutes, and keeping the offset whole
+   means truncating to the minute commutes with shifting, which is what leaves paid hours
+   provably unchanged. */
+function skewMs(cfg){
+  return cfg && cfg.skewOn ? Math.round(+cfg.skewMins || 0) * 60000 : 0;
+}
+function shopTime(ms, cfg){ return ms - skewMs(cfg); }     // this phone → that machine
+function phoneTime(ms, cfg){ return ms + skewMs(cfg); }    // that machine → this phone
+function shopSession(s, cfg){
+  var k = skewMs(cfg);
+  if (!k) return s;
+  var o = {};
+  for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p)) o[p] = s[p];
+  o.start = s.start - k; o.end = s.end - k;
+  return o;
+}
 
 function extraTime(startMs, endMs, schedStart, schedEnd){
   startMs = toMinute(startMs); endMs = toMinute(endMs);
@@ -2305,18 +2364,22 @@ function timeCardRows(sessions, cfg, fromMs, toMs){
   (sessions || []).filter(function(s){
     return s.end > s.start && s.start < toMs && s.end > fromMs;
   }).slice().sort(function(a, b){ return a.start - b.start; }).forEach(function(s){
+    /* On the machine's clock, if it is known to run off this phone's. A card is filled in
+       from what the machine printed, and the times either side of the roster are measured
+       against that same printing. Shifting both ends leaves the paid hours alone. */
+    var sh = shopSession(s, cfg);
     // The day the shift IS, not the date it happened to begin on — so a night worker's
     // roster is judged against the right weekday.
-    var day = shiftDayMs(s, cfg);
+    var day = shiftDayMs(sh, cfg);
     // To the minute, like the punch times printed beside it and the figures on the slip.
-    var cut = { start: toMinute(s.start), end: toMinute(s.end), adj: s.adj };
+    var cut = { start: toMinute(sh.start), end: toMinute(sh.end), adj: s.adj };
     var paidH = 0;
     paidSpans(cut, cfg).forEach(function(sp){ paidH += (sp.end - sp.start) / HOUR_MS; });
     var paid = chartHours(paidH);
     var rostered = isWorkDay(cfg, new Date(day).getDay());
     var before = 0, after = 0;
     if (rostered && ss != null && se != null){
-      var x = extraTime(s.start, s.end, ss, se);
+      var x = extraTime(sh.start, sh.end, ss, se);
       before = chartHours(x.before);
       after  = chartHours(x.after);
     }
@@ -2454,6 +2517,13 @@ function ftime(ms){
   var ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
   return h + ':' + String(m).padStart(2, '0') + ' ' + ap;
 }
+/* A punch, printed the way the machine would print it. Every clock time in the app is one
+   of two things and they are not interchangeable: a punch, which this phone stamped and
+   which the shop-clock offset applies to, or a roster time like "scheduled 2 PM", which is
+   the shop's own number and is already on its clock. Punches go through ptime, roster times
+   through ftime. With the offset off the two are identical. */
+function ptime(ms){ return ftime(shopTime(ms, state.cfg)); }
+
 function countdown(ms){
   if (ms <= 0) return 'now';
   var d = Math.floor(ms / DAY_MS), h = Math.floor(ms % DAY_MS / HOUR_MS), m = Math.floor(ms % HOUR_MS / 60000);
@@ -2491,7 +2561,7 @@ function clockIn(){
   state.activeStart = Date.now();
   state.activeAdj = null;
   save(); chime(true); render();
-  toast('Clocked in at ' + ftime(state.activeStart));
+  toast('Clocked in at ' + ptime(state.activeStart));
 }
 function clockOut(atMs, silent){
   if (!state.activeStart) return;
@@ -2565,7 +2635,7 @@ function resumeShift(){
     if (stop && Date.now() >= stop){ state.planOn = false; stoodDown = true; }
   }
   save(); syncControls(); chime(true); render();
-  toast('Back on the clock since ' + ftime(s.start) + ' — the '
+  toast('Back on the clock since ' + ptime(s.start) + ' — the '
       + hhmmss(Date.now() - s.end) + ' since you clocked out counts as worked.'
       + (stoodDown ? ' Auto-stop was already past its target, so it is off.' : ''));
 }
@@ -2866,11 +2936,14 @@ function autoDayOn(d){
   if (!days || days.length !== 7) return true;        // unset means every day
   return !!days[d];
 }
+/* The moment this phone should start the clock so the punch READS the time you asked for.
+   You set auto clock-in to the time you want on your card, which is the machine's time, so
+   when the two clocks differ the phone has to fire that many minutes off to land on it. */
 function autoInAt(now){
   var m = hhmmToMin(state.autoAt);
   if (m == null) return null;
   var d0 = midnight(now);
-  return +d0 + m * 60000;
+  return phoneTime(+d0 + m * 60000, state.cfg);
 }
 var autoNotice = '';
 function checkAutoIn(now){
@@ -2892,9 +2965,9 @@ function checkAutoIn(now){
   tickWhileActive = now;
   var late = now - at;
   autoNotice = late > 60000
-    ? 'Auto clock-in — the clock was started at ' + ftime(at) + ', so the '
+    ? 'Auto clock-in — the clock was started at ' + ptime(at) + ', so the '
       + hhmmss(late) + ' before you opened the app is counted.'
-    : 'Auto clock-in — on the clock since ' + ftime(at) + '.';
+    : 'Auto clock-in — on the clock since ' + ptime(at) + '.';
   save(); chime(true);
   return true;
 }
@@ -3067,7 +3140,7 @@ function render(){
     : 'ready at <b>' + money(cfg.rate) + '</b> / hr';
   if (onLunch){
     document.getElementById('liveline').innerHTML =
-      'money paused for the ' + cfg.lunchMins + ' min unpaid lunch · resumes ' + ftime(lw.end);
+      'money paused for the ' + cfg.lunchMins + ' min unpaid lunch · resumes ' + ptime(lw.end);
   }
   document.getElementById('seghint').textContent =
     state.unit === 'sec' ? 'stepping every second' :
@@ -3091,7 +3164,7 @@ function render(){
   if (!re) show('resumeConfirm', false);
   if (re && !document.getElementById('resumeConfirm').classList.contains('hide')){
     document.getElementById('resumeTxt').innerHTML =
-      'Put the ' + ftime(re.start) + ' shift back on the clock? It ended ' + ftime(re.end)
+      'Put the ' + ptime(re.start) + ' shift back on the clock? It ended ' + ptime(re.end)
       + ', so the <b>' + hhmmss(now - re.end) + '</b> since then counts as worked and the clock keeps running.';
   }
 
@@ -3115,14 +3188,14 @@ function render(){
     var kk = nx == null ? '' : dkey(ad.getFullYear(), ad.getMonth(), ad.getDate());
     if (nx == null) aeta.textContent = '';
     else if (now < nx && autoDayOn(ad.getDay())) aeta.textContent = '→ starts in ' + countdown(nx - now);
-    else if (state.autoLast === kk) aeta.textContent = '→ next ' + ftime(nx) + ' tomorrow';
+    else if (state.autoLast === kk) aeta.textContent = '→ next ' + ptime(nx) + ' tomorrow';
     else aeta.textContent = '';
   } else aeta.textContent = active && state.autoOn ? '→ on the clock' : '';
 
   var eta = document.getElementById('planEta');
   if (active && state.planOn){
     var s2 = plannedStopAt(active, state.plannedHours, state.sessions, cfg);
-    eta.textContent = s2 ? '→ stops ' + ftime(s2) + ' (' + countdown(s2 - now) + ')' : '';
+    eta.textContent = s2 ? '→ stops ' + ptime(s2) + ' (' + countdown(s2 - now) + ')' : '';
   } else eta.textContent = '';
 
   checkOt(!!inOt);
@@ -3649,7 +3722,7 @@ function renderTimeCard(ledger, now){
     html += '<div class="tcrow' + (r.rostered ? '' : ' un') + '">'
       + '<span class="d">' + fdate(new Date(r.dayMs))
       + (r.rostered ? '' : ' <span class="whole">WHOLE DAY</span>') + '</span>'
-      + '<span class="t">' + ftime(r.start) + ' – ' + ftime(r.end)
+      + '<span class="t">' + ptime(r.start) + ' – ' + ptime(r.end)
       + ' &nbsp;·&nbsp; ' + r.paid.toFixed(2) + ' h paid</span>'
       + '<b class="b">' + (r.rostered ? (r.before >= 0.005 ? r.before.toFixed(2) : '—') : '—') + '</b>'
       + '<b class="a">' + (r.rostered ? (r.after  >= 0.005 ? r.after.toFixed(2)  : '—') : '—') + '</b>'
@@ -3718,15 +3791,15 @@ function renderLog(ledger, period, active, now){
       /* The day the shift IS, not the date it began on — a 10 PM Sunday start reads Mon,
          which is what the person working it calls it. Synthetic rows (a holiday credit, a
          booked day off) are already filed against a date and are left alone. */
-      + '<td class="c-day">' + fdate(new Date(synth ? s.start : shiftDayMs(s, state.cfg)))
+      + '<td class="c-day">' + fdate(new Date(synth ? s.start : shiftDayMs(shopSession(s, state.cfg), state.cfg)))
           .replace(/^(\w{3}) /, '<span class="dow">$1 </span>')
       + (t.clipped ? ' <span class="clipped">· split across periods</span>' : '')
       + (s.hol ? ' <span class="hollbl">· ' + esc(s.holiday) + '</span>' : '')
       + (s.off ? ' <span class="offlbl">· ' + esc(s.dayOff) + '</span>' : '')
       + (!synth && s.adj ? ' <span style="opacity:.65;font-size:10.5px">· ' + (s.adj.noOt ? 'PTO' : s.adj.mult ? '×' + s.adj.mult : s.adj.diff ? '+$' + s.adj.diff + '/h' : 'no lunch') + '</span>' : '')
       + '</td><td class="c-in">' + (s.hol ? '<span class="holpill">HOLIDAY</span>'
-          : s.off ? '<span class="offpill">DAY OFF</span>' : ftime(s.start)) + '</td>'
-      + '<td class="c-out">' + (synth ? '' : s.live ? '<span class="running">running</span>' : ftime(s.end)) + '</td>'
+          : s.off ? '<span class="offpill">DAY OFF</span>' : ptime(s.start)) + '</td>'
+      + '<td class="c-out">' + (synth ? '' : s.live ? '<span class="running">running</span>' : ptime(s.end)) + '</td>'
       + '<td class="num c-hours">' + t.hours.toFixed(2) + '</td>'
       + '<td class="num g otcol' + (t.otHours > 0.0001 ? '' : ' noot') + '">'
       + (t.otHours > 0.0001 ? t.otHours.toFixed(2) : '—') + '</td>'
@@ -4047,7 +4120,7 @@ function renderCalc(){
       + '<span class="sub">'
       + (bank.live
           ? (bank.planned
-              ? 'Counting today out to your auto-stop at ' + ftime(bank.through) + '. '
+              ? 'Counting today out to your auto-stop at ' + ptime(bank.through) + '. '
               : 'Counting the shift running right now, up to this moment. ')
           : '')
       + (bank.toOt > 0.004
@@ -4119,9 +4192,14 @@ function renderExtra(period, active, now){
     return;
   }
   var day0 = +midnight(Date.now());
+  /* If the shop clock is set, say so right here. This is the section the slip gets copied
+     from, so it is where knowing whose clock the punches are on actually matters. */
+  var skm = Math.round(+cfg.skewMins || 0), skOn = cfg.skewOn && skm !== 0;
   el('xSched').textContent = 'Counting anything before ' + ftime(day0 + ss * 60000)
     + ' and after ' + ftime(day0 + se * 60000 + (se <= ss ? DAY_MS : 0))
-    + (se <= ss ? ' the next morning.' : '.');
+    + (se <= ss ? ' the next morning.' : '.')
+    + (skOn ? ' Punch times below are the shop clock\'s, ' + Math.abs(skm) + ' min '
+              + (skm > 0 ? 'behind' : 'ahead of') + ' this phone.' : '');
 
   var rows = state.sessions.filter(function(s){
     return s.end > period.startMs && s.start < period.endMs;
@@ -4131,15 +4209,18 @@ function renderExtra(period, active, now){
 
   var tb = 0, ta = 0, tmin = 0, html = '';
   rows.forEach(function(s){
-    var x = extraTime(s.start, s.end, ss, se);
+    // Measured off the machine's clock when it is known to differ, since that is the
+    // printing these figures get copied onto.
+    var sh = shopSession(s, cfg);
+    var x = extraTime(sh.start, sh.end, ss, se);
     // Rounded per entry, the way the figure is written on the slip, and summed from there.
     var bH = chartHours(x.before), aH = chartHours(x.after);
     tb += bH; ta += aH;
     tmin += Math.round(x.before * 60) + Math.round(x.after * 60);
     if (bH < 0.005 && aH < 0.005) return;         // a shift inside its hours has nothing to claim
-    html += '<div class="xrow"><span class="xd">' + fdate(new Date(shiftDayMs(s, cfg)))
+    html += '<div class="xrow"><span class="xd">' + fdate(new Date(shiftDayMs(sh, cfg)))
       + (s.live ? ' <span class="running">running</span>' : '') + '</span>'
-      + '<span class="xt">' + ftime(s.start) + ' – ' + (s.live ? 'now' : ftime(s.end)) + '</span>'
+      + '<span class="xt">' + ptime(s.start) + ' – ' + (s.live ? 'now' : ptime(s.end)) + '</span>'
       + '<b class="xb">' + (bH >= 0.005 ? bH.toFixed(2) : '—') + '</b>'
       + '<b class="xa">' + (aH >= 0.005 ? aH.toFixed(2) : '—') + '</b></div>';
   });
@@ -4688,7 +4769,7 @@ function readBackdate(){
   if (backMode === 'time'){
     var d = el('bDate').value, t = el('bTime').value;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || !t) return { error: 'Pick the date and time you actually started.' };
-    var start = stamp(d, t);
+    var start = shopStamp(d, t);
     if (isNaN(start)) return { error: 'Could not read that date and time.' };
     if (start > now) return { error: 'That is in the future — use Clock In for a shift starting now.' };
     return { start: start };
@@ -4713,7 +4794,7 @@ function previewBackdate(){
   var gross = payForSpan(r.start, hrs);
   // Overlapping a logged shift would count the same hours twice.
   var clash = state.sessions.filter(function(x){ return x.end > r.start && x.start < now; }).length;
-  box.innerHTML = 'Clock in as if you started <b>' + fdate(new Date(r.start)) + ' at ' + ftime(r.start) + '</b>'
+  box.innerHTML = 'Clock in as if you started <b>' + fdate(new Date(r.start)) + ' at ' + ptime(r.start) + '</b>'
     + '<br><b>' + hrs.toFixed(2) + ' h</b> and <span class="pay">' + money(gross) + '</span> already on the clock'
     + (clash ? '<br><span style="color:var(--warn);font-weight:700">⚠ This overlaps ' + clash
         + ' logged shift' + (clash === 1 ? '' : 's') + ' — those hours would be counted twice.</span>' : '');
@@ -4721,8 +4802,8 @@ function previewBackdate(){
 
 function openBackdate(){
   var now = new Date(Date.now() - 2 * HOUR_MS);        // a sensible default: two hours ago
-  el('bDate').value = dateValue(+now);
-  el('bTime').value = timeValue(+now);
+  el('bDate').value = shopDateValue(+now);
+  el('bTime').value = shopTimeValue(+now);
   el('bHours').value = 2;
   el('bEarned').value = (state.cfg.rate * 2).toFixed(2);
   setBackMode('time');
@@ -4746,7 +4827,7 @@ function startBackdated(){
   state.activeAdj = null;
   tickWhileActive = 0;
   save(); closeBackdate(); chime(true); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
-  toast('Clock running from ' + ftime(r.start) + ' — ' +
+  toast('Clock running from ' + ptime(r.start) + ' — ' +
         ((Date.now() - r.start) / HOUR_MS).toFixed(2) + ' h already on it.');
 }
 
@@ -4783,6 +4864,17 @@ function stamp(dateStr, timeStr){
   if (d.length !== 3 || t.length < 2 || d.concat(t).some(isNaN)) return NaN;
   return +new Date(d[0], d[1] - 1, d[2], t[0], t[1], 0, 0);
 }
+/* The shop-clock pair for the three above. A punch time you type is one you read off the
+   machine or off this app, so it comes in on the shop's clock and is stored back on the
+   phone's; a punch time shown in a field goes out the other way. Filling a field and saving
+   it unchanged is therefore lossless at any offset. Roster fields — scheduled start and end
+   — are the shop's own numbers and use the plain versions. */
+function shopDateValue(ms){ return dateValue(shopTime(ms, state.cfg)); }
+function shopTimeValue(ms){ return timeValue(shopTime(ms, state.cfg)); }
+function shopStamp(dateStr, timeStr){
+  var v = stamp(dateStr, timeStr);
+  return isNaN(v) ? v : phoneTime(v, state.cfg);
+}
 
 function kindOfAdj(adj){
   if (!adj) return 'regular';
@@ -4809,7 +4901,7 @@ function openEditor(id){
   var s = id ? state.sessions.find(function(x){ return x.id === id; }) : null;
   el('eTitle').textContent = s ? 'Edit this shift' : 'Add a shift';
   el('eSave').textContent = s ? 'Save changes' : 'Add shift';
-  el('eDate').value = dateValue(s ? s.start : Date.now());
+  el('eDate').value = shopDateValue(s ? s.start : Date.now());
   el('eKind').value = kindOfAdj(s && s.adj);
   el('eNoLunch').checked = !!(s && s.adj && s.adj.noLunch);
   show('fNoLunch', (state.cfg.lunchMins || 0) > 0);
@@ -4818,8 +4910,8 @@ function openEditor(id){
   syncKindFields();
   if (s){
     setMode('times');
-    el('eIn').value = timeValue(s.start);
-    el('eOut').value = timeValue(s.end);
+    el('eIn').value = shopTimeValue(s.start);
+    el('eOut').value = shopTimeValue(s.end);
     el('eHours').value = ((s.end - s.start) / HOUR_MS).toFixed(2);
   } else {
     setMode('hours');
@@ -4851,12 +4943,12 @@ function readEditor(){
     var h = parseFloat(el('eHours').value);
     if (!isFinite(h) || h <= 0) return { error: 'Enter how many hours you worked.' };
     if (h > 24) return { error: "That's more than 24 hours — split it across two days." };
-    var start = stamp(date, el('eIn').value || '08:00');
+    var start = shopStamp(date, el('eIn').value || '08:00');
     if (isNaN(start)) return { error: 'Could not read that date.' };
     return { start: start, end: start + Math.round(h * HOUR_MS), assumed: true };
   }
 
-  var a = stamp(date, el('eIn').value), b = stamp(date, el('eOut').value);
+  var a = shopStamp(date, el('eIn').value), b = shopStamp(date, el('eOut').value);
   if (isNaN(a) || isNaN(b)) return { error: 'Fill in both the clock-in and clock-out time.' };
   if (b === a) return { error: 'Clock-out matches clock-in — that is no time at all.' };
   // Out earlier than in means the shift ran past midnight.
@@ -4872,12 +4964,12 @@ function previewShift(){
   var others = state.sessions.filter(function(s){ return s.id !== editing; });
   if (state.activeStart) others.push(liveSession('__a', Date.now()));
   var t = sumSession(buildLedger(others.concat([{ id: '__p', start: r.start, end: r.end, adj: adjFromForm() }]), state.cfg).parts, '__p');
-  p.innerHTML = '<b>' + fdate(new Date(r.start)) + '</b> · ' + ftime(r.start) + ' → ' + ftime(r.end)
+  p.innerHTML = '<b>' + fdate(new Date(r.start)) + '</b> · ' + ptime(r.start) + ' → ' + ptime(r.end)
     + (r.overnight ? ' <b>(next morning)</b>' : '')
     + ' &nbsp;·&nbsp; <b>' + t.hours.toFixed(2) + ' h</b>'
     + (t.otHours > 0.0001 ? ' <span style="color:var(--warn);font-weight:700">incl. ' + t.otHours.toFixed(2) + ' h OT</span>' : '')
     + ' &nbsp;·&nbsp; <span class="pay">' + money(t.gross) + '</span>'
-    + (r.assumed ? '<br><span style="opacity:.65">Recorded starting ' + ftime(r.start)
+    + (r.assumed ? '<br><span style="opacity:.65">Recorded starting ' + ptime(r.start)
         + '. Switch to “Start &amp; end times” if that matters.</span>' : '');
 }
 
@@ -4905,8 +4997,8 @@ function exportCsv(){
                 // Clock times follow the 12/24-hour setting, so an exported sheet reads
                 // the same way the app does rather than however the machine's locale does.
                 new Date(s.start).toDateString(),
-                new Date(s.start).toDateString() + ' ' + ftime(s.start),
-                new Date(s.end).toDateString() + ' ' + ftime(s.end),
+                new Date(s.start).toDateString() + ' ' + ptime(s.start),
+                new Date(s.end).toDateString() + ' ' + ptime(s.end),
                 t.hours.toFixed(4), t.regHours.toFixed(4), t.otHours.toFixed(4), t.gross.toFixed(2)]
                .map(function(v){ return '"' + String(v).replace(/"/g, '""') + '"'; }).join(','));
   });
@@ -5025,6 +5117,18 @@ document.getElementById('taxStaleGo').onclick = function(){ openNetSetup(); };
 /* ---- the roster and the holiday list ---- */
 document.getElementById('cShiftDay').onchange = function(e){
   state.cfg.shiftDayRule = e.target.value;
+  save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+};
+document.getElementById('cSkewOn').onchange = function(e){
+  state.cfg.skewOn = e.target.value === '1';
+  save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+};
+document.getElementById('cSkewMins').onchange = function(e){
+  /* Whole minutes, and bounded — a clock that is half an hour out is a broken clock, not an
+     offset, and letting it run further would only hide a mis-set phone. */
+  var v = parseFloat(e.target.value);
+  state.cfg.skewMins = isFinite(v) ? Math.max(-30, Math.min(30, Math.round(v))) : 0;
+  e.target.value = state.cfg.skewMins;
   save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
 };
 document.getElementById('cWorkDays').addEventListener('click', function(e){
@@ -5727,6 +5831,20 @@ function syncControls(){
         + ftime(_st) + ' counts as <b>' + fdate(new Date(_which)) + '</b>.'
       : 'Your scheduled shift does not cross midnight, so this makes no difference to it.';
   } else el('cShiftDayNote').textContent = '';
+  el('cSkewOn').value = state.cfg.skewOn ? '1' : '0';
+  var _sk = el('cSkewMins');
+  if (document.activeElement !== _sk) _sk.value = state.cfg.skewMins || 0;
+  /* Both clocks, side by side, on the spot. The point of the setting is knowing what the
+     machine says as against what the phone says, so the note answers that directly rather
+     than describing the rule in the abstract. */
+  var _kn = Math.round(+state.cfg.skewMins || 0), _now = Date.now();
+  el('cSkewNote').innerHTML = !state.cfg.skewOn
+    ? 'Off — every time shown is exactly what this phone stamped.'
+    : !_kn
+      ? 'On, but set to zero minutes, so nothing moves. Put in how far ahead this phone runs.'
+      : 'Right now this phone reads <b>' + ftime(_now) + '</b> and the machine reads <b>'
+        + ptime(_now) + '</b>. Punch times through the app are the machine\'s — the shift log, '
+        + 'the decimal time card, the slip figures. Your hours and pay are untouched.';
   renderWorkDays();
   renderHolidayList();
   renderBankCfg();
