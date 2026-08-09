@@ -33,7 +33,7 @@ const E = new Function(m[1] + `
            BANK_DEFAULTS, bankById, daysOffUsed, bankLeft, bankSlots, dayOffName,
            bankCredits, daysOffOutlook, periodHistory, timeCardRows, timeCardTotals,
            extraTime, chartHours, otThresholdOf, otBucketKey, sumSessionRange,
-           payMonths, currentPayMonth };
+           payMonths, currentPayMonth, shiftDayMs };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -1002,6 +1002,76 @@ group('Robustness');
                                  end: +new Date(2026, 7, 11, 23) }], sc);
   near('a shift nine hours in reads nine hours',
        E.bucketHoursAt(sofar, +new Date(2026, 7, 11, 23), sc, 'n'), 9);
+}
+
+
+/* ---------------- which day a shift belongs to ---------------- */
+{
+  const c = { ...E.DEFAULTS, rate: 38, schedStart: '14:00', schedEnd: '22:30', lunchMins: 30,
+              workDays: [true, true, true, true, true, false, false],
+              holidays: [], banks: [], daysOff: [], periodAnchor: '2026-08-09' };
+  // Sun Aug 16 2026 through Mon Aug 17.
+  const on = (d, h, mi = 0) => +new Date(2026, 7, d, h, mi);
+  const sh = (d1, h1, m1, d2, h2, m2) => ({ id: 'x', start: on(d1, h1, m1), end: on(d2, h2, m2) });
+  const dayOf = (s, cfg = c) => {
+    const d = new Date(E.shiftDayMs(s, cfg));
+    return E.dkey(d.getFullYear(), d.getMonth(), d.getDate());
+  };
+
+  ok('a shift inside one day is that day',       dayOf(sh(16, 9, 0, 16, 17, 0)) === '2026-08-16');
+  ok('6 PM to 2 AM is the evening it started',   dayOf(sh(16, 18, 0, 17, 2, 0)) === '2026-08-16');
+  ok('10 PM to 6 AM is the next day',            dayOf(sh(16, 22, 0, 17, 6, 0)) === '2026-08-17');
+  ok("Curtis's 2 PM to 10:30 PM is that day",    dayOf(sh(16, 14, 0, 16, 22, 30)) === '2026-08-16');
+  ok("and his 12:15 PM to 12:45 AM too",         dayOf(sh(16, 12, 15, 17, 0, 45)) === '2026-08-16');
+  ok('a shift ending exactly at midnight is the day it worked',
+     dayOf(sh(16, 16, 0, 17, 0, 0)) === '2026-08-16');
+  ok('an exact 50/50 split keeps the day it started',
+     dayOf(sh(16, 20, 0, 17, 4, 0)) === '2026-08-16');
+  ok('a minute past half tips it over',
+     dayOf(sh(16, 20, 0, 17, 4, 1)) === '2026-08-17');
+  ok('a shift spanning three days takes the fullest',
+     dayOf({ id: 'l', start: on(16, 22, 0), end: on(18, 2, 0) }) === '2026-08-17');
+
+  // Overrides, for employers who name shifts their own way.
+  const byStart = { ...c, shiftDayRule: 'start' }, byEnd = { ...c, shiftDayRule: 'end' };
+  ok('forced to the start day', dayOf(sh(16, 22, 0, 17, 6, 0), byStart) === '2026-08-16');
+  ok('forced to the end day',   dayOf(sh(16, 18, 0, 17, 2, 0), byEnd) === '2026-08-17');
+  ok('and "end" still will not claim a day with no hours in it',
+     dayOf(sh(16, 16, 0, 17, 0, 0), byEnd) === '2026-08-16');
+  ok('a zero-length shift falls back to its start day',
+     dayOf({ id: 'z', start: on(16, 9), end: on(16, 9) }) === '2026-08-16');
+
+  /* The reason this matters, with a real night worker: rostered Mon-Fri, scheduled
+     10 PM to 6 AM. Their Monday shift starts Sunday night. Judged by the date it begins on
+     it lands on Sunday — not a rostered day — and the time card would claim the whole
+     shift as extra time instead of nothing. */
+  const night = { ...c, schedStart: '22:00', schedEnd: '06:00', lunchMins: 0,
+                  workDays: [false, true, true, true, true, true, false] };   // Mon-Fri
+  const mondayShift = { id: 'm', start: on(16, 22, 0), end: on(17, 6, 0) };   // Sun 22:00 -> Mon 06:00
+  ok('it is Monday\'s shift', dayOf(mondayShift, night) === '2026-08-17');
+  const row = E.timeCardRows([mondayShift], night, on(9, 0), on(23, 0))[0];
+  ok('so it counts as rostered', row.rostered === true);
+  near('and a shift worked exactly to schedule claims nothing', row.extra, 0);
+  near('while still reporting its 8 paid hours', row.paid, 8);
+
+  const rowStart = E.timeCardRows([mondayShift], { ...night, shiftDayRule: 'start' },
+                                  on(9, 0), on(23, 0))[0];
+  ok('named by the day it began, it reads as unrostered', rowStart.rostered === false);
+  near('and the whole shift is wrongly claimed', rowStart.extra, 8);
+
+  // Clocking in an hour early on that same shift is an hour to claim, not eight.
+  const early = E.timeCardRows([{ id: 'e', start: on(16, 21, 0), end: on(17, 6, 0) }],
+                               night, on(9, 0), on(23, 0))[0];
+  near('an hour early is 1.00 to claim', early.before, 1);
+  near('nothing late',                   early.after, 0);
+
+  // A genuinely unrostered shift is still unrostered.
+  const satDay = { id: 'd', start: on(15, 9, 0), end: on(15, 17, 30) };
+  ok('a Saturday daytime shift is still not rostered',
+     E.timeCardRows([satDay], c, on(9, 0), on(23, 0))[0].rostered === false);
+  const satNight = { id: 's', start: on(15, 22, 0), end: on(16, 6, 0) };
+  ok('and a Saturday night that is really Sunday is rostered for a Sun-Thu roster',
+     E.timeCardRows([satNight], c, on(9, 0), on(23, 0))[0].rostered === true);
 }
 
 /* ------------------------------------------------------------------ */

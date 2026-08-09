@@ -1271,6 +1271,22 @@
         <div class="f"><label for="cSchedEnd2">Scheduled end</label><input type="time" id="cSchedEnd2"></div>
       </div>
 
+      <div class="f" style="margin-top:18px"><label for="cShiftDay">Which day a shift belongs to</label>
+        <div class="note">A shift that crosses midnight is still one shift, and it belongs to
+        one day. By default that is whichever day holds most of it — so a 10 PM start is the
+        next day's shift, while a 6 PM start is that evening's. Change it only if your
+        employer names them some other way.</div>
+      </div>
+      <div class="cfgrid">
+        <div class="f"><label for="cShiftDay">Rule</label>
+          <select id="cShiftDay">
+            <option value="majority">Whichever day holds most of it</option>
+            <option value="start">The day it started</option>
+            <option value="end">The day it finished</option>
+          </select></div>
+      </div>
+      <div class="note" id="cShiftDayNote" style="margin-top:8px"></div>
+
       <div class="f" style="margin-top:18px"><label>Days you are scheduled to work</label>
         <div class="note">The roster the app judges everything else against. "The day before a
         holiday" means the shift before it, not whatever date happens to sit there — so a
@@ -1456,6 +1472,9 @@ var DEFAULTS = {
   periodThreshold: 80,
   dailyThreshold: 8,
   shiftThreshold: 8,         // 'shift' mode: hours from clock-in, midnight does not reset it
+  /* Which day a shift belongs to: 'majority' whichever day holds most of it (default),
+     'start' the day it began, 'end' the day it finished. */
+  shiftDayRule: 'majority',
   weekStartDay: 0,           // 0 = Sunday
   periodAnchor: '2026-01-04',// any Sunday; setup replaces it with your real period start
   periodLengthDays: 14,
@@ -2232,6 +2251,39 @@ function periodHistory(parts, cfg, nowMs, limit){
   return out;
 }
 
+/* ---- which day a shift belongs to ----
+   The calendar day a shift starts on is not always the day it is. A 10 PM Sunday start
+   running to 6 AM is Monday's shift to the person working it, and to their payroll — they
+   would never call it Sunday. But a 6 PM start running to 2 AM is that evening's shift,
+   even though it also crosses midnight. What separates the two is where the hours are:
+   whichever calendar day holds most of the shift is the day it belongs to.
+
+   That needs nothing to be configured and no question asked, because it is a fact about
+   the hours rather than about the employer. An exact split goes to the day it started —
+   you turned up that day. Some employers do name every night shift by the day it ends
+   regardless, so the rule can be overridden. */
+function shiftDayMs(s, cfg){
+  var rule = (cfg && cfg.shiftDayRule) || 'majority';
+  var startDay = +midnight(s.start);
+  if (!(s.end > s.start)) return startDay;
+  if (rule === 'start') return startDay;
+
+  /* A shift ending exactly at midnight worked none of the following day, so it is not
+     that day's shift however you name it. */
+  var lastMs = +midnight(s.end) === s.end ? s.end - 1 : s.end;
+  var endDay = +midnight(lastMs);
+  if (rule === 'end') return endDay;
+
+  var best = startDay, bestSpan = -1, d = new Date(startDay);
+  while (+d <= endDay){
+    var from = Math.max(s.start, +d), to = Math.min(s.end, +addDays(d, 1));
+    var span = Math.max(0, to - from);
+    if (span > bestSpan){ bestSpan = span; best = +d; }   // strict, so a tie keeps the earlier day
+    d = addDays(d, 1);
+  }
+  return best;
+}
+
 /* ---- the decimal time card ----
    What an overtime slip needs, day by day, for a period that has already closed. On a
    day you are rostered for, the claim is the time either side of your scheduled shift.
@@ -2245,7 +2297,9 @@ function timeCardRows(sessions, cfg, fromMs, toMs){
   (sessions || []).filter(function(s){
     return s.end > s.start && s.start < toMs && s.end > fromMs;
   }).slice().sort(function(a, b){ return a.start - b.start; }).forEach(function(s){
-    var day = +midnight(s.start);
+    // The day the shift IS, not the date it happened to begin on — so a night worker's
+    // roster is judged against the right weekday.
+    var day = shiftDayMs(s, cfg);
     var paidH = 0;
     paidSpans(s, cfg).forEach(function(sp){ paidH += (sp.end - sp.start) / HOUR_MS; });
     var paid = chartHours(paidH);
@@ -3651,7 +3705,11 @@ function renderLog(ledger, period, active, now){
     html += '<tr' + (synth ? ' class="' + (s.hol ? 'holrowlog' : 'offrowlog') + '"'
       : ' data-row="' + s.id + '" class="'
       + (t.otHours > 0.0001 ? 'otrow ' : '') + (s.live ? 'live' : '') + (asking ? ' pending' : '') + '"') + '>'
-      + '<td class="c-day">' + fdate(new Date(s.start)).replace(/^(\w{3}) /, '<span class="dow">$1 </span>')
+      /* The day the shift IS, not the date it began on — a 10 PM Sunday start reads Mon,
+         which is what the person working it calls it. Synthetic rows (a holiday credit, a
+         booked day off) are already filed against a date and are left alone. */
+      + '<td class="c-day">' + fdate(new Date(synth ? s.start : shiftDayMs(s, state.cfg)))
+          .replace(/^(\w{3}) /, '<span class="dow">$1 </span>')
       + (t.clipped ? ' <span class="clipped">· split across periods</span>' : '')
       + (s.hol ? ' <span class="hollbl">· ' + esc(s.holiday) + '</span>' : '')
       + (s.off ? ' <span class="offlbl">· ' + esc(s.dayOff) + '</span>' : '')
@@ -4069,7 +4127,7 @@ function renderExtra(period, active, now){
     tb += bH; ta += aH;
     tmin += Math.round(x.before * 60) + Math.round(x.after * 60);
     if (bH < 0.005 && aH < 0.005) return;         // a shift inside its hours has nothing to claim
-    html += '<div class="xrow"><span class="xd">' + fdate(new Date(s.start))
+    html += '<div class="xrow"><span class="xd">' + fdate(new Date(shiftDayMs(s, cfg)))
       + (s.live ? ' <span class="running">running</span>' : '') + '</span>'
       + '<span class="xt">' + ftime(s.start) + ' – ' + (s.live ? 'now' : ftime(s.end)) + '</span>'
       + '<b class="xb">' + (bH >= 0.005 ? bH.toFixed(2) : '—') + '</b>'
@@ -4955,6 +5013,10 @@ document.getElementById('autoUndo').onclick = function(){ undoAutoIn(); };
 document.getElementById('taxStaleGo').onclick = function(){ openNetSetup(); };
 
 /* ---- the roster and the holiday list ---- */
+document.getElementById('cShiftDay').onchange = function(e){
+  state.cfg.shiftDayRule = e.target.value;
+  save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+};
 document.getElementById('cWorkDays').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
   var w = state.cfg.workDays;
@@ -5642,6 +5704,19 @@ function syncControls(){
   var s1 = el('cSchedStart2'), s2 = el('cSchedEnd2');
   if (document.activeElement !== s1) s1.value = state.cfg.schedStart || '';
   if (document.activeElement !== s2) s2.value = state.cfg.schedEnd || '';
+  el('cShiftDay').value = state.cfg.shiftDayRule || 'majority';
+  /* Worked through with the user's own scheduled shift, so the setting is judged on their
+     hours rather than on an abstraction. */
+  var _ss = hhmmToMin(state.cfg.schedStart), _se = hhmmToMin(state.cfg.schedEnd);
+  if (_ss != null && _se != null){
+    var _d0 = +midnight(Date.now());
+    var _st = _d0 + _ss * 60000, _en = _d0 + _se * 60000 + (_se <= _ss ? DAY_MS : 0);
+    var _which = shiftDayMs({ start: _st, end: _en }, state.cfg);
+    el('cShiftDayNote').innerHTML = _se <= _ss
+      ? 'Your shift crosses midnight. A shift starting ' + fdate(new Date(_d0)) + ' at '
+        + ftime(_st) + ' counts as <b>' + fdate(new Date(_which)) + '</b>.'
+      : 'Your scheduled shift does not cross midnight, so this makes no difference to it.';
+  } else el('cShiftDayNote').textContent = '';
   renderWorkDays();
   renderHolidayList();
   renderBankCfg();
