@@ -33,7 +33,7 @@ const E = new Function(m[1] + `
            BANK_DEFAULTS, bankById, daysOffUsed, bankLeft, bankSlots, dayOffName,
            bankCredits, daysOffOutlook, periodHistory, timeCardRows, timeCardTotals,
            extraTime, chartHours, otThresholdOf, otBucketKey, sumSessionRange,
-           payMonths, currentPayMonth, shiftDayMs };
+           payMonths, currentPayMonth, shiftDayMs, toMinute };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -1072,6 +1072,52 @@ group('Robustness');
   const satNight = { id: 's', start: on(15, 22, 0), end: on(16, 6, 0) };
   ok('and a Saturday night that is really Sunday is rostered for a Sun-Thu roster',
      E.timeCardRows([satNight], c, on(9, 0), on(23, 0))[0].rostered === true);
+}
+
+
+/* ---------------- slip figures read the punch as printed ---------------- */
+{
+  /* Curtis clocked in at 12:15-and-some-seconds against a 2 PM start. The screen said
+     12:15 PM, so the slip says 1.75 — but measuring from the raw stamp gave 104 minutes
+     and 1.73. A hundredth, every shift, on the figure that goes to payroll. */
+  const c = { ...E.DEFAULTS, rate: 38, schedStart: '14:00', schedEnd: '22:30', lunchMins: 30,
+              workDays: [true, true, true, true, true, false, false],
+              holidays: [], banks: [], daysOff: [], periodAnchor: '2026-08-09' };
+  const at = (h, mi, sec = 0) => +new Date(2026, 7, 9, h, mi, sec);
+  const ex = (h, mi, sec) => E.extraTime(at(h, mi, sec), at(22, 30), 14 * 60, 22 * 60 + 30);
+
+  near('a clean 12:15 is 1.75 h early', E.chartHours(ex(12, 15, 0).before), 1.75);
+  near('12:15 and 40 seconds is still 1.75',  E.chartHours(ex(12, 15, 40).before), 1.75);
+  near('12:15 and 59 seconds is still 1.75',  E.chartHours(ex(12, 15, 59).before), 1.75);
+  near('12:16 on the nose drops to 1.73',     E.chartHours(ex(12, 16, 0).before), 1.73);
+  near('and 12:16:59 is still 1.73',          E.chartHours(ex(12, 16, 59).before), 1.73);
+
+  // The same at the other end of the shift.
+  const late = (h, mi, sec) => E.extraTime(at(14, 0), at(h, mi, sec), 14 * 60, 22 * 60 + 30);
+  near('out at 23:00 flat is 0.50 late',   E.chartHours(late(23, 0, 0).after), 0.50);
+  near('23:00 and 50 seconds is still 0.50', E.chartHours(late(23, 0, 50).after), 0.50);
+  near('23:01 is 0.52',                    E.chartHours(late(23, 1, 0).after), 0.52);
+
+  ok('toMinute drops the seconds', E.toMinute(at(12, 15, 59)) === at(12, 15, 0));
+  ok('and leaves a clean minute alone', E.toMinute(at(12, 15, 0)) === at(12, 15, 0));
+
+  // The time card's own figures follow the same rule.
+  const row = E.timeCardRows([{ id: 'r', start: at(12, 15, 40), end: at(22, 30, 20) }],
+                             c, at(0, 0), at(23, 59))[0];
+  near('the card reads 1.75 early', row.before, 1.75);
+  near('nothing late',              row.after, 0);
+  near('claiming 1.75',             row.extra, 1.75);
+  near('and 9.75 h paid after the half-hour lunch', row.paid, 9.75);
+
+  // A whole fortnight of punches with seconds on them must not drift.
+  const week = [];
+  for (let d = 9; d <= 13; d++)
+    week.push({ id: 'd' + d, start: +new Date(2026, 7, d, 12, 15, 37),
+                             end:   +new Date(2026, 7, d, 22, 30, 11) });
+  const t = E.timeCardTotals(E.timeCardRows(week, c, +new Date(2026, 7, 8), +new Date(2026, 7, 15)));
+  near('five days at 1.75 is 8.75, not 8.65', t.before, 8.75);
+  near('with nothing late',                   t.after, 0);
+  near('and 8.75 to claim',                   t.extra, 8.75);
 }
 
 /* ------------------------------------------------------------------ */

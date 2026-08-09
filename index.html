@@ -1802,7 +1802,15 @@ function plannedStopAt(activeStart, plannedHours, completed, cfg){
    that is how a slip is written — half an hour is 0.50.
    `schedStart`/`schedEnd` are minutes past midnight. An end at or before the start means
    the scheduled shift itself runs past midnight, so its end belongs to the next day. */
+/* A punch is stamped to the second but shown — and written on a slip — to the minute, and
+   the display truncates: 12:15:40 reads 12:15 PM. Measuring from the raw stamp made a
+   12:15 clock-in 104 minutes before a 2 PM start instead of 105, so the slip figure came
+   out 1.73 where anyone reading the punch off the screen would write 1.75. Everything that
+   produces a slip figure works from the minute it shows, not the second underneath it. */
+function toMinute(ms){ return Math.floor(ms / 60000) * 60000; }
+
 function extraTime(startMs, endMs, schedStart, schedEnd){
+  startMs = toMinute(startMs); endMs = toMinute(endMs);
   var day = +midnight(startMs);
   var s = day + schedStart * 60000;
   var e = day + schedEnd * 60000;
@@ -2300,8 +2308,10 @@ function timeCardRows(sessions, cfg, fromMs, toMs){
     // The day the shift IS, not the date it happened to begin on — so a night worker's
     // roster is judged against the right weekday.
     var day = shiftDayMs(s, cfg);
+    // To the minute, like the punch times printed beside it and the figures on the slip.
+    var cut = { start: toMinute(s.start), end: toMinute(s.end), adj: s.adj };
     var paidH = 0;
-    paidSpans(s, cfg).forEach(function(sp){ paidH += (sp.end - sp.start) / HOUR_MS; });
+    paidSpans(cut, cfg).forEach(function(sp){ paidH += (sp.end - sp.start) / HOUR_MS; });
     var paid = chartHours(paidH);
     var rostered = isWorkDay(cfg, new Date(day).getDay());
     var before = 0, after = 0;
