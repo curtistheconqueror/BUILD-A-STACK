@@ -218,10 +218,12 @@
   .xsum{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
   /* the printed minutes→decimal chart, folded away until it is wanted */
   .hsub{color:var(--muted);font-weight:600;text-transform:none;letter-spacing:.2px}
+  /* 44px minimum: this is a button, and a short label was leaving it under the size a
+     thumb can reliably hit. */
   .charthead{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;
-    margin-top:16px;padding:11px 13px;background:var(--card2);border:1px solid var(--border);
-    border-radius:11px;color:var(--ink);font:inherit;font-size:13.2px;font-weight:700;
-    cursor:pointer;-webkit-tap-highlight-color:transparent}
+    min-height:44px;margin-top:16px;padding:11px 13px;background:var(--card2);
+    border:1px solid var(--border);border-radius:11px;color:var(--ink);font:inherit;
+    font-size:13.2px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent}
   .charthead:hover{border-color:var(--acc)}
   .charthead .chev{color:var(--muted);transition:transform .2s}
   .charthead[aria-expanded="true"] .chev{transform:rotate(180deg)}
@@ -308,6 +310,21 @@
   .holrow .hwhen{color:var(--muted);font-size:12.4px;text-align:right;font-variant-numeric:tabular-nums}
   .holrow .hotf{color:var(--warn);font-size:10.6px;letter-spacing:1px;font-weight:800}
   .holnone{color:var(--muted);font-size:13px;padding:10px 0}
+  /* completed pay periods */
+  .pastsum{color:var(--muted);font-weight:600;font-size:12px;margin-left:8px}
+  .pastrow{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:11px 0;
+    border-top:1px solid var(--border)}
+  .pastrow:first-child{border-top:0}
+  .pastrow .r1{font-weight:700;font-size:13.6px;color:var(--ink)}
+  .pastrow .amt{font-weight:800;font-size:15px;text-align:right;font-variant-numeric:tabular-nums;
+    color:var(--cal-fill)}
+  .pastrow .r2,.pastrow .r2b{color:var(--muted);font-size:12.3px;font-variant-numeric:tabular-nums}
+  .pastrow .r2b{text-align:right}
+  .pastrow .ot{color:var(--warn)}
+  .paidtag{font-size:9.5px;letter-spacing:.9px;font-weight:800;padding:1px 5px;border-radius:5px;
+    margin-left:7px;white-space:nowrap}
+  .paidtag.yes{color:var(--cal-fill);border:1px solid var(--cal-fill)}
+  .paidtag.no{color:var(--acc);border:1px solid var(--acc)}
   /* the floater and sick-day balances */
   .bank{border-top:1px solid var(--border);padding:13px 0}
   .bank:first-child{border-top:0;padding-top:0}
@@ -758,6 +775,19 @@
       <div class="pm"><div class="k">Payday</div><div class="v" id="payday">—</div></div>
       <div class="pm"><div class="k">Period ends in</div><div class="v" id="pleft">—</div></div>
       <div class="pm"><div class="k">Paid in</div><div class="v" id="payin">—</div></div>
+    </div>
+
+    <!-- A period that has rolled over otherwise vanishes from the app, which is exactly
+         when you want it: the stub for it is about to land. -->
+    <button class="charthead" id="pastBtn" aria-expanded="false" aria-controls="pastBody">
+      <span>⏮ Previous pay periods<span class="pastsum" id="pastSum"></span></span><span class="chev">▾</span>
+    </button>
+    <div class="hide" id="pastBody">
+      <div class="seg" id="pastView" style="margin-top:11px">
+        <button data-v="gross" class="on">GROSS</button><button data-v="net">NET</button>
+      </div>
+      <div id="pastList" style="margin-top:11px"></div>
+      <div class="note hide" id="pastNote" style="margin-top:9px"></div>
     </div>
     </div>
   </section>
@@ -1927,6 +1957,37 @@ function daysOffOutlook(cfg, year){
   return out.sort(function(a, b){ return a.ms - b.ms; });
 }
 
+/* ---- completed pay periods ----
+   A period that has rolled over otherwise disappears from the app entirely, which is
+   exactly when you want to check it against the stub that is about to land. Walks back
+   from the current period to the earliest thing on file, newest first. Periods with
+   nothing in them are skipped rather than listed as rows of zeroes. */
+function periodHistory(parts, cfg, nowMs, limit){
+  if (!parts || !parts.length) return [];
+  var earliest = Infinity;
+  for (var i = 0; i < parts.length; i++) if (parts[i].start < earliest) earliest = parts[i].start;
+  var cur = periodInfo(nowMs, cfg).index;
+  var first = periodInfo(earliest, cfg).index;
+  var out = [], max = limit || 24;
+  for (var k = cur - 1; k >= first && out.length < max; k--){
+    var start = addDays(ymd(cfg.periodAnchor), k * cfg.periodLengthDays);
+    var p = periodInfo(+start, cfg);
+    var t = sumRange(parts, p.startMs, p.endMs);
+    if (!(t.hours > 0.00001)) continue;
+    /* The overtime premium banked earlier the same year, which is what the tax break's
+       annual cap is measured against — so a past period's net is worked out on the room
+       that was actually left at the time, not on today's. */
+    var yearStart = +new Date(p.start.getFullYear(), 0, 1);
+    var before = sumRange(parts, yearStart, p.startMs);
+    out.push({ index: k, start: p.start, lastDay: p.lastDay, payDate: p.payDate,
+               startMs: p.startMs, endMs: p.endMs,
+               hours: t.hours, regHours: t.regHours, otHours: t.otHours, gross: t.gross,
+               otHoursBefore: before.otHours,
+               paid: +midnight(nowMs) >= +midnight(+p.payDate) });
+  }
+  return out;
+}
+
 /* ==ENGINE-END== */
 
 /* ============================ state ============================ */
@@ -2631,6 +2692,7 @@ function render(){
   renderProgress(ledger, period, now);
   renderYtd(ledger, now);
   renderLog(ledger, period, active, now);
+  renderPast(ledger, now);
   renderExtra(period, active, now);
   renderColSums(ledger, period, now, active, netOn);
   // Synced to the real clock, so the banked figure has to keep up with it. Safe in the
@@ -2867,6 +2929,59 @@ function renderProgress(ledger, period, now){
         + ruleName + ' — switch in Settings to bill every hour past ' + thr + ' h at ' + otRate + '.';
   }
 }
+
+/* Completed pay periods, newest first. Gross is the ledger's own figure; net runs each
+   period through the same withholding the current period uses, with the overtime premium
+   already banked that year handed in, so a past period's tax break reflects the room that
+   was left at the time rather than today's. */
+function renderPast(ledger, now){
+  var open = !!uiOpen().past;
+  var list = periodHistory(ledger.parts, state.cfg, now, 24);
+  el('pastSum').textContent = list.length
+    ? ' — ' + list.length + (list.length === 1 ? ' completed' : ' completed')
+    : '';
+  el('pastBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+  show('pastBody', open);
+  if (!open) return;
+
+  var view = pastView(), nc = netCfg();
+  [].forEach.call(el('pastView').querySelectorAll('button'), function(b){
+    b.classList.toggle('on', b.dataset.v === view);
+  });
+
+  if (!list.length){
+    el('pastList').innerHTML = '<div class="note">Nothing completed yet — the first pay period '
+      + 'shows here once it ends.</div>';
+    show('pastNote', false);
+    return;
+  }
+  el('pastList').innerHTML = list.map(function(p){
+    var amount, sub;
+    if (view === 'net'){
+      var bd = currentNetView(p.gross, p.hours, 'net', p.otHours,
+                              p.otHoursBefore * state.cfg.rate * ((state.cfg.otMultiplier || 1.5) - 1));
+      amount = money(bd.net);
+      sub = 'gross ' + money(p.gross) + ' · withheld ' + money(p.gross - bd.net);
+    } else {
+      amount = money(p.gross);
+      sub = p.hours.toFixed(2) + ' h'
+          + (p.otHours > 0.004 ? ' · <span class="ot">' + p.otHours.toFixed(2) + ' h OT</span>' : '');
+    }
+    return '<div class="pastrow">'
+      + '<div class="r1">' + fdate(p.start) + ' – ' + fdateY(p.lastDay) + '</div>'
+      + '<div class="amt">' + amount + '</div>'
+      + '<div class="r2">' + (view === 'net'
+          ? p.hours.toFixed(2) + ' h' + (p.otHours > 0.004 ? ' · <span class="ot">' + p.otHours.toFixed(2) + ' h OT</span>' : '')
+          : sub) + '</div>'
+      + '<div class="r2b">' + (p.paid ? 'paid ' : 'pays ') + fdateY(p.payDate)
+      + '<span class="paidtag ' + (p.paid ? 'yes">PAID' : 'no">DUE') + '</span></div>'
+      + (view === 'net' ? '<div class="r2" style="grid-column:1/-1">' + sub + '</div>' : '')
+      + '</div>';
+  }).join('');
+  show('pastNote', view === 'net');
+  if (view === 'net') el('pastNote').innerHTML = netBasisNote(nc);
+}
+function pastView(){ return uiOpen().pastView === 'net' ? 'net' : 'gross'; }
 
 function renderLog(ledger, period, active, now){
   var rows = state.sessions.filter(function(s){ return s.end > period.startMs && s.start < period.endMs; });
@@ -4173,6 +4288,15 @@ document.getElementById('cHolList').addEventListener('click', function(e){
     toast('Removed ' + h.name + '.');
   }
 });
+document.getElementById('pastBtn').addEventListener('click', function(e){
+  e.stopPropagation();                                // the section header is not what was tapped
+  var u = uiOpen(); u.past = !u.past; save(); lastMoney = ''; render();
+});
+document.getElementById('pastView').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  var u = uiOpen(); u.pastView = b.dataset.v; save(); lastMoney = ''; render();
+});
+
 document.getElementById('offAdd').onclick = function(){ openOffEditor(null); };
 document.getElementById('oCancel').onclick = function(){ show('offEdit', false); offEditing = null; };
 document.getElementById('oSave').onclick = saveDayOff;

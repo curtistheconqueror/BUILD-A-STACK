@@ -31,7 +31,7 @@ const E = new Function(m[1] + `
            isWorkDay, anyWorkDay, adjacentWorkDay, dkey,
            workedOn, holidayEligibility, holidayYears, holidayCredits, holidayOutlook,
            BANK_DEFAULTS, bankById, daysOffUsed, bankLeft, bankSlots, dayOffName,
-           bankCredits, daysOffOutlook };
+           bankCredits, daysOffOutlook, periodHistory };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -580,6 +580,82 @@ group('Robustness');
   ok('and the floater pays as well', dec.parts.some(p => p.sessionId === '__off:x'));
   near('16 h worked + 8 h holiday + 8 h floater = 32 h',
        dec.parts.reduce((s, p) => s + p.hours, 0), 32);
+}
+
+
+/* ---------------- completed pay periods ---------------- */
+{
+  // Anchor Sun Jul 26 2026, 14-day periods, payday 13 days after the last day.
+  const hcfg = { ...E.DEFAULTS, rate: 38, periodAnchor: '2026-07-26', periodLengthDays: 14,
+                 payDateOffsetDays: 13, holidays: [], banks: [], daysOff: [] };
+  const day = (mo, d, from, to) => ({ id: `s${mo}-${d}`, start: +new Date(2026, mo - 1, d, from),
+                                                          end: +new Date(2026, mo - 1, d, to) });
+  // Period 0: Jul 26 – Aug 8. Period 1: Aug 9 – Aug 22. Period 2: Aug 23 – Sep 5.
+  const work = [
+    day(7, 27, 9, 17), day(7, 28, 9, 17),               // 16 h in period 0
+    day(8, 10, 9, 17), day(8, 11, 9, 17), day(8, 12, 9, 17),   // 24 h in period 1
+    day(8, 24, 9, 17)                                    // 8 h in period 2
+  ];
+  const led = E.buildLedger(work, hcfg);
+  // Standing in period 2, so periods 0 and 1 are complete.
+  const now = +new Date(2026, 7, 25, 12);
+  const hist = E.periodHistory(led.parts, hcfg, now, 24);
+
+  ok('two completed periods', hist.length === 2, hist.length);
+  ok('newest first', hist[0].index > hist[1].index, `${hist[0].index}, ${hist[1].index}`);
+  ok('the period you are standing in is not listed',
+     !hist.some(h => h.startMs <= now && h.endMs > now));
+
+  const p1 = hist[0], p0 = hist[1];
+  ok('the newer one is Aug 9 – Aug 22',
+     p1.start.getDate() === 9 && p1.lastDay.getDate() === 22, `${p1.start} ${p1.lastDay}`);
+  near('with 24 h', p1.hours, 24);
+  near('and $912.00', p1.gross, 912);
+  ok('payday Fri Sep 4', p1.payDate.getMonth() === 8 && p1.payDate.getDate() === 4);
+  ok('not paid yet on Aug 25', p1.paid === false);
+
+  ok('the older one is Jul 26 – Aug 8',
+     p0.start.getDate() === 26 && p0.lastDay.getDate() === 8);
+  near('with 16 h', p0.hours, 16);
+  near('and $608.00', p0.gross, 608);
+  ok('payday Fri Aug 21', p0.payDate.getMonth() === 7 && p0.payDate.getDate() === 21);
+  ok('and it has been paid', p0.paid === true);
+
+  // A period with nothing in it is skipped rather than listed as zeroes.
+  const gap = [day(7, 27, 9, 17), day(8, 24, 9, 17)];    // nothing at all in period 1
+  const gh = E.periodHistory(E.buildLedger(gap, hcfg).parts, hcfg, now, 24);
+  ok('an empty period is left out', gh.length === 1 && gh[0].index === 0, gh.map(h => h.index));
+
+  // Overtime is reported per period, and the premium banked before it is carried
+  // so a past period's tax break is worked out on the room left at the time.
+  const heavy = [];
+  for (let d = 26; d <= 31; d++) heavy.push(day(7, d, 8, 20));   // 6 x 12 h in period 0
+  const hl = E.buildLedger(heavy, hcfg);
+  const hh = E.periodHistory(hl.parts, hcfg, now, 24);
+  near('72 h in that period', hh[hh.length - 1].hours, 72);
+  ok('with overtime recorded', hh[hh.length - 1].otHours > 0, hh[hh.length - 1].otHours);
+  near('and nothing banked before it in the year', hh[hh.length - 1].otHoursBefore, 0);
+
+  const twoBusy = heavy.concat([day(8, 10, 8, 20), day(8, 11, 8, 20), day(8, 12, 8, 20),
+                                day(8, 13, 8, 20)]);            // 48 h in period 1
+  const tb = E.periodHistory(E.buildLedger(twoBusy, hcfg).parts, hcfg, now, 24);
+  ok('the later period knows what came before it', tb[0].otHoursBefore > 0, tb[0].otHoursBefore);
+  near('and it is period 0\'s overtime', tb[0].otHoursBefore, tb[1].otHours);
+
+  // Limits and edges.
+  ok('the limit is respected', E.periodHistory(led.parts, hcfg, now, 1).length === 1);
+  ok('no parts means no history', E.periodHistory([], hcfg, now, 24).length === 0);
+  ok('standing in the first period there is nothing behind you',
+     E.periodHistory(E.buildLedger([day(7, 27, 9, 17)], hcfg).parts, hcfg,
+                     +new Date(2026, 6, 30, 12), 24).length === 0);
+  // Holiday and booked days count toward a completed period the same as worked hours.
+  const withHol = { ...hcfg, holidays: E.HOLIDAY_DEFAULTS(),
+                    workDays: [true,true,true,true,true,false,false],
+                    banks: E.BANK_DEFAULTS(),
+                    daysOff: [{ id: 'f', bank: 'float', slot: 0, date: '2026-08-11' }] };
+  const wh = E.periodHistory(E.buildLedger(work, withHol).parts, withHol, now, 24);
+  near('a booked floater lands in its period', wh[0].hours, 32);
+  near('and is paid in its total', wh[0].gross, 1216);
 }
 
 /* ------------------------------------------------------------------ */
