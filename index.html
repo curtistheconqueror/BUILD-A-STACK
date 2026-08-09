@@ -2346,7 +2346,10 @@ function load(){
   } catch(e){ /* corrupt storage — fall back to defaults rather than dying */ }
   return base;
 }
-function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
+/* Bumped on every save, so the heavy renderers below can tell "nothing has changed" from
+   "redraw everything". */
+var dataVer = 0;
+function save(){ dataVer++; try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
 function uid(){ return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
 /* ============================ format ============================ */
@@ -2838,6 +2841,23 @@ function checkOt(inOt){
 
 /* ============================ render ============================ */
 var lastMoney = '';
+/* The last state the heavy renderers were drawn for. Cleared wherever a redraw has to be
+   forced regardless — the same places that already clear lastMoney. */
+var lastHeavySig = '';
+
+/* buildLedger walks every shift on file and splits each at midnight, so on a year of work
+   it is the most expensive thing in a frame — and render called it three times, eight times
+   a second, for figures that step once a second at most. Each call site caches on the
+   instant it actually depends on, so the walk happens when the answer would change and not
+   otherwise. Any save bumps dataVer and invalidates all of them. */
+var _ledCache = {};
+function cachedLedger(slot, key, build){
+  var c = _ledCache[slot];
+  if (c && c.key === key) return c.val;
+  var val = build();
+  _ledCache[slot] = { key: key, val: val };
+  return val;
+}
 /* The last instant we rendered while clocked in. An auto-stop may never finish a shift
    before this, or time already worked would be thrown away. */
 var tickWhileActive = 0;
@@ -2867,9 +2887,14 @@ function render(){
   }
   tickWhileActive = active ? now : 0;
 
-  var all = state.sessions.slice();
-  if (active) all.push(liveSession('__active', now));
-  var ledger = buildLedger(all, cfg);
+  /* Nothing drawn from this ledger is finer than a second, so a second is the resolution
+     it is cached at. The timer above reads the raw clock and is unaffected. */
+  var liveSec = active ? Math.floor(now / 1000) * 1000 : 0;
+  var ledger = cachedLedger('main', dataVer + '|' + liveSec, function(){
+    var all = state.sessions.slice();
+    if (active) all.push(liveSession('__active', Math.max(active, liveSec)));
+    return buildLedger(all, cfg);
+  });
 
   var period = periodInfo(now, cfg), week = weekInfo(now, cfg);
   var dayStart = +midnight(now), dayEnd = dayStart + DAY_MS;
@@ -2898,7 +2923,9 @@ function render(){
   // the toggle: recompute the shift as of the last tick of the chosen unit
   var shownGross = shift.gross, dp = 2, qEnd = active ? active + quantize(elapsed, state.unit) : now;
   if (active){
-    var q = buildLedger(state.sessions.concat([{ id: '__q', start: active, end: Math.max(active, qEnd) }]), cfg);
+    var q = cachedLedger('q', dataVer + '|' + qEnd, function(){
+      return buildLedger(state.sessions.concat([{ id: '__q', start: active, end: Math.max(active, qEnd) }]), cfg);
+    });
     shownGross = sumSession(q.parts, '__q').gross;
     dp = state.unit === 'sec' ? 4 : 2;
   }
@@ -2942,7 +2969,9 @@ function render(){
      numbers always agree on what "now" means. */
   var perShown = per.gross;
   if (active){
-    var perQ = buildLedger(state.sessions.concat([liveSession('__pq', Math.max(active, qEnd))]), cfg);
+    var perQ = cachedLedger('perQ', dataVer + '|' + qEnd, function(){
+      return buildLedger(state.sessions.concat([liveSession('__pq', Math.max(active, qEnd))]), cfg);
+    });
     perShown = sumRange(perQ.parts, period.startMs, period.endMs).gross;
   }
   document.getElementById('permoney').textContent = money(perShown, dp);
@@ -3053,18 +3082,30 @@ function render(){
     ? bucketH.toFixed(2) + ' h · ' + over.toFixed(2) + ' h in OT'
     : bucketH.toFixed(2) + ' / ' + thr + ' h · ' + (thr - bucketH).toFixed(2) + ' h to OT';
 
-  renderProgress(ledger, period, now);
-  renderYtd(ledger, now);
-  renderLog(ledger, period, active, now);
-  renderPayMonths(ledger, now);
-  renderPast(ledger, now);
-  renderTimeCard(ledger, now);
-  renderWhatIf();
-  renderExtra(period, active, now);
-  renderColSums(ledger, period, now, active, netOn);
-  // Synced to the real clock, so the banked figure has to keep up with it. Safe in the
-  // loop: renderCalc only writes result text, never the fields you type into.
-  if (calcState().sync) renderCalc();
+  // Live: a number and a label, nothing rebuilt.
+  renderPayMonthCounter(ledger, now);
+
+  /* Everything below rebuilds whole tables and lists. None of it shows anything finer than
+     two decimal places, so redrawing it eight times a second was work nobody could see —
+     roughly 15% of a phone's core, continuously, on a year of shifts. It now runs when
+     something has actually changed: a save, a mode change, or the second ticking over.
+     The clock, the money and the counters above still update every 120 ms. */
+  var heavySig = dataVer + '|' + pendingDelete + '|' + pickMode + '|' + Math.floor(now / 1000);
+  if (heavySig !== lastHeavySig){
+    lastHeavySig = heavySig;
+    renderProgress(ledger, period, now);
+    renderYtd(ledger, now);
+    renderLog(ledger, period, active, now);
+    renderPayMonths(ledger, now);
+    renderPast(ledger, now);
+    renderTimeCard(ledger, now);
+    renderWhatIf();
+    renderExtra(period, active, now);
+    renderColSums(ledger, period, now, active, netOn);
+    // Synced to the real clock, so the banked figure has to keep up with it. Safe here:
+    // renderCalc only writes result text, never the fields you type into.
+    if (calcState().sync) renderCalc();
+  }
 }
 
 /* Year to date: live totals, the OT tax-free cap, and a projection built from the
@@ -3355,20 +3396,23 @@ function pastView(){ return uiOpen().pastView === 'net' ? 'net' : 'gross'; }
 /* What each month pays, by payday rather than by when the work happened. The live one is
    the month the current period lands in, so it climbs with the clock — the money it counts
    has not arrived yet. */
+/* The counter under the pay period total. Live, because it is one of the few figures that
+   genuinely moves with the clock — a number and a label, no markup rebuilt. */
+function renderPayMonthCounter(ledger, now){
+  var cur = currentPayMonth(ledger.parts, state.cfg, now);
+  show('monmoney', !!cur);
+  show('monmoneyLbl', !!cur);
+  if (!cur) return;
+  var mm = el('monmoney'), want = money(cur.gross);
+  if (mm.textContent !== want) mm.textContent = want;
+  var lbl = MONTHS_FULL[cur.month] + ' ' + cur.year + ' pay month'
+    + (cur.periods.length > 1 ? ' · ' + cur.periods.length + ' periods' : '');
+  if (el('monmoneyLbl').textContent !== lbl) el('monmoneyLbl').textContent = lbl;
+}
+
 function renderPayMonths(ledger, now){
   var cfg = state.cfg;
   var cur = currentPayMonth(ledger.parts, cfg, now);
-
-  // The counter under the pay period total.
-  show('monmoney', !!cur);
-  show('monmoneyLbl', !!cur);
-  if (cur){
-    var mm = el('monmoney'), want = money(cur.gross);
-    if (mm.textContent !== want) mm.textContent = want;
-    el('monmoneyLbl').textContent = MONTHS_FULL[cur.month] + ' ' + cur.year + ' pay month'
-      + (cur.periods.length > 1 ? ' · ' + cur.periods.length + ' periods' : '');
-  }
-
   var open = !!uiOpen().mon;
   var list = payMonths(ledger.parts, cfg, now, 24);
   el('monSum').textContent = cur ? ' — ' + MONTHS_FULL[cur.month] + ' ' + money(cur.gross) : '';
@@ -4406,7 +4450,7 @@ function setPayMode(mode){
   [].forEach.call(document.querySelectorAll('#payMode button'), function(b){
     b.classList.toggle('on', (b.dataset.p === 'net') === nc.enabled);
   });
-  save(); lastMoney = ''; render();
+  save(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
 }
 
 /* ============================ look & feel ============================
@@ -4613,7 +4657,7 @@ function startBackdated(){
   state.activeStart = r.start;
   state.activeAdj = null;
   tickWhileActive = 0;
-  save(); closeBackdate(); chime(true); lastMoney = ''; render();
+  save(); closeBackdate(); chime(true); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
   toast('Clock running from ' + ftime(r.start) + ' — ' +
         ((Date.now() - r.start) / HOUR_MS).toFixed(2) + ' h already on it.');
 }
@@ -4850,7 +4894,7 @@ function restoreFrom(text){
   if (d.calc) state.calc = d.calc;
   if (d.calCal) state.calCal = d.calCal;
   state.activeStart = null; state.activeAdj = null;   // never restore a running clock from a file
-  save(); applyTheme(); renderThemeControls(); applyCols(); applyChart(); syncControls(); applyStage(); lastMoney = ''; render();
+  save(); applyTheme(); renderThemeControls(); applyCols(); applyChart(); syncControls(); applyStage(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
   toast('Restored ' + clean.length + ' shifts at ' + money(state.cfg.rate) + '/hr.');
 }
 
@@ -4859,7 +4903,7 @@ document.getElementById('punch').onclick = function(){ state.activeStart ? clock
 
 document.getElementById('seg').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
-  state.unit = b.dataset.u; lastMoney = ''; save(); syncControls(); render();
+  state.unit = b.dataset.u; lastMoney = ''; lastHeavySig = ''; _ledCache = {}; save(); syncControls(); render();
 });
 
 /* Switching auto clock-in on, or moving its time, never reaches back into a day that is
@@ -4929,7 +4973,7 @@ document.getElementById('cHolList').addEventListener('click', function(e){
 });
 document.getElementById('pastBtn').addEventListener('click', function(e){
   e.stopPropagation();                                // the section header is not what was tapped
-  var u = uiOpen(); u.past = !u.past; save(); lastMoney = ''; render();
+  var u = uiOpen(); u.past = !u.past; save(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
 });
 document.getElementById('wifBtn').addEventListener('click', function(e){
   e.stopPropagation();                                // not the hero chevron
@@ -4957,18 +5001,18 @@ document.getElementById('wifBody').addEventListener('click', function(e){ e.stop
 
 document.getElementById('monBtn').addEventListener('click', function(e){
   e.stopPropagation();                                // the section header is not what was tapped
-  var u = uiOpen(); u.mon = !u.mon; save(); lastMoney = ''; render();
+  var u = uiOpen(); u.mon = !u.mon; save(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
 });
 document.getElementById('tcBtn').addEventListener('click', function(e){
   e.stopPropagation();
-  var u = uiOpen(); u.tc = !u.tc; save(); lastMoney = ''; render();
+  var u = uiOpen(); u.tc = !u.tc; save(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
 });
 document.getElementById('tcPick').addEventListener('change', function(e){
-  uiOpen().tcPeriod = parseInt(e.target.value, 10); save(); lastMoney = ''; render();
+  uiOpen().tcPeriod = parseInt(e.target.value, 10); save(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
 });
 document.getElementById('pastView').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
-  var u = uiOpen(); u.pastView = b.dataset.v; save(); lastMoney = ''; render();
+  var u = uiOpen(); u.pastView = b.dataset.v; save(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
 });
 
 document.getElementById('offAdd').onclick = function(){ openOffEditor(null); };
@@ -5307,14 +5351,14 @@ document.getElementById('yBaseSave').onclick = saveYtdBase;
 
 document.getElementById('cLunch').onchange = function(e){
   state.cfg.lunchMins = parseInt(e.target.value, 10) || 0;
-  save(); lastMoney = ''; render();
+  save(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
   toast(state.cfg.lunchMins
     ? state.cfg.lunchMins + ' min unpaid lunch on — every logged shift over 5 h just corrected itself.'
     : 'Unpaid lunch off — all time paid again.');
 };
 document.getElementById('cLunchExtra').onchange = function(e){
   state.cfg.lunchExtra = Math.max(0, parseInt(e.target.value, 10) || 0);
-  save(); lastMoney = ''; render();
+  save(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
 };
 
 document.getElementById('rApply').onclick = function(){
@@ -5328,14 +5372,14 @@ document.getElementById('rApply').onclick = function(){
   cfg.rateHistory.push({ before: d, rate: cfg.rate });
   cfg.rate = r;
   document.getElementById('rNew').value = ''; document.getElementById('rDate').value = '';
-  save(); syncControls(); lastMoney = ''; render();
+  save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
   toast('Raise applied — ' + money(r) + '/hr from ' + fdate(ymd(d)) + '. Earlier work keeps its old rate.');
 };
 document.getElementById('rHist').addEventListener('click', function(e){
   var b = e.target.closest('button[data-rh]'); if (!b) return;
   var i = parseInt(b.dataset.rh, 10);
   state.cfg.rateHistory.splice(i, 1);
-  save(); syncControls(); lastMoney = ''; render();
+  save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
   toast('Rate boundary removed — that era now uses the current rate.');
 });
 
@@ -5494,7 +5538,7 @@ CFG_FIELDS.forEach(function(f){
     if (state.cfg[key] === v) return;
 
     var was = Object.assign({}, state.cfg);
-    state.cfg[key] = v; save(); lastMoney = ''; render(); syncCalc();
+    state.cfg[key] = v; save(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render(); syncCalc();
     offerUndo(was, key);
   };
 });
@@ -5531,13 +5575,13 @@ document.getElementById('cSound').onchange = function(e){ state.sound = e.target
 });
 document.getElementById('cClock24').onchange = function(e){
   state.cfg.clock24 = e.target.value === '1';
-  save(); lastMoney = ''; render(); syncCalc();
+  save(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render(); syncCalc();
 };
 
 document.getElementById('cfgUndoBtn').onclick = function(){
   if (!cfgUndo) return;
   state.cfg = cfgUndo; cfgUndo = null;
-  save(); syncControls(); show('cfgUndo', false); lastMoney = ''; render();
+  save(); syncControls(); show('cfgUndo', false); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
   toast('Change undone.');
 };
 
@@ -5644,7 +5688,7 @@ window.addEventListener('focus', render);
    unsaved work here to lose. */
 window.addEventListener('storage', function(e){
   if (e.key && e.key !== KEY) return;
-  state = load(); lastMoney = ''; syncControls(); applyStage(); render();
+  state = load(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; syncControls(); applyStage(); render();
 });
 
 /* Offline support. Registration failing is not fatal — the app still runs, it just
