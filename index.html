@@ -325,6 +325,25 @@
     margin-left:7px;white-space:nowrap}
   .paidtag.yes{color:var(--cal-fill);border:1px solid var(--cal-fill)}
   .paidtag.no{color:var(--acc);border:1px solid var(--acc)}
+  /* the what-if at the clock */
+  .wifrow{display:flex;align-items:flex-end;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+  .wifrow .f{flex:0 1 auto}
+  .wifout{margin-top:13px}
+  .wifbig{font-size:26px;font-weight:800;color:var(--cal-fill);text-align:center;
+    font-variant-numeric:tabular-nums;line-height:1.15}
+  .wifsub{text-align:center;color:var(--muted);font-size:12.8px;margin-top:5px}
+  .wifgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:13px}
+  .wifcell{background:var(--card2);border:1px solid var(--border);border-radius:10px;
+    padding:9px 6px;text-align:center}
+  .wifcell .k{color:var(--muted);font-size:9.8px;letter-spacing:1px;text-transform:uppercase;
+    font-weight:800}
+  .wifcell .v{font-size:16px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:3px}
+  .wifcell .v.b{color:var(--acc)}
+  .wifcell .v.a{color:var(--warn)}
+  .wifcell .v.x{color:var(--cal-fill)}
+  .wifnote{color:var(--muted);font-size:12.3px;margin-top:11px;line-height:1.65;text-align:center}
+  .wifnote b{color:var(--ink)}
+  .wifot{color:var(--warn);font-weight:700}
   /* the decimal time card */
   .tcrow{display:grid;grid-template-columns:1fr auto 58px 58px 58px;gap:8px;align-items:center;
     padding:8px 0;border-top:1px solid var(--border);font-size:13px}
@@ -697,6 +716,24 @@
       <label class="swrap"><input type="checkbox" id="planOn"> Auto-stop after</label>
       <input type="number" id="planHrs" min="0.25" max="24" step="0.25" value="8"> <span>hours today</span>
       <span class="eta" id="planEta"></span>
+    </div>
+
+    <!-- The sum you do in your head at the time clock: in at this, out at that, what does
+         that come to. Priced through the real ledger, so the overtime is what you would
+         actually be paid given the hours already banked — not a guess at 1.5x. -->
+    <button class="charthead" id="wifBtn" aria-expanded="false" aria-controls="wifBody">
+      <span>⚡ What if I work…</span><span class="chev">▾</span>
+    </button>
+    <div class="hide" id="wifBody">
+      <div class="wifrow">
+        <div class="f"><label for="wIn">Clock in</label><input type="time" id="wIn"></div>
+        <div class="f"><label for="wOut">Clock out</label><input type="time" id="wOut"></div>
+        <button class="mini" id="wNow">Now</button>
+      </div>
+      <div id="wifOut"></div>
+      <label class="swrap" id="wPayWrap" style="justify-content:center;margin-top:13px">
+        <input type="checkbox" id="wPay"> Show what it pays</label>
+      <div class="wifnote hide" id="wifMoney"></div>
     </div>
     </div>
   </section>
@@ -2774,6 +2811,7 @@ function render(){
   renderLog(ledger, period, active, now);
   renderPast(ledger, now);
   renderTimeCard(ledger, now);
+  renderWhatIf();
   renderExtra(period, active, now);
   renderColSums(ledger, period, now, active, netOn);
   // Synced to the real clock, so the banked figure has to keep up with it. Safe in the
@@ -3063,6 +3101,86 @@ function renderPast(ledger, now){
   if (view === 'net') el('pastNote').innerHTML = netBasisNote(nc);
 }
 function pastView(){ return uiOpen().pastView === 'net' ? 'net' : 'gross'; }
+
+/* ---- the sum you do in your head at the clock ----
+   In at this, out at that: what does that come to in decimal hours. The decimal figures
+   are the point — they are what goes on the slip — so they are the big numbers and the
+   money is a toggle. Both ends are shown separately because a slip asks for them
+   separately: time before your scheduled start and time after your scheduled end.
+
+   The whole day counts on a day you are not rostered for, exactly as the time card does,
+   and the pay is priced through the real ledger so the overtime is what you would
+   actually be paid given the hours already banked this week — not a flat guess at 1.5x. */
+function renderWhatIf(){
+  if (!uiOpen().wif) return;
+  var cfg = state.cfg, box = el('wifOut');
+  var im = hhmmToMin(el('wIn').value), om = hhmmToMin(el('wOut').value);
+  if (im == null || om == null){
+    box.innerHTML = '<div class="wifnote">Put a clock-in and a clock-out time in and the '
+      + 'decimal hours work themselves out.</div>';
+    show('wifMoney', false);
+    return;
+  }
+  var day = +midnight(Date.now());
+  var start = day + im * 60000;
+  var end = day + om * 60000;
+  if (om <= im) end += DAY_MS;                       // clocking out after midnight
+
+  var sess = { id: '__wif', start: start, end: end };
+  var row = timeCardRows([sess], cfg, start - DAY_MS, end + DAY_MS)[0];
+  var span = (end - start) / HOUR_MS;
+
+  box.innerHTML = '<div class="wifout">'
+    + '<div class="wifbig">' + row.extra.toFixed(2) + ' h</div>'
+    + '<div class="wifsub">' + (row.rostered ? 'outside your scheduled shift'
+        : 'the whole day — ' + DOW_FULL_LIST[new Date(day).getDay()] + ' is not a scheduled day')
+      + '</div>'
+    + '<div class="wifgrid">'
+    + '<div class="wifcell"><div class="k">Early</div><div class="v b">'
+      + (row.rostered ? row.before.toFixed(2) : '—') + '</div></div>'
+    + '<div class="wifcell"><div class="k">Late</div><div class="v a">'
+      + (row.rostered ? row.after.toFixed(2) : '—') + '</div></div>'
+    + '<div class="wifcell"><div class="k">To claim</div><div class="v x">'
+      + row.extra.toFixed(2) + '</div></div>'
+    + '</div>'
+    + '<div class="wifnote">' + ftime(start) + ' – ' + ftime(end)
+      + (om <= im ? ' next day' : '') + ' &nbsp;·&nbsp; <b>' + chartHours(span).toFixed(2)
+      + ' h</b> on the clock, <b>' + row.paid.toFixed(2) + ' h</b> paid'
+      + ((cfg.lunchMins || 0) ? ' after the ' + cfg.lunchMins + '-minute lunch' : '')
+      + '</div></div>';
+
+  show('wifMoney', !!uiOpen().wifPay);
+  if (!uiOpen().wifPay) return;
+
+  /* Priced against the shifts already on file, minus any running one — the hypothetical
+     stands in for it, so counting both would bank the same hours twice. */
+  var base = state.sessions.filter(function(x){ return x.id !== '__wif'; });
+  var led = buildLedger(base.concat([sess]), cfg);
+  var t = sumSession(led.parts, '__wif');
+  el('wifMoney').innerHTML = '<b style="color:var(--cal-fill);font-size:17px">' + money(t.gross)
+    + '</b> for the day'
+    + (t.otHours > 0.004
+        ? ' &nbsp;·&nbsp; <span class="wifot">' + t.otHours.toFixed(2) + ' h at '
+          + money(cfg.rate * (cfg.otMultiplier || 1.5)) + '/hr</span>'
+        : ' &nbsp;·&nbsp; all straight time')
+    + '<br>Counted against the ' + t.hours.toFixed(2) + ' h this shift adds to what you have '
+    + 'already banked, so the overtime is what you would really be paid.';
+}
+/* Prefill: the shift you are on if you are clocked in, otherwise now — and your usual
+   finish, so the common question is already answered before anything is typed. */
+function seedWhatIf(force){
+  var cfg = state.cfg;
+  if (!force && el('wIn').value && el('wOut').value) return;
+  var startMs = state.activeStart || Date.now();
+  var d = new Date(startMs);
+  el('wIn').value = pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  if (force || !el('wOut').value){
+    var se = hhmmToMin(cfg.schedEnd);
+    if (se == null) se = (d.getHours() * 60 + d.getMinutes() + (state.plannedHours || 8) * 60) % 1440;
+    el('wOut').value = pad2(Math.floor(se / 60)) + ':' + pad2(se % 60);
+  }
+}
+function pad2(n){ return String(n).padStart(2, '0'); }
 
 /* The decimal time card for a closed period. A rostered day claims the time either side
    of your scheduled shift; a day you are not rostered for has no shift to be either side
@@ -4446,6 +4564,30 @@ document.getElementById('pastBtn').addEventListener('click', function(e){
   e.stopPropagation();                                // the section header is not what was tapped
   var u = uiOpen(); u.past = !u.past; save(); lastMoney = ''; render();
 });
+document.getElementById('wifBtn').addEventListener('click', function(e){
+  e.stopPropagation();                                // not the hero chevron
+  var u = uiOpen(); u.wif = !u.wif;
+  if (u.wif) seedWhatIf(false);
+  save(); show('wifBody', u.wif);
+  el('wifBtn').setAttribute('aria-expanded', u.wif ? 'true' : 'false');
+  renderWhatIf();
+});
+['wIn','wOut'].forEach(function(id){
+  var e2 = document.getElementById(id);
+  // input as well as change, so the figures move as the time is scrolled
+  e2.addEventListener('input', renderWhatIf);
+  e2.addEventListener('change', renderWhatIf);
+  e2.addEventListener('click', function(ev){ ev.stopPropagation(); });
+});
+document.getElementById('wNow').onclick = function(e){
+  e.stopPropagation(); seedWhatIf(true); renderWhatIf();
+};
+document.getElementById('wPay').onchange = function(e){
+  uiOpen().wifPay = e.target.checked; save(); renderWhatIf();
+};
+document.getElementById('wPayWrap').addEventListener('click', function(e){ e.stopPropagation(); });
+document.getElementById('wifBody').addEventListener('click', function(e){ e.stopPropagation(); });
+
 document.getElementById('tcBtn').addEventListener('click', function(e){
   e.stopPropagation();
   var u = uiOpen(); u.tc = !u.tc; save(); lastMoney = ''; render();
@@ -5035,6 +5177,13 @@ applyTheme();
 renderThemeControls();
 applyCols();
 applyChart();
+(function(){
+  var u = uiOpen();
+  el('wPay').checked = !!u.wifPay;
+  show('wifBody', !!u.wif);
+  el('wifBtn').setAttribute('aria-expanded', u.wif ? 'true' : 'false');
+  if (u.wif) seedWhatIf(false);
+})();
 show('noStore', !STORAGE_OK);
 syncControls();
 applyStage();
