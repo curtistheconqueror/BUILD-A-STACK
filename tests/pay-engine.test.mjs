@@ -31,7 +31,8 @@ const E = new Function(m[1] + `
            isWorkDay, anyWorkDay, adjacentWorkDay, dkey,
            workedOn, holidayEligibility, holidayYears, holidayCredits, holidayOutlook,
            BANK_DEFAULTS, bankById, daysOffUsed, bankLeft, bankSlots, dayOffName,
-           bankCredits, daysOffOutlook, periodHistory };
+           bankCredits, daysOffOutlook, periodHistory, timeCardRows, timeCardTotals,
+           extraTime, chartHours };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -656,6 +657,89 @@ group('Robustness');
   const wh = E.periodHistory(E.buildLedger(work, withHol).parts, withHol, now, 24);
   near('a booked floater lands in its period', wh[0].hours, 32);
   near('and is paid in its total', wh[0].gross, 1216);
+}
+
+
+/* ---------------- the decimal time card ---------------- */
+{
+  // Curtis's real shape: scheduled 14:00–22:30, rostered Sun–Thu, half-hour unpaid lunch.
+  const tcfg = { ...E.DEFAULTS, rate: 38, periodAnchor: '2026-07-26', periodLengthDays: 14,
+                 schedStart: '14:00', schedEnd: '22:30', lunchMins: 30,
+                 workDays: [true, true, true, true, true, false, false],
+                 holidays: [], banks: [], daysOff: [] };
+  const S = (id, mo, d, h1, m1, h2, m2) => ({ id, start: +new Date(2026, mo - 1, d, h1, m1),
+                                                   end: +new Date(2026, mo - 1, d, h2, m2) });
+  const from = +new Date(2026, 6, 26), to = +new Date(2026, 7, 9);
+
+  // Sun Aug 2 is rostered: in at 12:33 (1h27 early), out at 23:03 (33 min late).
+  const sun = S('sun', 8, 2, 12, 33, 23, 3);
+  let r = E.timeCardRows([sun], tcfg, from, to)[0];
+  ok('a rostered day is marked as such', r.rostered === true);
+  near('1.45 h before the shift', r.before, 1.45);
+  near('0.55 h after it',         r.after, 0.55);
+  near('2.00 h to claim',         r.extra, 2.00);
+
+  // Fri Aug 7 is NOT rostered: clocked 8:30 with a half-hour lunch = 8.00 paid, all of it.
+  const fri = S('fri', 8, 7, 9, 0, 17, 30);
+  r = E.timeCardRows([fri], tcfg, from, to)[0];
+  ok('an unrostered day is marked', r.rostered === false);
+  near('the whole paid day counts — 8.00', r.extra, 8.00);
+  near('which is the paid hours, lunch already out', r.paid, 8.00);
+  ok('and it is not split into before and after', r.before === 0 && r.after === 0);
+
+  // Saturday behaves the same way.
+  const sat = E.timeCardRows([S('sat', 8, 8, 9, 30, 18, 0)], tcfg, from, to)[0];
+  near('Saturday is a clean 8.00 too', sat.extra, 8.00);
+  ok('and is flagged unrostered', sat.rostered === false);
+
+  // A rostered day worked exactly to schedule claims nothing.
+  const onTime = E.timeCardRows([S('ot', 8, 3, 14, 0, 22, 30)], tcfg, from, to)[0];
+  near('on-time day claims nothing', onTime.extra, 0);
+  near('but its paid hours are still reported', onTime.paid, 8.00);
+
+  // Only early.
+  const early = E.timeCardRows([S('e', 8, 4, 12, 0, 22, 30)], tcfg, from, to)[0];
+  near('two hours early', early.before, 2.00);
+  near('nothing late',    early.after, 0);
+  // Only late.
+  const late = E.timeCardRows([S('l', 8, 5, 14, 0, 24, 1)], tcfg, from, to)[0];
+  near('nothing early', late.before, 0);
+  near('1.52 h late',   late.after, 1.52);
+
+  // The whole period, the way it gets filled in.
+  const week = [sun, S('mon', 8, 3, 14, 0, 24, 15), S('tue', 8, 4, 14, 0, 24, 1),
+                S('wed', 8, 5, 12, 31, 24, 1), S('thu', 8, 6, 12, 32, 23, 55), fri, sat];
+  const rows = E.timeCardRows(week, tcfg, from, to);
+  ok('every day is listed', rows.length === 7, rows.length);
+  ok('in date order', rows.every((x, i) => i === 0 || x.start >= rows[i - 1].start));
+  ok('five rostered, two not', rows.filter(x => x.rostered).length === 5 &&
+                               rows.filter(x => !x.rostered).length === 2);
+  const t = E.timeCardTotals(rows);
+  // rostered: Sun 1.45+0.55, Mon 0+1.75, Tue 0+1.52, Wed 1.48+1.52, Thu 1.47+1.42
+  near('early time totals 4.40', t.before, 4.40);
+  near('late time totals 6.76',  t.after, 6.76);
+  near('unrostered days total 16.00', t.whole, 16.00);
+  near('and the claim is 27.16', t.extra, 27.16);
+  ok('the day count is right', t.days === 7);
+
+  // Rounding is per entry, the way a slip adds them, not on the exact total.
+  const two = [S('a', 8, 3, 13, 13, 22, 30), S('b', 8, 4, 13, 13, 22, 30)];   // 47 min early twice
+  const tr = E.timeCardRows(two, tcfg, from, to);
+  near('each 47-minute entry rounds to 0.78', tr[0].before, 0.78);
+  near('and two of them make 1.56, not 1.57', E.timeCardTotals(tr).before, 1.56);
+
+  // Windows and edges.
+  ok('a shift outside the window is left out',
+     E.timeCardRows([S('x', 9, 1, 14, 0, 22, 0)], tcfg, from, to).length === 0);
+  ok('a zero-length shift is ignored',
+     E.timeCardRows([S('z', 8, 3, 14, 0, 14, 0)], tcfg, from, to).length === 0);
+  ok('with no schedule set, a rostered day claims nothing rather than guessing',
+     E.timeCardRows([sun], { ...tcfg, schedStart: '', schedEnd: '' }, from, to)[0].extra === 0);
+  ok('but an unrostered day still claims its whole paid day',
+     E.timeCardRows([fri], { ...tcfg, schedStart: '', schedEnd: '' }, from, to)[0].extra === 8);
+  ok('with every day rostered, nothing is a whole-day claim',
+     E.timeCardTotals(E.timeCardRows(week, { ...tcfg, workDays: [1,1,1,1,1,1,1].map(Boolean) },
+                                     from, to)).whole === 0);
 }
 
 /* ------------------------------------------------------------------ */

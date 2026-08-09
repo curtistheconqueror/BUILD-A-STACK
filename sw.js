@@ -7,7 +7,7 @@
    with "a problem repeatedly occurred").
 
    Static assets (icons, manifest) stay cache-first; they effectively never change. */
-const CACHE = 'pay-clock-v20';
+const CACHE = 'pay-clock-v21';
 const ASSETS = ['./', './index.html', './manifest.webmanifest',
                 './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
 

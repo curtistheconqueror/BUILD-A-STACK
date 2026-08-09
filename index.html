@@ -325,6 +325,26 @@
     margin-left:7px;white-space:nowrap}
   .paidtag.yes{color:var(--cal-fill);border:1px solid var(--cal-fill)}
   .paidtag.no{color:var(--acc);border:1px solid var(--acc)}
+  /* the decimal time card */
+  .tcrow{display:grid;grid-template-columns:1fr auto 58px 58px 58px;gap:8px;align-items:center;
+    padding:8px 0;border-top:1px solid var(--border);font-size:13px}
+  .tcrow.head{border-top:0;padding-top:0;color:var(--muted);font-size:10.4px;letter-spacing:1.3px;
+    text-transform:uppercase;font-weight:800}
+  .tcrow .d{font-weight:700;color:var(--ink)}
+  .tcrow .t{color:var(--muted);font-size:12.2px;white-space:nowrap}
+  .tcrow b,.tcrow .n{text-align:right;font-variant-numeric:tabular-nums}
+  .tcrow .b{color:var(--acc)}
+  .tcrow .a{color:var(--warn)}
+  .tcrow .x{color:var(--cal-fill);font-weight:800}
+  .tcrow.head b{color:var(--muted);font-weight:800}
+  .tcrow.un{background:rgba(255,180,84,.06)}
+  .tcrow .whole{color:var(--warn);font-size:10.2px;letter-spacing:.8px;font-weight:800}
+  .tcsum{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
+  @media(max-width:560px){
+    .tcrow{grid-template-columns:1fr 52px 52px 52px;gap:5px;font-size:12.4px}
+    .tcrow .t{grid-column:1/-1;padding-left:1px}
+    .tcrow .b,.tcrow .a,.tcrow .x,.tcrow.head b{font-size:12.4px}
+  }
   /* the floater and sick-day balances */
   .bank{border-top:1px solid var(--border);padding:13px 0}
   .bank:first-child{border-top:0;padding-top:0}
@@ -788,6 +808,18 @@
       </div>
       <div id="pastList" style="margin-top:11px"></div>
       <div class="note hide" id="pastNote" style="margin-top:9px"></div>
+    </div>
+
+    <!-- The per-day decimal breakdown for a closed period, for filling in an OT slip
+         from shifts you can no longer remember. -->
+    <button class="charthead" id="tcBtn" aria-expanded="false" aria-controls="tcBody">
+      <span>⏱ Decimal time card<span class="pastsum" id="tcSum"></span></span><span class="chev">▾</span>
+    </button>
+    <div class="hide" id="tcBody">
+      <div class="f" style="margin-top:11px"><label for="tcPick">Pay period</label>
+        <select id="tcPick"></select></div>
+      <div class="note" id="tcSched" style="margin-top:9px"></div>
+      <div id="tcList" style="margin-top:11px"></div>
     </div>
     </div>
   </section>
@@ -1988,6 +2020,54 @@ function periodHistory(parts, cfg, nowMs, limit){
   return out;
 }
 
+/* ---- the decimal time card ----
+   What an overtime slip needs, day by day, for a period that has already closed. On a
+   day you are rostered for, the claim is the time either side of your scheduled shift.
+   On a day you are not rostered for there is no shift to be either side of, so the whole
+   paid day is the claim — a Saturday clocked 8:30 with a half-hour lunch is 8.00, not
+   nothing. Every figure is rounded on its own by chartHours before anything is added,
+   which is how the slip adds them. */
+function timeCardRows(sessions, cfg, fromMs, toMs){
+  var ss = hhmmToMin(cfg.schedStart), se = hhmmToMin(cfg.schedEnd);
+  var rows = [];
+  (sessions || []).filter(function(s){
+    return s.end > s.start && s.start < toMs && s.end > fromMs;
+  }).slice().sort(function(a, b){ return a.start - b.start; }).forEach(function(s){
+    var day = +midnight(s.start);
+    var paidH = 0;
+    paidSpans(s, cfg).forEach(function(sp){ paidH += (sp.end - sp.start) / HOUR_MS; });
+    var paid = chartHours(paidH);
+    var rostered = isWorkDay(cfg, new Date(day).getDay());
+    var before = 0, after = 0;
+    if (rostered && ss != null && se != null){
+      var x = extraTime(s.start, s.end, ss, se);
+      before = chartHours(x.before);
+      after  = chartHours(x.after);
+    }
+    /* Added, not re-rounded. before and after have already been through chartHours, so
+       running the sum through it again re-quantizes to whole minutes and can move the
+       figure by a cent — 1.47 + 1.42 came back 2.88 instead of 2.89. Rounding happens
+       once, per entry, which is how the slip does it. */
+    rows.push({ id: s.id, dayMs: day, start: s.start, end: s.end, paid: paid,
+                rostered: rostered, before: before, after: after,
+                extra: rostered ? cents(before + after) : paid });
+  });
+  return rows;
+}
+/* Two decimal places on a sum of two-decimal figures — floating point only, no requantising. */
+function cents(x){ return Math.round(x * 100) / 100; }
+function timeCardTotals(rows){
+  var t = { paid: 0, before: 0, after: 0, whole: 0, extra: 0, days: rows.length };
+  rows.forEach(function(r){
+    t.paid += r.paid; t.extra += r.extra;
+    if (r.rostered){ t.before += r.before; t.after += r.after; }
+    else t.whole += r.paid;
+  });
+  t.paid = cents(t.paid); t.before = cents(t.before); t.after = cents(t.after);
+  t.whole = cents(t.whole); t.extra = cents(t.extra);
+  return t;
+}
+
 /* ==ENGINE-END== */
 
 /* ============================ state ============================ */
@@ -2693,6 +2773,7 @@ function render(){
   renderYtd(ledger, now);
   renderLog(ledger, period, active, now);
   renderPast(ledger, now);
+  renderTimeCard(ledger, now);
   renderExtra(period, active, now);
   renderColSums(ledger, period, now, active, netOn);
   // Synced to the real clock, so the banked figure has to keep up with it. Safe in the
@@ -2982,6 +3063,79 @@ function renderPast(ledger, now){
   if (view === 'net') el('pastNote').innerHTML = netBasisNote(nc);
 }
 function pastView(){ return uiOpen().pastView === 'net' ? 'net' : 'gross'; }
+
+/* The decimal time card for a closed period. A rostered day claims the time either side
+   of your scheduled shift; a day you are not rostered for has no shift to be either side
+   of, so the whole paid day is the claim. Every figure is rounded on its own before
+   anything is added, which is how the slip adds them. */
+function renderTimeCard(ledger, now){
+  var open = !!uiOpen().tc, cfg = state.cfg;
+  el('tcBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+  show('tcBody', open);
+  var list = periodHistory(ledger.parts, cfg, now, 24);
+  el('tcSum').textContent = list.length ? ' — for a closed period' : '';
+  if (!open) return;
+
+  if (!list.length){
+    el('tcPick').innerHTML = '';
+    el('tcSched').textContent = '';
+    el('tcList').innerHTML = '<div class="note">Nothing has closed yet — a period shows here '
+      + 'once it ends.</div>';
+    return;
+  }
+  // Default to the period that just ended, which is the one the card is for.
+  var want = uiOpen().tcPeriod;
+  if (!list.some(function(p){ return p.index === want; })) want = list[0].index;
+  el('tcPick').innerHTML = list.map(function(p){
+    return '<option value="' + p.index + '"' + (p.index === want ? ' selected' : '') + '>'
+      + fdate(p.start) + ' – ' + fdateY(p.lastDay) + '</option>';
+  }).join('');
+
+  var per = list.filter(function(p){ return p.index === want; })[0];
+  var ss = hhmmToMin(cfg.schedStart), se = hhmmToMin(cfg.schedEnd);
+  var day0 = +midnight(Date.now());
+  var offNames = [];
+  for (var i = 0; i < 7; i++) if (!isWorkDay(cfg, i)) offNames.push(DOW[i]);
+  el('tcSched').innerHTML = (ss == null || se == null)
+    ? 'Set your scheduled start and end in the Decimal Time Conversion section and the '
+      + 'early/late columns fill in.'
+    : 'Scheduled ' + ftime(day0 + ss * 60000) + ' – ' + ftime(day0 + se * 60000 + (se <= ss ? DAY_MS : 0))
+      + '. ' + (offNames.length
+          ? '<b style="color:var(--warn)">' + offNames.join(' and ') + '</b> are not scheduled days, '
+            + 'so the whole paid day counts.'
+          : 'Every day is a scheduled day.');
+
+  var rows = timeCardRows(state.sessions, cfg, per.startMs, per.endMs);
+  if (!rows.length){
+    el('tcList').innerHTML = '<div class="note">No shifts clocked in that period.</div>';
+    return;
+  }
+  var t = timeCardTotals(rows);
+  var html = '<div class="tcrow head"><span class="d">Day</span><span class="t">Clocked</span>'
+           + '<b>Early</b><b>Late</b><b>Claim</b></div>';
+  rows.forEach(function(r){
+    html += '<div class="tcrow' + (r.rostered ? '' : ' un') + '">'
+      + '<span class="d">' + fdate(new Date(r.dayMs))
+      + (r.rostered ? '' : ' <span class="whole">WHOLE DAY</span>') + '</span>'
+      + '<span class="t">' + ftime(r.start) + ' – ' + ftime(r.end)
+      + ' &nbsp;·&nbsp; ' + r.paid.toFixed(2) + ' h paid</span>'
+      + '<b class="b">' + (r.rostered ? (r.before >= 0.005 ? r.before.toFixed(2) : '—') : '—') + '</b>'
+      + '<b class="a">' + (r.rostered ? (r.after  >= 0.005 ? r.after.toFixed(2)  : '—') : '—') + '</b>'
+      + '<b class="x">' + (r.extra >= 0.005 ? r.extra.toFixed(2) : '—') + '</b></div>';
+  });
+  html += '<div class="tcsum">'
+       + '<div class="qline"><span>Before your shift</span><b>' + t.before.toFixed(2) + ' h</b></div>'
+       + '<div class="qline"><span>After your shift</span><b>' + t.after.toFixed(2) + ' h</b></div>'
+       + (t.whole > 0.005 ? '<div class="qline"><span>Unscheduled days, whole</span><b>'
+            + t.whole.toFixed(2) + ' h</b></div>' : '')
+       + '<div class="qline tot"><span>Total to claim</span><b>' + t.extra.toFixed(2) + ' h</b></div>'
+       + '<div class="note" style="margin-top:8px">' + t.days + ' day'
+       + (t.days === 1 ? '' : 's') + ' clocked, ' + t.paid.toFixed(2) + ' h paid in total. '
+       + 'Worth ' + money(t.extra * cfg.rate * (cfg.otMultiplier || 1.5)) + ' at the overtime rate. '
+       + 'Booked floaters, sick days and holiday credit are left out — a time card is about punches.'
+       + '</div></div>';
+  el('tcList').innerHTML = html;
+}
 
 function renderLog(ledger, period, active, now){
   var rows = state.sessions.filter(function(s){ return s.end > period.startMs && s.start < period.endMs; });
@@ -4291,6 +4445,13 @@ document.getElementById('cHolList').addEventListener('click', function(e){
 document.getElementById('pastBtn').addEventListener('click', function(e){
   e.stopPropagation();                                // the section header is not what was tapped
   var u = uiOpen(); u.past = !u.past; save(); lastMoney = ''; render();
+});
+document.getElementById('tcBtn').addEventListener('click', function(e){
+  e.stopPropagation();
+  var u = uiOpen(); u.tc = !u.tc; save(); lastMoney = ''; render();
+});
+document.getElementById('tcPick').addEventListener('change', function(e){
+  uiOpen().tcPeriod = parseInt(e.target.value, 10); save(); lastMoney = ''; render();
 });
 document.getElementById('pastView').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
