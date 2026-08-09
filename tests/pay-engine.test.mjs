@@ -32,7 +32,8 @@ const E = new Function(m[1] + `
            workedOn, holidayEligibility, holidayYears, holidayCredits, holidayOutlook,
            BANK_DEFAULTS, bankById, daysOffUsed, bankLeft, bankSlots, dayOffName,
            bankCredits, daysOffOutlook, periodHistory, timeCardRows, timeCardTotals,
-           extraTime, chartHours, otThresholdOf, otBucketKey, sumSessionRange };
+           extraTime, chartHours, otThresholdOf, otBucketKey, sumSessionRange,
+           payMonths, currentPayMonth };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -844,6 +845,97 @@ group('Robustness');
                                   E.periodInfo(at(11, 15), scfg).endMs);
   ok('a shift inside one period is not clipped', whole.clipped === false);
   near('and reports all of its hours', whole.hours, 10.5);
+}
+
+
+/* ---------------- what you are paid in a month ---------------- */
+{
+  /* Curtis's real shape: 14-day periods anchored Sun Jul 26 2026, payday 13 days after
+     the period ends.
+       period 0  Jul 26 – Aug  8  -> paid Fri Aug 21   (August)
+       period 1  Aug  9 – Aug 22  -> paid Fri Sep  4   (September)
+       period 2  Aug 23 – Sep  5  -> paid Fri Sep 18   (September)
+       period 3  Sep  6 – Sep 19  -> paid Fri Oct  2   (October)
+     Two periods land in September, which is the case a naive calendar-month total gets
+     wrong. */
+  const mcfg = { ...E.DEFAULTS, rate: 38, periodAnchor: '2026-07-26', periodLengthDays: 14,
+                 payDateOffsetDays: 13, lunchMins: 0, holidays: [], banks: [], daysOff: [] };
+  const d = (mo, day, from, to) => ({ id: `${mo}-${day}`, start: +new Date(2026, mo - 1, day, from),
+                                                          end: +new Date(2026, mo - 1, day, to) });
+  const work = [
+    d(7, 27, 9, 17), d(7, 28, 9, 17),                    // 16 h in period 0
+    d(8, 10, 9, 17), d(8, 11, 9, 17),                    // 16 h in period 1
+    d(8, 24, 9, 17)                                      // 8 h in period 2
+  ];
+  const parts = E.buildLedger(work, mcfg).parts;
+  const now = +new Date(2026, 7, 25, 12);                // Tue Aug 25, inside period 2
+  const months = E.payMonths(parts, mcfg, now, 0);
+
+  ok('two pay months so far', months.length === 2, months.map(m => m.ym));
+  ok('newest first', months[0].ym === '2026-09' && months[1].ym === '2026-08',
+     months.map(m => m.ym));
+
+  const aug = months.find(m => m.ym === '2026-08');
+  const sep = months.find(m => m.ym === '2026-09');
+
+  // August's money is period 0 only — worked mostly in July, paid Aug 21.
+  near('August is paid 16 h', aug.hours, 16);
+  near('worth $608.00',       aug.gross, 608);
+  ok('from one period',       aug.periods.length === 1, aug.periods.length);
+  ok('which was worked in July', aug.periods[0].start.getMonth() === 6);
+  ok('August is not the live month', aug.live === false);
+
+  // September gets BOTH periods that pay in it.
+  ok('September collects two periods', sep.periods.length === 2, sep.periods.length);
+  near('24 h between them', sep.hours, 24);
+  near('worth $912.00',     sep.gross, 912);
+  ok('and it is the live one', sep.live === true);
+
+  ok('currentPayMonth points at September',
+     E.currentPayMonth(parts, mcfg, now).ym === '2026-09');
+
+  // Paid vs still owed.
+  ok('August has been paid by Aug 25', aug.allPaid === true);
+  ok('September has not', sep.allPaid === false);
+  const early = E.payMonths(parts, mcfg, +new Date(2026, 7, 12, 12), 0);
+  ok('and on Aug 12, August is not paid yet',
+     early.find(m => m.ym === '2026-08').allPaid === false);
+
+  // A month total is NOT the calendar month of the work.
+  const augWork = E.sumRange(parts, +new Date(2026, 7, 1), +new Date(2026, 8, 1));
+  near('work actually done in August is 24 h', augWork.hours, 24);
+  ok('which is not what August pays', Math.abs(augWork.hours - aug.hours) > 0.001,
+     `${augWork.hours} worked vs ${aug.hours} paid`);
+
+  // The live month exists even before any hours are in it.
+  const fresh = E.payMonths(E.buildLedger([], mcfg).parts, mcfg, now, 0);
+  ok('an empty ledger still names the month being earned', fresh.length === 1 && fresh[0].live,
+     JSON.stringify(fresh.map(m => m.ym)));
+  near('at zero', fresh[0].gross, 0);
+
+  // Overtime is carried through.
+  const heavy = [];
+  for (let x = 26; x <= 31; x++) heavy.push(d(7, x, 8, 20));    // 6 x 12 h in period 0
+  const hm = E.payMonths(E.buildLedger(heavy, mcfg).parts, mcfg, now, 0);
+  const hAug = hm.find(m => m.ym === '2026-08');
+  near('72 h paid in August', hAug.hours, 72);
+  ok('with overtime counted', hAug.otHours > 0, hAug.otHours);
+  near('and priced with it', hAug.gross, 40 * 38 + 32 * 57);
+
+  // Holidays and booked days land in the month their period pays in.
+  const withOff = { ...mcfg, banks: E.BANK_DEFAULTS(),
+                    daysOff: [{ id: 'f', bank: 'float', slot: 0, date: '2026-08-12' }] };
+  const om = E.payMonths(E.buildLedger(work, withOff).parts, withOff, now, 0);
+  near('a floater on Aug 12 pays in September', om.find(m => m.ym === '2026-09').hours, 32);
+  near('and August is unchanged', om.find(m => m.ym === '2026-08').hours, 16);
+
+  // Limits and edges.
+  ok('the limit is respected', E.payMonths(parts, mcfg, now, 1).length === 1);
+  ok('an empty month with no live flag is dropped',
+     E.payMonths(parts, mcfg, now, 0).every(m => m.gross > 0 || m.live));
+  ok('the months add back to the ledger',
+     Math.abs(months.reduce((s, m) => s + m.gross, 0)
+              - parts.reduce((s, p) => s + p.gross, 0)) < 1e-6);
 }
 
 /* ------------------------------------------------------------------ */

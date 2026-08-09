@@ -338,6 +338,24 @@
   .paidtag.no{color:var(--acc);border:1px solid var(--acc)}
   /* a shift that belongs to two pay periods, showing only this period's half */
   .clipped{color:var(--acc);font-size:10.2px;font-weight:800;letter-spacing:.4px}
+  /* the live pay-month counter under the period total */
+  .monmoney{font-size:19px;font-weight:800;color:var(--warn);text-align:center;
+    font-variant-numeric:tabular-nums;line-height:1.15;margin-top:9px}
+  .monmoneyLbl{text-align:center;color:var(--muted);font-size:11.4px;letter-spacing:.4px;
+    margin-top:2px}
+  /* the pay-month list */
+  .monrow{display:grid;grid-template-columns:1fr auto;gap:3px 12px;padding:11px 0;
+    border-top:1px solid var(--border)}
+  .monrow:first-child{border-top:0}
+  .monrow .m{font-weight:700;font-size:14px;color:var(--ink)}
+  .monrow .amt{font-weight:800;font-size:15.5px;text-align:right;font-variant-numeric:tabular-nums;
+    color:var(--cal-fill)}
+  .monrow.live .amt{color:var(--warn)}
+  .monrow .sub,.monrow .subr{color:var(--muted);font-size:12.2px;font-variant-numeric:tabular-nums}
+  .monrow .subr{text-align:right}
+  .monrow .ot{color:var(--warn)}
+  .livetag{font-size:9.5px;letter-spacing:.9px;font-weight:800;padding:1px 5px;border-radius:5px;
+    margin-left:7px;color:var(--warn);border:1px solid var(--warn);white-space:nowrap}
   /* the what-if at the clock */
   .wifrow{display:flex;align-items:flex-end;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:12px}
   .wifrow .f{flex:0 1 auto}
@@ -713,6 +731,10 @@
     <div class="liveline" id="liveline"></div>
     <div class="permoney" id="permoney">$0.00</div>
     <div class="permoneyLbl" id="permoneyLbl">pay period total</div>
+    <!-- What this period will actually pay you, in the month it lands in. Climbs with the
+         clock, because the money it is counting has not been paid yet. -->
+    <div class="monmoney hide" id="monmoney">$0.00</div>
+    <div class="monmoneyLbl hide" id="monmoneyLbl"></div>
     <div class="timer" id="timer">00:00:00</div>
     <div class="timerlbl">on the clock</div>
 
@@ -881,6 +903,16 @@
         <div class="det" id="wDet">0.00 h</div></div>
       <div class="tile"><div class="k">Period to date</div><div class="big" id="pGross">$0.00</div>
         <div class="det" id="pDet">0.00 h</div></div>
+    </div>
+    <!-- What each month pays, grouped by payday rather than by when the work happened. -->
+    <button class="charthead" id="monBtn" aria-expanded="false" aria-controls="monBody">
+      <span>📅 By pay month<span class="pastsum" id="monSum"></span></span><span class="chev">▾</span>
+    </button>
+    <div class="hide" id="monBody">
+      <div class="note" style="margin-top:11px">A pay period counts in the month its payday
+      falls in — that is when the money arrives. A period worked in July but paid in August
+      is August's income.</div>
+      <div id="monList" style="margin-top:11px"></div>
     </div>
     <div class="otbar">
       <div class="lbl"><span id="otLbl">Toward overtime</span><span id="otNum"></span></div>
@@ -2233,6 +2265,52 @@ function timeCardTotals(rows){
   return t;
 }
 
+/* ---- pay months ----
+   What you are paid in a month, not what you worked in it. A pay period's earnings belong
+   to the month its payday falls in, which is how the money actually arrives: a period
+   ending Aug 8 and paid Aug 21 is August's income even though half of it was worked in
+   July. Periods are grouped by payday month, and the month the current period pays into is
+   marked live because it is still climbing. */
+function payMonths(parts, cfg, nowMs, limit){
+  var now = nowMs == null ? Date.now() : nowMs;
+  var curIdx = periodInfo(now, cfg).index;
+  var earliest = Infinity;
+  for (var i = 0; i < (parts || []).length; i++) if (parts[i].start < earliest) earliest = parts[i].start;
+  var firstIdx = earliest === Infinity ? curIdx : periodInfo(earliest, cfg).index;
+
+  var byMonth = {}, order = [];
+  for (var k = firstIdx; k <= curIdx; k++){
+    var start = addDays(ymd(cfg.periodAnchor), k * cfg.periodLengthDays);
+    var p = periodInfo(+start, cfg);
+    var t = sumRange(parts, p.startMs, p.endMs);
+    var ym = p.payDate.getFullYear() + '-' + String(p.payDate.getMonth() + 1).padStart(2, '0');
+    if (!byMonth[ym]){
+      byMonth[ym] = { ym: ym, year: p.payDate.getFullYear(), month: p.payDate.getMonth(),
+                      hours: 0, otHours: 0, gross: 0, periods: [], live: false, allPaid: true };
+      order.push(ym);
+    }
+    var m = byMonth[ym];
+    m.hours += t.hours; m.otHours += t.otHours; m.gross += t.gross;
+    var paid = +midnight(now) >= +midnight(+p.payDate);
+    if (!paid) m.allPaid = false;
+    if (k === curIdx) m.live = true;
+    m.periods.push({ index: k, start: p.start, lastDay: p.lastDay, payDate: p.payDate,
+                     hours: t.hours, otHours: t.otHours, gross: t.gross, paid: paid });
+  }
+  var out = order.map(function(ym){ return byMonth[ym]; })
+                 .filter(function(m){ return m.gross > 0.004 || m.live; })
+                 .sort(function(a, b){ return a.ym < b.ym ? 1 : -1; });   // newest first
+  return limit ? out.slice(0, limit) : out;
+}
+
+/* The month the current pay period pays into — the one a live counter should be counting
+   toward. Null before anything is configured enough to work out a payday. */
+function currentPayMonth(parts, cfg, nowMs){
+  var list = payMonths(parts, cfg, nowMs, 0);
+  for (var i = 0; i < list.length; i++) if (list[i].live) return list[i];
+  return null;
+}
+
 /* ==ENGINE-END== */
 
 /* ============================ state ============================ */
@@ -2978,6 +3056,7 @@ function render(){
   renderProgress(ledger, period, now);
   renderYtd(ledger, now);
   renderLog(ledger, period, active, now);
+  renderPayMonths(ledger, now);
   renderPast(ledger, now);
   renderTimeCard(ledger, now);
   renderWhatIf();
@@ -3272,6 +3351,45 @@ function renderPast(ledger, now){
   if (view === 'net') el('pastNote').innerHTML = netBasisNote(nc);
 }
 function pastView(){ return uiOpen().pastView === 'net' ? 'net' : 'gross'; }
+
+/* What each month pays, by payday rather than by when the work happened. The live one is
+   the month the current period lands in, so it climbs with the clock — the money it counts
+   has not arrived yet. */
+function renderPayMonths(ledger, now){
+  var cfg = state.cfg;
+  var cur = currentPayMonth(ledger.parts, cfg, now);
+
+  // The counter under the pay period total.
+  show('monmoney', !!cur);
+  show('monmoneyLbl', !!cur);
+  if (cur){
+    var mm = el('monmoney'), want = money(cur.gross);
+    if (mm.textContent !== want) mm.textContent = want;
+    el('monmoneyLbl').textContent = MONTHS_FULL[cur.month] + ' ' + cur.year + ' pay month'
+      + (cur.periods.length > 1 ? ' · ' + cur.periods.length + ' periods' : '');
+  }
+
+  var open = !!uiOpen().mon;
+  var list = payMonths(ledger.parts, cfg, now, 24);
+  el('monSum').textContent = cur ? ' — ' + MONTHS_FULL[cur.month] + ' ' + money(cur.gross) : '';
+  el('monBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+  show('monBody', open);
+  if (!open) return;
+
+  el('monList').innerHTML = list.length ? list.map(function(m){
+    var payDays = m.periods.map(function(p){ return fdate(p.payDate); }).join(' and ');
+    return '<div class="monrow' + (m.live ? ' live' : '') + '">'
+      + '<div class="m">' + MONTHS_FULL[m.month] + ' ' + m.year
+      + (m.live ? '<span class="livetag">EARNING</span>'
+          : m.allPaid ? '' : '<span class="livetag">DUE</span>') + '</div>'
+      + '<div class="amt">' + money(m.gross) + '</div>'
+      + '<div class="sub">' + m.hours.toFixed(2) + ' h'
+      + (m.otHours > 0.004 ? ' · <span class="ot">' + m.otHours.toFixed(2) + ' h OT</span>' : '')
+      + '</div>'
+      + '<div class="subr">' + (m.periods.length === 1 ? 'paid ' : 'paydays ') + payDays + '</div>'
+      + '</div>';
+  }).join('') : '<div class="note">Nothing yet — this fills in as pay periods close.</div>';
+}
 
 /* ---- the sum you do in your head at the clock ----
    In at this, out at that: what does that come to in decimal hours. The decimal figures
@@ -4837,6 +4955,10 @@ document.getElementById('wPay').onchange = function(e){
 document.getElementById('wPayWrap').addEventListener('click', function(e){ e.stopPropagation(); });
 document.getElementById('wifBody').addEventListener('click', function(e){ e.stopPropagation(); });
 
+document.getElementById('monBtn').addEventListener('click', function(e){
+  e.stopPropagation();                                // the section header is not what was tapped
+  var u = uiOpen(); u.mon = !u.mon; save(); lastMoney = ''; render();
+});
 document.getElementById('tcBtn').addEventListener('click', function(e){
   e.stopPropagation();
   var u = uiOpen(); u.tc = !u.tc; save(); lastMoney = ''; render();
