@@ -766,6 +766,12 @@
       <span id="autoTxt"></span>
       <button class="mini" id="autoUndo">↩ Undo — I wasn't working</button>
     </div>
+    <!-- Shown only once the calendar has moved past the year the tax tables are for, and
+         only if net pay is switched on — a wrong take-home is worse than no take-home. -->
+    <div class="confirm hide" id="taxStale" style="border-color:var(--warn);background:rgba(255,180,84,.10)">
+      <span id="taxStaleTxt"></span>
+      <button class="mini" id="taxStaleGo">Open deductions</button>
+    </div>
 
     <div class="planrow">
       <label class="swrap"><input type="checkbox" id="planOn"> Auto-stop after</label>
@@ -797,8 +803,9 @@
   <section class="card hide" id="netsetup">
     <h2>Your deductions</h2>
     <p class="slead">Answer once and the clock shows what you actually keep. Copy the numbers straight
-    off a recent paystub — everything stays on this device. Tax lines are computed for 2026; if a
-    figure differs from your stub, type the stub's dollar amount in its override box and that wins.</p>
+    off a recent paystub — everything stays on this device. If a figure differs from your stub,
+    type the stub's dollar amount in its override box and that wins.</p>
+    <div class="note" id="taxYearNote" style="margin-bottom:14px"></div>
 
     <div class="ngroup"><b>Federal income tax</b>
       <div class="cfgrid">
@@ -1729,6 +1736,11 @@ function quantize(ms, unit){
    annualized percentage method with the 2026 brackets and standard deduction, which
    tracks payroll processors closely but not always to the cent. Every line can be
    overridden with the dollar amount from a real paystub. */
+/* The year these figures are for. Brackets, the Social Security wage base and the
+   standard deduction all move every January, so a stale table quietly produces a wrong
+   take-home rather than an obviously missing one. Everything that shows a net figure
+   states this year, and says so plainly once the calendar has moved past it. */
+var TAX_YEAR = 2026;
 var TAX2026 = {
   ssRate: 0.062, ssWageBase: 184500, medicareRate: 0.0145,
   ilRate: 0.0495,
@@ -2858,6 +2870,12 @@ function render(){
 
   /* The notice stays up until it is dismissed or the shift ends, so a clock that started
      itself is never something you have to go looking for an explanation of. */
+  /* The tax tables are only worth warning about if net pay is actually being shown. */
+  var stale = taxYearsStale(now);
+  var netOn = netCfg().enabled || netCfg().configured;
+  show('taxStale', stale > 0 && netOn);
+  if (stale > 0 && netOn) el('taxStaleTxt').innerHTML = taxYearNote(now);
+
   show('autoConfirm', !!autoNotice && !!active);
   if (autoNotice && active) document.getElementById('autoTxt').textContent = autoNotice;
   if (!active) autoNotice = '';
@@ -3618,6 +3636,19 @@ function calcMult(id, cfg){
 /* Says plainly what the net figure is built on, so an untouched estimate is never
    mistaken for a personalised one. */
 var FILING_LABEL = { single: 'single', married: 'married filing jointly', hoh: 'head of household' };
+/* How far out of date the tax tables are, in years. Zero while they are current. */
+function taxYearsStale(nowMs){
+  return Math.max(0, new Date(nowMs == null ? Date.now() : nowMs).getFullYear() - TAX_YEAR);
+}
+function taxYearNote(nowMs){
+  var n = taxYearsStale(nowMs);
+  if (!n) return 'Tax figures are ' + TAX_YEAR + ' rates.';
+  return '<b style="color:var(--warn)">Tax figures are still ' + TAX_YEAR + ' rates — '
+    + n + ' year' + (n === 1 ? '' : 's') + ' out of date.</b> Federal brackets and the Social '
+    + 'Security wage base change every January, so take-home here will be off. Type the real '
+    + 'figures from a recent paystub into the override boxes and those win.';
+}
+
 function netBasisNote(nc){
   var st = STATE_TAX[nc.state || 'IL'];
   var pct = nc.statePct != null ? nc.statePct : 4.95;
@@ -3627,11 +3658,12 @@ function netBasisNote(nc){
                  : (st ? st[0] : 'state') + (pct > 0 ? ' at ' + pct + '%' : ' (no income tax)') ];
   if (nc.ficaOn !== false) bits.push('FICA');
   var fixed = (nc.items || []).reduce(function(s, it){ return s + (parseFloat(it.amount) || 0); }, 0);
-  return nc.configured
+  var base = nc.configured
       ? 'Using your saved deductions — ' + bits.join(', ')
         + (fixed > 0 ? ', ' + money(fixed) + ' a check in other deductions' : ', no other deductions')
       : 'Estimate only — standard withholding for ' + bits.join(', ')
         + '. Nothing personal entered yet.';
+  return base + ' ' + taxYearNote();
 }
 
 function calcState(){
@@ -3765,7 +3797,7 @@ function renderCalc(){
           + (bd.fixedApplied > 0.004
               ? '<div class="qline"><span>Your other deductions</span><b style="color:var(--bad)">−' + money(bd.fixedApplied) + '</b></div>' : '')
           + '<div class="qline tot"><span>Take-home</span><b>' + money(bd.net) + '</b></div>';
-    el('qNetBasis').textContent = netBasisNote(nc);
+    el('qNetBasis').innerHTML = netBasisNote(nc);
     el('qEditDed').textContent = nc.configured ? 'Edit my deductions' : 'Enter my real deductions';
   }
   show('qNetNote', c.payMode === 'net');
@@ -4195,7 +4227,9 @@ function syncNetForm(){
 /* The setup panel lives near the top of the page, so opening it from something far
    below (the calculator) would otherwise change nothing you can see. Bring it to you. */
 function openNetSetup(){
-  syncNetForm(); show('netsetup', true);
+  syncNetForm();
+  el('taxYearNote').innerHTML = taxYearNote();
+  show('netsetup', true);
   try { el('netsetup').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   catch(e){ el('netsetup').scrollIntoView(); }
 }
@@ -4690,6 +4724,7 @@ document.getElementById('autoDays').addEventListener('click', function(e){
   save(); syncControls(); render();
 });
 document.getElementById('autoUndo').onclick = function(){ undoAutoIn(); };
+document.getElementById('taxStaleGo').onclick = function(){ openNetSetup(); };
 
 /* ---- the roster and the holiday list ---- */
 document.getElementById('cWorkDays').addEventListener('click', function(e){
