@@ -32,7 +32,7 @@ const E = new Function(m[1] + `
            workedOn, holidayEligibility, holidayYears, holidayCredits, holidayOutlook,
            BANK_DEFAULTS, bankById, daysOffUsed, bankLeft, bankSlots, dayOffName,
            bankCredits, daysOffOutlook, periodHistory, timeCardRows, timeCardTotals,
-           extraTime, chartHours };
+           extraTime, chartHours, otThresholdOf, otBucketKey, sumSessionRange };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -740,6 +740,110 @@ group('Robustness');
   ok('with every day rostered, nothing is a whole-day claim',
      E.timeCardTotals(E.timeCardRows(week, { ...tcfg, workDays: [1,1,1,1,1,1,1].map(Boolean) },
                                      from, to)).whole === 0);
+}
+
+
+/* ---------------- overtime counted per shift, not per calendar day ---------------- */
+{
+  /* The distinction that matters to anyone on nights: a shift running 2 PM to 12:30 AM is
+     one shift, and the eight-hour allowance should not start again at midnight. */
+  const scfg = { ...E.DEFAULTS, rate: 38, otMode: 'shift', shiftThreshold: 8,
+                 periodAnchor: '2026-08-09', lunchMins: 0,
+                 holidays: [], banks: [], daysOff: [],
+                 workDays: [true, true, true, true, true, false, false] };
+  const dcfg = { ...scfg, otMode: 'daily', dailyThreshold: 8 };
+  const at = (d, h, mi = 0) => +new Date(2026, 7, d, h, mi);
+  const tot = (sessions, c) => {
+    const l = E.buildLedger(sessions, c);
+    return l.parts.reduce((a, p) => ({ h: a.h + p.hours, ot: a.ot + p.otHours, g: a.g + p.gross }),
+                          { h: 0, ot: 0, g: 0 });
+  };
+
+  // 2:00 PM – 12:30 AM = 10.5 h. Per shift: 8 straight, 2.5 over.
+  const night = [{ id: 'n', start: at(11, 14), end: at(12, 0, 30) }];
+  near('a shift crossing midnight is 10.5 h', tot(night, scfg).h, 10.5);
+  near('per shift: 2.5 h of overtime',        tot(night, scfg).ot, 2.5);
+  near('paid 8x38 + 2.5x57 = $446.50',        tot(night, scfg).g, 8 * 38 + 2.5 * 57);
+  // The calendar rule gives less, because the last half hour starts a fresh allowance.
+  near('the daily rule would say 2.0 h',      tot(night, dcfg).ot, 2.0);
+  ok('so the shift rule is worth more here', tot(night, scfg).g > tot(night, dcfg).g,
+     `${tot(night, scfg).g} vs ${tot(night, dcfg).g}`);
+
+  // A longer one: 12:15 PM – 12:30 AM = 12.25 h -> 4.25 h over per shift, 3.75 daily.
+  const longNight = [{ id: 'L', start: at(13, 12, 15), end: at(14, 0, 30) }];
+  near('12.25 h shift gives 4.25 h per shift', tot(longNight, scfg).ot, 4.25);
+  near('and 3.75 h by the calendar',           tot(longNight, dcfg).ot, 3.75);
+
+  // Midnight genuinely does not reset it: a shift starting at 8 PM and running 12 h has
+  // 4 h before midnight and 8 h after, and should still be 4 h over.
+  const deep = [{ id: 'd', start: at(15, 20), end: at(16, 8) }];
+  near('8 PM to 8 AM is 12 h', tot(deep, scfg).h, 12);
+  near('per shift: 4 h over',  tot(deep, scfg).ot, 4);
+  near('the daily rule finds none of it', tot(deep, dcfg).ot, 0);
+
+  // A shift entirely inside one day behaves identically under both rules.
+  const dayShift = [{ id: 'x', start: at(10, 9), end: at(10, 20) }];   // 11 h
+  near('an 11 h day shift is 3 h over per shift', tot(dayShift, scfg).ot, 3);
+  near('and 3 h over by the calendar too',        tot(dayShift, dcfg).ot, 3);
+
+  // Each shift gets its own allowance — two short shifts in a day are not added together.
+  const split = [{ id: 'a', start: at(17, 6), end: at(17, 12) },     // 6 h
+                 { id: 'b', start: at(17, 18), end: at(18, 1) }];    // 7 h, crosses midnight
+  near('13 h across two shifts', tot(split, scfg).h, 13);
+  near('neither passes 8 h on its own, so no overtime', tot(split, scfg).ot, 0);
+  // The same two under the calendar rule: 6 h + 6 h on the 17th is 12 h, so 4 h over.
+  near('the calendar rule adds them and finds 4 h', tot(split, dcfg).ot, 4);
+
+  // The threshold is its own setting, independent of the daily one.
+  near('a 10 h per-shift threshold leaves 0.5 h over',
+       tot(night, { ...scfg, shiftThreshold: 10 }).ot, 0.5);
+  near('and changing the daily one does not touch it',
+       tot(night, { ...scfg, dailyThreshold: 12 }).ot, 2.5);
+  ok('the threshold reads back from the right field',
+     E.otThresholdOf({ ...scfg, shiftThreshold: 9 }) === 9 &&
+     E.otThresholdOf({ ...dcfg, dailyThreshold: 7 }) === 7);
+
+  // An unpaid lunch comes out before the allowance is counted.
+  near('with a half-hour lunch, 10.5 clocked is 10 paid',
+       tot(night, { ...scfg, lunchMins: 30 }).h, 10);
+  near('and 2 h over rather than 2.5',
+       tot(night, { ...scfg, lunchMins: 30 }).ot, 2);
+
+  // Crossing a pay-period boundary: the hours still belong to the periods they fall in,
+  // but the shift's own overtime allowance runs straight through.
+  // Period anchor Sun Aug 9, 14 days -> period ends midnight closing Sat Aug 22.
+  const boundary = [{ id: 'bd', start: at(22, 20), end: at(23, 8) }];   // Sat 8 PM -> Sun 8 AM
+  const bl = E.buildLedger(boundary, scfg);
+  near('12 h in total', bl.parts.reduce((n, p) => n + p.hours, 0), 12);
+  near('4 h of it over, counted across the boundary',
+       bl.parts.reduce((n, p) => n + p.otHours, 0), 4);
+  const p1 = E.periodInfo(at(22, 21), scfg), p2 = E.periodInfo(at(23, 1), scfg);
+  ok('the two halves really are in different periods', p1.index !== p2.index,
+     `${p1.index} vs ${p2.index}`);
+  near('4 h land in the old period', E.sumRange(bl.parts, p1.startMs, p1.endMs).hours, 4);
+  near('and 8 h in the new one',     E.sumRange(bl.parts, p2.startMs, p2.endMs).hours, 8);
+
+  /* A shift belongs to both periods, and each has to be able to ask for just its own half.
+     Without this the shift log summed the whole shift into whichever period was on screen
+     while the period tile beside it summed only that period's share — two figures for the
+     same fortnight, on the same screen. */
+  const oldHalf = E.sumSessionRange(bl.parts, 'bd', p1.startMs, p1.endMs);
+  const newHalf = E.sumSessionRange(bl.parts, 'bd', p2.startMs, p2.endMs);
+  near('the old period\'s share is 4 h', oldHalf.hours, 4);
+  near('the new period\'s share is 8 h', newHalf.hours, 8);
+  ok('both know they are only part of a shift', oldHalf.clipped && newHalf.clipped);
+  near('and the two halves add back to the whole', oldHalf.gross + newHalf.gross,
+       bl.parts.reduce((n, p) => n + p.gross, 0));
+  near('with the overtime landing in the half that earned it', newHalf.otHours, 4);
+  near('and none of it in the other',                          oldHalf.otHours, 0);
+
+  // A shift wholly inside one period is not marked as split.
+  const inside = E.buildLedger([{ id: 'w', start: at(11, 14), end: at(12, 0, 30) }], scfg);
+  const whole = E.sumSessionRange(inside.parts, 'w',
+                                  E.periodInfo(at(11, 15), scfg).startMs,
+                                  E.periodInfo(at(11, 15), scfg).endMs);
+  ok('a shift inside one period is not clipped', whole.clipped === false);
+  near('and reports all of its hours', whole.hours, 10.5);
 }
 
 /* ------------------------------------------------------------------ */

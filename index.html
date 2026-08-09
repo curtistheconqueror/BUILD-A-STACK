@@ -336,6 +336,8 @@
     margin-left:7px;white-space:nowrap}
   .paidtag.yes{color:var(--cal-fill);border:1px solid var(--cal-fill)}
   .paidtag.no{color:var(--acc);border:1px solid var(--acc)}
+  /* a shift that belongs to two pay periods, showing only this period's half */
+  .clipped{color:var(--acc);font-size:10.2px;font-weight:800;letter-spacing:.4px}
   /* the what-if at the clock */
   .wifrow{display:flex;align-items:flex-end;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:12px}
   .wifrow .f{flex:0 1 auto}
@@ -641,6 +643,8 @@
       <div class="schoice" id="sMode">
         <button data-m="weekly" class="on"><b>After 40 hours a week</b><span>Resets every week. What US payroll normally does.</span></button>
         <button data-m="period"><b>After 80 hours a pay period</b><span>One running total across the whole period.</span></button>
+        <button data-m="shift"><b>After 8 hours in a shift</b><span>Counted from when you clock in — a shift running past midnight keeps counting.</span></button>
+        <button data-m="daily"><b>After 8 hours in a day</b><span>Resets at midnight, so a shift crossing it starts again.</span></button>
       </div>
     </div>
 
@@ -1184,7 +1188,8 @@
           <select id="cMode">
             <option value="weekly">Weekly — 40 h, resets each week</option>
             <option value="period">Pay period — 80 h cumulative</option>
-            <option value="daily">Daily — 8 h, resets each day</option>
+            <option value="daily">Daily — 8 h, resets at midnight</option>
+            <option value="shift">Per shift — 8 h from when you clock in</option>
           </select></div>
         <div class="f"><label>Week starts on</label>
           <select id="cWeekStart">
@@ -1195,6 +1200,7 @@
         <div class="f"><label>Weekly OT threshold (h)</label><input type="number" id="cWeekThr" min="0" step="0.5"></div>
         <div class="f"><label>Period OT threshold (h)</label><input type="number" id="cPeriodThr" min="0" step="0.5"></div>
         <div class="f"><label>Daily OT threshold (h)</label><input type="number" id="cDailyThr" min="0" step="0.5"></div>
+        <div class="f"><label>Per-shift OT threshold (h)</label><input type="number" id="cShiftThr" min="0" step="0.5"></div>
         <div class="f"><label>Period start anchor</label><input type="date" id="cAnchor"></div>
         <div class="f"><label>Period length (days)</label><input type="number" id="cLen" min="1" step="1"></div>
         <div class="f"><label>Payday = period end + (days)</label><input type="number" id="cPayOff" min="0" step="1"></div>
@@ -1411,10 +1417,13 @@ function BANK_DEFAULTS(){
 var DEFAULTS = {
   rate: 0,
   otMultiplier: 1.5,
-  otMode: 'weekly',          // 'weekly' 40 h a week | 'period' 80 h a period | 'daily' 8 h a day
+  /* 'weekly' 40 h a week | 'period' 80 h a period | 'daily' 8 h a calendar day
+     | 'shift' 8 h from clock-in, whatever the clock says */
+  otMode: 'weekly',
   weeklyThreshold: 40,
   periodThreshold: 80,
   dailyThreshold: 8,
+  shiftThreshold: 8,         // 'shift' mode: hours from clock-in, midnight does not reset it
   weekStartDay: 0,           // 0 = Sunday
   periodAnchor: '2026-01-04',// any Sunday; setup replaces it with your real period start
   periodLengthDays: 14,
@@ -1491,15 +1500,29 @@ function splitSession(startMs, endMs, cfg){
 }
 
 function otThresholdOf(cfg){
-  return cfg.otMode === 'daily'  ? (cfg.dailyThreshold || 8)
+  return cfg.otMode === 'shift'  ? (cfg.shiftThreshold || 8)
+       : cfg.otMode === 'daily'  ? (cfg.dailyThreshold || 8)
        : cfg.otMode === 'weekly' ? cfg.weeklyThreshold
        : cfg.periodThreshold;
 }
-/* Which bucket an hour fills. Days, weeks and periods all begin at a midnight, and
-   splitSession already chops every shift there, so a part never straddles any of them —
-   which is why a daily rule needs nothing more than a different key. */
-function otBucketKey(part, cfg){
-  return cfg.otMode === 'daily'  ? 'd' + part.dayMs
+/* Which bucket an hour fills.
+
+   Days, weeks and periods all begin at a midnight, and splitSession already chops every
+   shift there, so a part never straddles any of them — which is why those rules need
+   nothing more than a different key.
+
+   'shift' is the one that is deliberately NOT a clock-boundary rule: it counts from when
+   you punched in, so a shift running 2 PM to 12:30 AM is one continuous eight-hour
+   allowance rather than two. Keying on the session does that on its own — the parts are
+   still split at midnight for every other purpose, they just share one bucket. */
+function otBucketKey(part, cfg, sessionId){
+  /* sessionId is passed in rather than read off `part`: this is called with the raw split
+     chunk, which carries the day, week and period keys but does not yet know which shift
+     it came from. Reading part.sessionId here silently gave every shift the same bucket —
+     one eight-hour allowance for all of history — and a test with a single shift in it
+     cannot tell the difference. */
+  return cfg.otMode === 'shift'  ? 's' + (sessionId != null ? sessionId : part.sessionId)
+       : cfg.otMode === 'daily'  ? 'd' + part.dayMs
        : cfg.otMode === 'weekly' ? part.weekKey
        : part.periodKey;
 }
@@ -1628,7 +1651,7 @@ function buildLedger(sessions, cfg){
     for (var j = 0; j < chunks.length; j++){
       var c = chunks[j], hours = (c.end - c.start) / HOUR_MS;
       var base = (rateAt(c.start, cfg) + (adj.diff || 0)) * (adj.mult || 1);
-      var key = otBucketKey(c, cfg);
+      var key = otBucketKey(c, cfg, s.id);
       var before = bucket[key] || 0;
       var reg, ot;
       if (adj.noOt){ reg = hours; ot = 0; }            // never accrues toward the threshold
@@ -1667,6 +1690,22 @@ function sumSession(parts, id){
   for (var i = 0; i < parts.length; i++){
     var p = parts[i];
     if (p.sessionId === id){ t.hours += p.hours; t.regHours += p.regHours; t.otHours += p.otHours; t.gross += p.gross; }
+  }
+  return t;
+}
+
+/* A session's hours within one window. A shift that crosses a pay-period boundary belongs
+   to both periods, and each period should show only its own half — otherwise the shift log
+   footer says one thing while the period tile beside it says another, which is what it did
+   before this existed. Parts never straddle a boundary, so a whole-part test is exact. */
+function sumSessionRange(parts, id, fromMs, toMs){
+  var t = { hours: 0, regHours: 0, otHours: 0, gross: 0, clipped: false };
+  for (var i = 0; i < parts.length; i++){
+    var p = parts[i];
+    if (p.sessionId !== id) continue;
+    if (p.start >= fromMs && p.end <= toMs){
+      t.hours += p.hours; t.regHours += p.regHours; t.otHours += p.otHours; t.gross += p.gross;
+    } else t.clipped = true;                    // some of this shift belongs to another period
   }
   return t;
 }
@@ -2928,7 +2967,8 @@ function render(){
   document.getElementById('barReg').style.width = pctReg + '%';
   document.getElementById('barOt').style.width = Math.min(100 - pctReg, over / thr * 100) + '%';
   document.getElementById('otLbl').textContent =
-    cfg.otMode === 'daily'  ? 'Today toward ' + thr + ' h'
+    cfg.otMode === 'shift'  ? 'This shift toward ' + thr + ' h'
+  : cfg.otMode === 'daily'  ? 'Today toward ' + thr + ' h'
   : cfg.otMode === 'weekly' ? 'This week toward ' + thr + ' h'
   : 'This period toward ' + thr + ' h';
   document.getElementById('otNum').textContent = over > 0
@@ -3166,8 +3206,10 @@ function renderProgress(ledger, period, now){
   } else {
     // Another rule drives the rate, so this bar is a milestone rather than the thing
     // being measured. Name the rule that is actually in force, whichever it is.
-    var ruleName = cfg.otMode === 'daily'
-      ? '<b>' + otThresholdOf(cfg) + ' h daily</b> rule, so it resets every day'
+    var ruleName = cfg.otMode === 'shift'
+      ? '<b>' + otThresholdOf(cfg) + ' h per shift</b> rule, counted from when you clock in'
+      : cfg.otMode === 'daily'
+      ? '<b>' + otThresholdOf(cfg) + ' h daily</b> rule, so it resets at midnight'
       : '<b>' + cfg.weeklyThreshold + ' h weekly</b> rule, so it resets each week';
     note.className = 'p80note';
     note.innerHTML = past
@@ -3419,7 +3461,8 @@ function renderLog(ledger, period, active, now){
            + '<th class="act"></th></tr></thead><tbody>';
   var tot = { hours: 0, otHours: 0, gross: 0 };
   rows.forEach(function(s){
-    var t = sumSession(ledger.parts, s.id);
+    // Clamped to the period on screen, so this footer and the period tile agree.
+    var t = sumSessionRange(ledger.parts, s.id, period.startMs, period.endMs);
     tot.hours += t.hours; tot.otHours += t.otHours; tot.gross += t.gross;
     var asking = pendingDelete === s.id;
     /* A holiday is not a shift: it has no clock times, and it cannot be edited or deleted
@@ -3430,6 +3473,7 @@ function renderLog(ledger, period, active, now){
       : ' data-row="' + s.id + '" class="'
       + (t.otHours > 0.0001 ? 'otrow ' : '') + (s.live ? 'live' : '') + (asking ? ' pending' : '') + '"') + '>'
       + '<td class="c-day">' + fdate(new Date(s.start)).replace(/^(\w{3}) /, '<span class="dow">$1 </span>')
+      + (t.clipped ? ' <span class="clipped">· split across periods</span>' : '')
       + (s.hol ? ' <span class="hollbl">· ' + esc(s.holiday) + '</span>' : '')
       + (s.off ? ' <span class="offlbl">· ' + esc(s.dayOff) + '</span>' : '')
       + (!synth && s.adj ? ' <span style="opacity:.65;font-size:10.5px">· ' + (s.adj.noOt ? 'PTO' : s.adj.mult ? '×' + s.adj.mult : s.adj.diff ? '+$' + s.adj.diff + '/h' : 'no lunch') + '</span>' : '')
@@ -3758,7 +3802,8 @@ function renderCalc(){
           : '')
       + (bank.toOt > 0.004
           ? bank.toOt.toFixed(2) + ' h left before overtime starts (' + bank.threshold + ' h '
-            + (cfg.otMode === 'daily' ? 'a day' : cfg.otMode === 'weekly' ? 'a week' : 'a period') + ').'
+            + (cfg.otMode === 'shift' ? 'a shift' : cfg.otMode === 'daily' ? 'a day'
+               : cfg.otMode === 'weekly' ? 'a week' : 'a period') + ').'
           : 'You are past ' + bank.threshold + ' h — everything further bills at overtime.')
       + '</span>';
   }
@@ -4098,7 +4143,8 @@ function paintCalRule(){
   el('qCalRule').textContent = cc.otStyle === 'daily'
     ? 'Anything past ' + (cc.dailyAfter || 8) + ' h in a day counts as overtime right away.'
     : 'Overtime builds the way it really does — after ' + otThresholdOf(state.cfg) + ' h '
-      + (state.cfg.otMode === 'daily' ? 'in a day' : state.cfg.otMode === 'weekly' ? 'in a week' : 'in a pay period') + '.';
+      + (state.cfg.otMode === 'shift' ? 'in a shift' : state.cfg.otMode === 'daily' ? 'in a day'
+         : state.cfg.otMode === 'weekly' ? 'in a week' : 'in a pay period') + '.';
 }
 
 /* More months at either end as you reach them. Prepending shifts everything down, so
@@ -5293,6 +5339,7 @@ var CFG_FIELDS = [
   ['cRate', 'rate', 'float'], ['cMult', 'otMultiplier', 'float'], ['cMode', 'otMode', 'str'],
   ['cWeekStart', 'weekStartDay', 'int'], ['cWeekThr', 'weeklyThreshold', 'float'],
   ['cPeriodThr', 'periodThreshold', 'float'], ['cDailyThr', 'dailyThreshold', 'float'],
+  ['cShiftThr', 'shiftThreshold', 'float'],
   ['cAnchor', 'periodAnchor', 'str'],
   ['cLen', 'periodLengthDays', 'int'], ['cPayOff', 'payDateOffsetDays', 'int']
 ];
