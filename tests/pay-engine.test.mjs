@@ -938,6 +938,72 @@ group('Robustness');
               - parts.reduce((s, p) => s + p.gross, 0)) < 1e-6);
 }
 
+
+/* ---------------- how close to overtime, under every rule ---------------- */
+{
+  /* Days, weeks and periods can be named from an instant alone. A shift cannot — two
+     shifts can cover the same time of day — so the per-shift rule has to be told which
+     shift, or find it. Getting this wrong reads the bucket "sundefined", which is always
+     zero, so the overtime bar sits at nothing all shift and never warns. */
+  const mk = m => ({ ...E.DEFAULTS, rate: 38, otMode: m, weeklyThreshold: 40,
+                     periodThreshold: 80, dailyThreshold: 8, shiftThreshold: 8,
+                     periodAnchor: '2026-08-09', lunchMins: 0,
+                     holidays: [], banks: [], daysOff: [] });
+  const start = +new Date(2026, 7, 10, 12, 15), now = +new Date(2026, 7, 10, 16, 25);
+  const live = [{ id: '__active', start: start, end: now }];
+
+  ['weekly', 'daily', 'shift'].forEach(mode => {
+    const c = mk(mode), led = E.buildLedger(live, c);
+    near(`${mode}: named shift reports the hours banked`,
+         E.bucketHoursAt(led, now, c, '__active'), 25 / 6);
+    near(`${mode}: and finds them without being told`,
+         E.bucketHoursAt(led, now, c), 25 / 6);
+  });
+
+  // A wrong or unknown id must not silently read as zero-but-plausible; it reads zero,
+  // which is why the caller has to pass the id it actually used.
+  const sc = mk('shift'), sled = E.buildLedger(live, sc);
+  near('an unknown shift id banks nothing', E.bucketHoursAt(sled, now, sc, '__nope'), 0);
+
+  // Two shifts in one day: each has its own allowance, and the bar must follow the one
+  // being worked rather than adding them.
+  const two = [{ id: 'a', start: +new Date(2026, 7, 10, 6), end: +new Date(2026, 7, 10, 12) },
+               { id: 'b', start: +new Date(2026, 7, 10, 18), end: +new Date(2026, 7, 10, 23) }];
+  const tled = E.buildLedger(two, sc);
+  near('the morning shift banks 6 h', E.bucketHoursAt(tled, +new Date(2026, 7, 10, 11), sc), 6);
+  near('the evening one banks 5 h',   E.bucketHoursAt(tled, +new Date(2026, 7, 10, 22), sc), 5);
+  const dled = E.buildLedger(two, mk('daily'));
+  near('while the daily rule adds both to 11 h',
+       E.bucketHoursAt(dled, +new Date(2026, 7, 10, 22), mk('daily')), 11);
+
+  // Between shifts nothing is banked toward the next one.
+  near('an hour with no shift on it banks nothing',
+       E.bucketHoursAt(tled, +new Date(2026, 7, 10, 15), sc), 0);
+
+  /* Across midnight the shift keeps its bucket, which is the whole point of the rule.
+     Note what this function means: it is the bucket's total, not the hours up to `t`. That
+     reads as "so far" in the app only because the ledger there is built up to now — the
+     same is true of the weekly and daily rules. Here the shift is already complete, so all
+     10.75 h of it are in the bucket at any instant inside it. */
+  const night = [{ id: 'n', start: +new Date(2026, 7, 11, 14), end: +new Date(2026, 7, 12, 0, 45) }];
+  const nled = E.buildLedger(night, sc);
+  near('the shift banks all 10.75 h of itself',
+       E.bucketHoursAt(nled, +new Date(2026, 7, 11, 23), sc), 10.75);
+  near('and midnight does not divide it',
+       E.bucketHoursAt(nled, +new Date(2026, 7, 12, 0, 30), sc), 10.75);
+  const nd = mk('daily'), ndl = E.buildLedger(night, nd);
+  near('where the daily rule starts the new day at 0.75 h',
+       E.bucketHoursAt(ndl, +new Date(2026, 7, 12, 0, 30), nd), 0.75);
+  near('and gives the evening 10 h of its own',
+       E.bucketHoursAt(ndl, +new Date(2026, 7, 11, 23), nd), 10);
+
+  // Hours-so-far, the way the app actually asks it: a ledger built up to the moment.
+  const sofar = E.buildLedger([{ id: 'n', start: +new Date(2026, 7, 11, 14),
+                                 end: +new Date(2026, 7, 11, 23) }], sc);
+  near('a shift nine hours in reads nine hours',
+       E.bucketHoursAt(sofar, +new Date(2026, 7, 11, 23), sc, 'n'), 9);
+}
+
 /* ------------------------------------------------------------------ */
 console.log(`\n${fail === 0 ? '✅' : '❌'}  ${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

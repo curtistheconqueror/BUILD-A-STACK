@@ -1742,8 +1742,23 @@ function sumSessionRange(parts, id, fromMs, toMs){
   return t;
 }
 
-/* Hours already banked in the OT bucket that `t` falls into — i.e. how close to OT you are. */
-function bucketHoursAt(ledger, t, cfg){
+/* Hours already banked in the OT bucket that `t` falls into — i.e. how close to OT you are.
+
+   Days, weeks and periods can be named from the instant alone, which is what the synthetic
+   part below does. A shift cannot: two shifts can contain the same time of day and there is
+   nothing in a timestamp that says which one you are on. So under the per-shift rule the
+   shift has to be identified, either by being named or by finding the part that covers `t`.
+   Without that this returned the bucket for the key "sundefined" — always zero — so the
+   overtime bar sat at nothing all shift and never warned that overtime had started. */
+function bucketHoursAt(ledger, t, cfg, sessionId){
+  if (cfg.otMode === 'shift'){
+    if (sessionId != null) return ledger.bucket['s' + sessionId] || 0;
+    for (var i = ledger.parts.length - 1; i >= 0; i--){
+      var p = ledger.parts[i];
+      if (t >= p.start && t <= p.end) return ledger.bucket['s' + p.sessionId] || 0;
+    }
+    return 0;                                  // between shifts, nothing is banked toward one
+  }
   var key = otBucketKey({ dayMs: +midnight(t), weekKey: 'w' + weekInfo(t, cfg).index,
                           periodKey: 'p' + periodInfo(t, cfg).index }, cfg);
   return ledger.bucket[key] || 0;
@@ -2902,7 +2917,9 @@ function render(){
   var wk = sumRange(ledger.parts, week.startMs, week.endMs);
   var per = sumRange(ledger.parts, period.startMs, period.endMs);
 
-  var bucketH = bucketHoursAt(ledger, now, cfg);
+  // Name the running shift, so the per-shift rule knows which bucket "how close to
+  // overtime" is asking about.
+  var bucketH = bucketHoursAt(ledger, now, cfg, active ? '__active' : null);
   var inOt = active && bucketH >= ledger.threshold;
   var rateNow = inOt ? ledger.otRate : cfg.rate;
 
@@ -3896,7 +3913,10 @@ function calcBanked(){
   var ledger = buildLedger(sessions, cfg);
   var per = periodInfo(now, cfg);
   var t = sumRange(ledger.parts, per.startMs, per.endMs);
-  var thr = otThresholdOf(cfg), banked = bucketHoursAt(ledger, now, cfg);
+  var thr = otThresholdOf(cfg);
+  // '__live' is the id this function gives the running shift a few lines up — not the
+  // '__active' that render uses. Passing the wrong one reads an empty bucket.
+  var banked = bucketHoursAt(ledger, now, cfg, state.activeStart ? '__live' : null);
   return { hours: t.hours, otHours: t.otHours,
            gross: Math.max(0, t.gross - extraLunchMoney()),
            premium: t.otHours * cfg.rate * ((cfg.otMultiplier || 1.5) - 1),
