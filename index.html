@@ -310,6 +310,17 @@
   .holrow .hwhen{color:var(--muted);font-size:12.4px;text-align:right;font-variant-numeric:tabular-nums}
   .holrow .hotf{color:var(--warn);font-size:10.6px;letter-spacing:1px;font-weight:800}
   .holnone{color:var(--muted);font-size:13px;padding:10px 0}
+  /* the allowance editor in Settings */
+  .bankcfg{border-top:1px solid var(--border);padding:13px 0}
+  .bankcfg:first-child{border-top:0}
+  .bankcfg .top{display:flex;gap:8px;align-items:center;margin-bottom:9px}
+  .bankcfg .top input[type=text]{flex:1 1 140px;min-width:0;font-weight:700}
+  .bankcfg .nums{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .bankcfg .nums .f{margin:0}
+  .bankcfg .nums input,.bankcfg .nums select{width:100%}
+  .bankcfg .slotwrap{margin-top:10px}
+  .bankcfg .slots{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:7px}
+  .bankcfg .slots input{width:100%;font-size:12.8px}
   /* completed pay periods */
   .pastsum{color:var(--muted);font-weight:600;font-size:12px;margin-left:8px}
   .pastrow{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:11px 0;
@@ -632,9 +643,53 @@
         <button data-m="period"><b>After 80 hours a pay period</b><span>One running total across the whole period.</span></button>
       </div>
     </div>
+
+    <div class="f" style="margin-top:18px"><label>Which days are you scheduled to work?</label>
+      <div class="note">A day you are not scheduled for is treated differently — the whole
+      shift counts as extra time rather than just the hours either side of it.</div>
+    </div>
+    <div class="autodays" id="sWorkDays" style="justify-content:flex-start">
+      <button data-w="0">Sun</button><button data-w="1">Mon</button><button data-w="2">Tue</button>
+      <button data-w="3">Wed</button><button data-w="4">Thu</button><button data-w="5">Fri</button>
+      <button data-w="6">Sat</button>
+    </div>
+    <div class="sgrid" style="margin-top:14px">
+      <div class="f"><label for="sSchedStart">What time does your shift start?</label>
+        <input type="time" id="sSchedStart"></div>
+      <div class="f"><label for="sSchedEnd">And when does it end?</label>
+        <input type="time" id="sSchedEnd"></div>
+      <div class="f"><label for="sLunch">Unpaid lunch per shift</label>
+        <select id="sLunch">
+          <option value="0">None — all time paid</option>
+          <option value="30">30 minutes</option>
+          <option value="60">1 hour</option>
+        </select></div>
+      <div class="f"><label for="sHolOn">Paid holidays</label>
+        <select id="sHolOn">
+          <option value="1">The usual six US holidays</option>
+          <option value="0">None — I'll add my own later</option>
+        </select></div>
+    </div>
+
+    <div class="f" style="margin-top:18px"><label>Paid days off you are given each year</label>
+      <div class="note">Days you spend rather than days that arrive. Leave a count at zero if
+      your job does not give them — all of this is editable in Settings afterwards.</div>
+    </div>
+    <div class="sgrid">
+      <div class="f"><label for="sFloat">Floating / personal days a year</label>
+        <input type="number" id="sFloat" min="0" max="99" step="1" value="0"></div>
+      <div class="f"><label for="sSick">Paid sick days a year</label>
+        <input type="number" id="sSick" min="0" max="99" step="1" value="0"></div>
+      <div class="f"><label for="sOffHours">Hours each one is worth</label>
+        <input type="number" id="sOffHours" min="0" max="24" step="0.5" value="8"></div>
+    </div>
+
     <div class="epreview" id="sPreview"></div>
     <div class="eerr hide" id="sErr"></div>
     <div class="eactions"><button class="btn go" id="sSave">Start tracking</button></div>
+    <div class="note" style="margin-top:11px">Every one of these is in Settings afterwards, and
+    changing one there updates everything that depends on it. Nothing here is a decision you
+    are stuck with.</div>
   </section>
 
   <!-- ================= HERO ================= -->
@@ -1161,6 +1216,16 @@
           <select id="cYtd"><option value="1">Show</option><option value="0">Hide</option></select></div>
       </div>
 
+      <div class="f" style="margin-top:18px"><label>Your scheduled shift</label>
+        <div class="note">The hours you are rostered for. Everything that asks "how far outside
+        your shift was this" — the decimal time card, the what-if at the clock — measures
+        against these.</div>
+      </div>
+      <div class="cfgrid">
+        <div class="f"><label for="cSchedStart2">Scheduled start</label><input type="time" id="cSchedStart2"></div>
+        <div class="f"><label for="cSchedEnd2">Scheduled end</label><input type="time" id="cSchedEnd2"></div>
+      </div>
+
       <div class="f" style="margin-top:18px"><label>Days you are scheduled to work</label>
         <div class="note">The roster the app judges everything else against. "The day before a
         holiday" means the shift before it, not whatever date happens to sit there — so a
@@ -1198,6 +1263,18 @@
         <button class="mini" id="cHolAdd">+ Add a holiday</button>
         <button class="mini" id="cHolReset">↺ Back to the standard six</button>
       </div>
+      <div class="f" style="margin-top:18px"><label>Paid days off you are given</label>
+        <div class="note">Allowances you spend rather than days that arrive — floating
+        holidays, sick days, personal days, whatever your contract calls them. Set how many
+        a year, what each is worth, and whether they count toward overtime. Name them
+        individually if it helps to know which you have left.</div>
+      </div>
+      <div id="cBankList"></div>
+      <div class="actions" style="justify-content:flex-start;margin-top:10px">
+        <button class="mini" id="cBankAdd">+ Add an allowance</button>
+        <button class="mini" id="cBankReset">↺ Back to the defaults</button>
+      </div>
+
       <div class="editor hide" id="holEdit">
         <div class="etitle" id="holTitle">Add a holiday</div>
         <div class="egrid">
@@ -2434,6 +2511,40 @@ function renderWorkDays(){
     : 'Scheduled ' + on.length + ' days a week: ' + on.join(', ') + '.';
 }
 
+/* The allowance editor. Everything about a bank is editable here — what it is called,
+   how many a year, what each is worth, whether it counts toward overtime, and whether the
+   individual days are named. A person at a different job should never be stuck with
+   somebody else's contract. */
+function renderBankCfg(){
+  var banks = state.cfg.banks || [];
+  el('cBankList').innerHTML = banks.length ? banks.map(function(b, i){
+    var named = !!(b.slots && b.slots.length);
+    var slots = '';
+    if (named){
+      for (var k = 0; k < (b.count || 0); k++){
+        slots += '<input type="text" data-bslot="' + i + '" data-i="' + k + '" '
+          + 'value="' + esc(b.slots[k] || '') + '" placeholder="' + esc(b.name) + ' ' + (k + 1) + '">';
+      }
+    }
+    return '<div class="bankcfg">'
+      + '<div class="top"><input type="text" data-bf="name" data-b="' + i + '" value="' + esc(b.name) + '">'
+      + '<button class="mini danger" data-bdel="' + i + '">✕</button></div>'
+      + '<div class="nums">'
+      + '<div class="f"><label>How many a year</label>'
+      + '<input type="number" min="0" max="99" step="1" data-bf="count" data-b="' + i + '" value="' + (b.count || 0) + '"></div>'
+      + '<div class="f"><label>Hours each</label>'
+      + '<input type="number" min="0" max="24" step="0.5" data-bf="hours" data-b="' + i + '" value="' + (b.hours == null ? 8 : b.hours) + '"></div>'
+      + '<div class="f"><label>Counts toward OT</label>'
+      + '<select data-bf="ot" data-b="' + i + '"><option value="1"' + (b.ot ? ' selected' : '') + '>Yes</option>'
+      + '<option value="0"' + (b.ot ? '' : ' selected') + '>No</option></select></div>'
+      + '</div>'
+      + '<div class="slotwrap"><label class="swrap"><input type="checkbox" data-bnamed="' + i + '"'
+      + (named ? ' checked' : '') + '> Name each one</label>'
+      + (named ? '<div class="slots">' + slots + '</div>' : '') + '</div>'
+      + '</div>';
+  }).join('') : '<div class="holnone">No allowances. Add one, or put the defaults back.</div>';
+}
+
 function renderHolidayList(){
   var cfg = state.cfg, list = cfg.holidays || [], y = new Date().getFullYear();
   el('cHolList').innerHTML = list.length ? list.map(function(h, i){
@@ -3346,23 +3457,75 @@ function readSetup(){
   if (rate > 10000) return { error: 'That rate looks off — check the number.' };
   var anchor = document.getElementById('sAnchor').value;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(anchor)) return { error: 'Pick the date your current pay period started.' };
+  var ss = el('sSchedStart').value, se = el('sSchedEnd').value;
+  if (hhmmToMin(ss) == null || hhmmToMin(se) == null)
+    return { error: 'Set the time your shift usually starts and ends.' };
+  if (!setupDays.some(Boolean)) return { error: 'Pick at least one day you work.' };
+
+  /* The allowances a person actually has. Zero means the job does not give them, so the
+     bank is left out entirely rather than shown as an empty row. */
+  var hours = parseFloat(el('sOffHours').value);
+  if (!isFinite(hours) || hours < 0 || hours > 24) hours = 8;
+  var nFloat = Math.max(0, Math.min(99, parseInt(el('sFloat').value, 10) || 0));
+  var nSick  = Math.max(0, Math.min(99, parseInt(el('sSick').value, 10) || 0));
+  var banks = [];
+  if (nFloat) banks.push({ id: 'float', name: 'Floating holiday', count: nFloat,
+                           hours: hours, ot: true, slots: [] });
+  if (nSick)  banks.push({ id: 'sick',  name: 'Sick day', count: nSick,
+                           hours: hours, ot: false, slots: [] });
+
   return {
     rate: rate, periodAnchor: anchor,
-    periodLengthDays: parseInt(document.getElementById('sLen').value, 10),
-    payDateOffsetDays: parseInt(document.getElementById('sPay').value, 10),
-    otMode: setupMode
+    periodLengthDays: parseInt(el('sLen').value, 10),
+    payDateOffsetDays: parseInt(el('sPay').value, 10),
+    otMode: setupMode,
+    workDays: setupDays.slice(),
+    schedStart: ss, schedEnd: se,
+    lunchMins: parseInt(el('sLunch').value, 10) || 0,
+    holidays: el('sHolOn').value === '1' ? HOLIDAY_DEFAULTS() : [],
+    holidayHours: hours,
+    banks: banks,
+    daysOff: []
   };
 }
 
+/* An hh:mm string as a clock time, without needing a real date. Used by the setup preview,
+   which is describing a shift rather than a moment. */
+function ftimeCfg(hhmm, cfg){
+  var m = hhmmToMin(hhmm);
+  if (m == null) return '—';
+  if (cfg && cfg.clock24) return hhmm;
+  var h = Math.floor(m / 60), mi = m % 60, ap = h >= 12 ? 'PM' : 'AM';
+  var h12 = h % 12; if (!h12) h12 = 12;
+  return h12 + ':' + String(mi).padStart(2, '0') + ' ' + ap;
+}
+
+/* Which days the setup screen has ticked. Mirrors cfg.workDays but lives on its own until
+   Start tracking is pressed, so an abandoned setup leaves nothing behind. */
+var setupDays = [true, true, true, true, true, false, false];
+function paintSetupDays(){
+  [].forEach.call(document.querySelectorAll('#sWorkDays button'), function(b){
+    b.classList.toggle('on', !!setupDays[+b.dataset.w]);
+  });
+}
 function previewSetup(){
   var r = readSetup(), box = document.getElementById('sPreview');
   if (r.error){ box.innerHTML = '<span style="opacity:.6">' + r.error + '</span>'; return; }
   var cfg = Object.assign({}, DEFAULTS, r);
   var p = periodInfo(Date.now(), cfg);
   var thr = otThresholdOf(cfg);
+  var offs = [];
+  for (var i = 0; i < 7; i++) if (!r.workDays[i]) offs.push(DOW[i]);
+  var give = (r.banks || []).map(function(b){ return b.count + ' ' + b.name.toLowerCase() + (b.count === 1 ? '' : 's'); });
   box.innerHTML = 'Current period <b>' + fdate(p.start) + ' → ' + fdateY(p.lastDay) + '</b>'
     + '<br>Payday <b>' + fdateY(p.payDate) + '</b>'
-    + '<br>Overtime past ' + thr + ' h at <span class="pay">' + money(r.rate * cfg.otMultiplier) + '</span>/hr';
+    + '<br>Overtime past ' + thr + ' h at <span class="pay">' + money(r.rate * cfg.otMultiplier) + '</span>/hr'
+    + '<br>Shift <b>' + ftimeCfg(r.schedStart, cfg) + ' – ' + ftimeCfg(r.schedEnd, cfg) + '</b>'
+    + (r.lunchMins ? ', ' + r.lunchMins + ' min unpaid lunch' : ', all time paid')
+    + (offs.length ? '<br><span style="color:var(--warn)">' + offs.join(' and ')
+        + ' are not scheduled days</span>' : '<br>Scheduled every day')
+    + '<br>' + ((r.holidays || []).length ? (r.holidays.length + ' paid holidays') : 'No paid holidays')
+    + (give.length ? ' &nbsp;·&nbsp; ' + give.join(', ') : '');
 }
 
 function saveSetup(){
@@ -3382,6 +3545,11 @@ function applyStage(){
   if (first) show('netsetup', false);
   if (first){
     document.getElementById('sAnchor').value = dateInput(mostRecentWeekStart());
+    /* Nobody else's contract: the setup screen starts blank-ish rather than pre-loaded
+       with the defaults this file happens to ship, so every answer is a real one. */
+    if (!el('sSchedStart').value) el('sSchedStart').value = '09:00';
+    if (!el('sSchedEnd').value) el('sSchedEnd').value = '17:00';
+    paintSetupDays();
     previewSetup();
   }
 }
@@ -4618,6 +4786,63 @@ document.getElementById('bankBody').addEventListener('click', function(e){
   if (gone) toast(dayOffName(cfg, gone) + ' given back — it is available again.');
 });
 
+document.getElementById('cBankList').addEventListener('change', function(e){
+  var t = e.target, cfg = state.cfg, banks = cfg.banks || (cfg.banks = []);
+  if (t.dataset.bnamed != null){
+    var nb = banks[+t.dataset.bnamed]; if (!nb) return;
+    // Turning naming on seeds blank slots; bankSlots falls back to "Name 1", "Name 2".
+    nb.slots = t.checked ? Array.apply(null, Array(nb.count || 0)).map(function(){ return ''; }) : [];
+    save(); renderBankCfg(); renderBanks(); render(); return;
+  }
+  if (t.dataset.bslot != null){
+    var sb = banks[+t.dataset.bslot]; if (!sb) return;
+    sb.slots = sb.slots || [];
+    sb.slots[+t.dataset.i] = t.value.trim();
+    save(); renderBanks(); render(); return;
+  }
+  if (t.dataset.bf == null) return;
+  var b = banks[+t.dataset.b]; if (!b) return;
+  var f = t.dataset.bf;
+  if (f === 'name'){ b.name = t.value.trim() || 'Paid day off'; t.value = b.name; }
+  if (f === 'count'){
+    var n = parseInt(t.value, 10);
+    b.count = isFinite(n) && n >= 0 ? Math.min(99, n) : 0;
+    t.value = b.count;
+    // Keep named slots the same length as the allowance, without losing the names kept.
+    if (b.slots && b.slots.length) b.slots.length = b.count;
+  }
+  if (f === 'hours'){
+    var h = parseFloat(t.value);
+    b.hours = isFinite(h) && h >= 0 ? Math.min(24, h) : 8;
+    t.value = b.hours;
+  }
+  if (f === 'ot') b.ot = t.value === '1';
+  save(); renderBankCfg(); renderBanks(); render();
+});
+document.getElementById('cBankList').addEventListener('click', function(e){
+  var b = e.target.closest('button[data-bdel]'); if (!b) return;
+  var i = +b.dataset.bdel, bank = (state.cfg.banks || [])[i];
+  if (!bank) return;
+  /* Days already booked from a bank that no longer exists would price as nothing, so they
+     go with it — and the toast says how many, rather than letting them vanish quietly. */
+  var spent = (state.cfg.daysOff || []).filter(function(d){ return d.bank === bank.id; }).length;
+  state.cfg.daysOff = (state.cfg.daysOff || []).filter(function(d){ return d.bank !== bank.id; });
+  state.cfg.banks.splice(i, 1);
+  save(); renderBankCfg(); renderBanks(); drawCal(true); render();
+  toast('Removed ' + bank.name + (spent ? ' and the ' + spent + ' day' + (spent === 1 ? '' : 's')
+        + ' booked from it.' : '.'));
+});
+document.getElementById('cBankAdd').onclick = function(){
+  state.cfg.banks = state.cfg.banks || [];
+  state.cfg.banks.push({ id: uid(), name: 'Personal day', count: 1, hours: 8, ot: false, slots: [] });
+  save(); renderBankCfg(); renderBanks(); render();
+};
+document.getElementById('cBankReset').onclick = function(){
+  state.cfg.banks = BANK_DEFAULTS();
+  save(); renderBankCfg(); renderBanks(); render();
+  toast('Allowances back to the defaults.');
+};
+
 document.getElementById('cHolAdd').onclick = function(){ openHolEditor(-1); };
 document.getElementById('cHolReset').onclick = function(){
   state.cfg.holidays = HOLIDAY_DEFAULTS();
@@ -4996,6 +5221,17 @@ document.getElementById('sMode').addEventListener('click', function(e){
   previewSetup();
 });
 document.getElementById('sSave').onclick = saveSetup;
+document.getElementById('sWorkDays').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  var i = +b.dataset.w;
+  setupDays[i] = !setupDays[i];
+  paintSetupDays(); previewSetup();
+});
+['sSchedStart','sSchedEnd','sLunch','sHolOn','sFloat','sSick','sOffHours'].forEach(function(id){
+  var e2 = document.getElementById(id);
+  e2.addEventListener('input', previewSetup);
+  e2.addEventListener('change', previewSetup);
+});
 
 document.getElementById('exportCsv').onclick = exportCsv;
 document.getElementById('clearPeriod').onclick = function(){ show('clearConfirm', true); show('logActions', false); };
@@ -5079,11 +5315,14 @@ function offerUndo(was, key){
   offerUndo.t = setTimeout(function(){ show('cfgUndo', false); }, 20000);
 }
 document.getElementById('cSound').onchange = function(e){ state.sound = e.target.value === '1'; save(); };
-['cSchedStart', 'cSchedEnd'].forEach(function(id){
+/* The scheduled shift appears twice — in Settings, where a new user goes looking, and in
+   the Decimal Time Conversion section, where you are when you notice it is wrong. Two
+   fields, one value; syncControls keeps whichever you are not typing in up to date. */
+['cSchedStart', 'cSchedEnd', 'cSchedStart2', 'cSchedEnd2'].forEach(function(id){
   document.getElementById(id).onchange = function(e){
-    var key = id === 'cSchedStart' ? 'schedStart' : 'schedEnd';
+    var key = id.indexOf('Start') > -1 ? 'schedStart' : 'schedEnd';
     if (hhmmToMin(e.target.value) == null){ syncControls(); return; }
-    state.cfg[key] = e.target.value; save(); render();
+    state.cfg[key] = e.target.value; save(); syncControls(); render();
   };
 });
 document.getElementById('cClock24').onchange = function(e){
@@ -5114,8 +5353,9 @@ function syncControls(){
   CFG_FIELDS.forEach(function(f){ document.getElementById(f[0]).value = state.cfg[f[1]]; });
   document.getElementById('cSound').value = state.sound ? '1' : '0';
   document.getElementById('cClock24').value = state.cfg.clock24 ? '1' : '0';
-  document.getElementById('cSchedStart').value = state.cfg.schedStart || '09:00';
-  document.getElementById('cSchedEnd').value = state.cfg.schedEnd || '17:00';
+  var sA = document.getElementById('cSchedStart'), sB = document.getElementById('cSchedEnd');
+  if (document.activeElement !== sA) sA.value = state.cfg.schedStart || '09:00';
+  if (document.activeElement !== sB) sB.value = state.cfg.schedEnd || '17:00';
   document.getElementById('cYtd').value = netCfg().ytdShow === false ? '0' : '1';
   document.getElementById('cLunch').value = String(state.cfg.lunchMins || 0);
   var xEl = document.getElementById('cLunchExtra');
@@ -5131,8 +5371,12 @@ function syncControls(){
   el('cHolHours').value = state.cfg.holidayHours != null ? state.cfg.holidayHours : 8;
   el('cHolAdj').value = state.cfg.holidayNeedsAdjacent === false ? '0' : '1';
   el('cHolOffDay').value = state.cfg.holidayOffDayPays === false ? '0' : '1';
+  var s1 = el('cSchedStart2'), s2 = el('cSchedEnd2');
+  if (document.activeElement !== s1) s1.value = state.cfg.schedStart || '';
+  if (document.activeElement !== s2) s2.value = state.cfg.schedEnd || '';
   renderWorkDays();
   renderHolidayList();
+  renderBankCfg();
   renderBanks();
   document.getElementById('autoOn').checked = !!state.autoOn;
   var aA = document.getElementById('autoAt');
