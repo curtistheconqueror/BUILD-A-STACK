@@ -621,6 +621,10 @@
   /* Touch devices: every control needs a finger-sized target, not a cursor-sized one. */
   @media(pointer:coarse){
     button.mini{min-height:44px;padding:10px 15px;font-size:13.4px}
+    /* The day-of-week pickers — your roster in Settings and at setup, and the auto clock-in
+       days. Seven small targets in a row is the worst case for a thumb, and these were the
+       only controls in the app still under the minimum. */
+    .autodays button{min-height:44px;min-width:44px}
     /* The smaller .btn variants sit a few pixels under a finger-sized target on their own.
        They used to reach 44 only by being stretched to the height of a taller button beside
        them, which is not a guarantee — change what shares the row and the target shrinks. */
