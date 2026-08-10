@@ -696,6 +696,19 @@
       </div>
     </div>
 
+    <!-- Only ever shown to the two day-based rules, because it is only ever a question for
+         them: under a weekly or pay-period threshold a missed day already costs you, since
+         you simply never reach forty. -->
+    <div class="f hide" id="sMakeUpWrap" style="margin-top:15px">
+      <label>If you miss a scheduled day, do you work those hours back first?</label>
+      <div class="schoice" id="sMakeUp">
+        <button data-mu="1" class="on"><b>Yes — make up the hours first</b>
+          <span>Overtime waits until you have worked back what you missed. Most plant and union contracts.</span></button>
+        <button data-mu="0"><b>No — every day stands on its own</b>
+          <span>Hours past the threshold always pay overtime, whatever the rest of the week looked like. This is how daily overtime works in California and a few other states.</span></button>
+      </div>
+    </div>
+
     <div class="f" style="margin-top:18px"><label>Which days are you scheduled to work?</label>
       <div class="note">A day you are not scheduled for is treated differently — the whole
       shift counts as extra time rather than just the hours either side of it.</div>
@@ -4390,6 +4403,17 @@ function renderLog(ledger, period, active, now){
    Nothing personal ships in this file, so the first launch collects the rate and
    pay schedule. Stored in this browser only. */
 var setupMode = 'weekly';
+/* Asked only of the daily and per-shift rules. Defaulted to yes because that is the common
+   arrangement, but asked rather than assumed: welding it on would quietly show anyone under
+   a statutory daily-overtime rule less than they are owed. */
+var setupMakeUp = true;
+function paintSetupMakeUp(){
+  var applies = setupMode === 'daily' || setupMode === 'shift';
+  show('sMakeUpWrap', applies);
+  [].forEach.call(document.querySelectorAll('#sMakeUp button'), function(x){
+    x.classList.toggle('on', (x.dataset.mu === '1') === setupMakeUp);
+  });
+}
 
 function mostRecentWeekStart(){
   var d = midnight(Date.now());
@@ -4427,6 +4451,8 @@ function readSetup(){
     periodLengthDays: parseInt(el('sLen').value, 10),
     payDateOffsetDays: parseInt(el('sPay').value, 10),
     otMode: setupMode,
+    // Only the two day-based rules carry it; the others already account for a missed day.
+    makeUpOn: (setupMode === 'daily' || setupMode === 'shift') && setupMakeUp,
     workDays: setupDays.slice(),
     schedStart: ss, schedEnd: se,
     lunchMins: parseInt(el('sLunch').value, 10) || 0,
@@ -6345,7 +6371,13 @@ document.getElementById('sMode').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
   setupMode = b.dataset.m;
   [].forEach.call(document.querySelectorAll('#sMode button'), function(x){ x.classList.toggle('on', x === b); });
+  paintSetupMakeUp();
   previewSetup();
+});
+document.getElementById('sMakeUp').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  setupMakeUp = b.dataset.mu === '1';
+  paintSetupMakeUp(); previewSetup();
 });
 document.getElementById('sSave').onclick = saveSetup;
 document.getElementById('sWorkDays').addEventListener('click', function(e){
