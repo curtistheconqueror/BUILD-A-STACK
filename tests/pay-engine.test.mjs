@@ -34,7 +34,9 @@ const E = new Function(m[1] + `
            bankCredits, daysOffOutlook, periodHistory, timeCardRows, timeCardTotals,
            extraTime, chartHours, otThresholdOf, otBucketKey, sumSessionRange,
            payMonths, currentPayMonth, shiftDayMs, toMinute,
-           skewMs, shopTime, phoneTime, shopSession };
+           skewMs, shopTime, phoneTime, shopSession,
+           ABSENCE_KINDS, absenceKindName, schedHoursOn, schedEndMs, absenceHoursOn,
+           workedPaidOn, scheduleGaps, makeUpOwed };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -1195,6 +1197,92 @@ group('Robustness');
      E.shopSession(plain, ahead).adj.noOt === true);
   near('while both ends move together',
        E.shopSession(plain, ahead).end - E.shopSession(plain, ahead).start, plain.end - plain.start);
+}
+
+/* ---------------- absences: time you were scheduled for and did not work ---------------- */
+{
+  /* Sun-Thu, 2 PM - 10:30 PM with a half-hour lunch: eight paid hours a scheduled day. */
+  const c = { ...E.DEFAULTS, rate: 38, otMode: 'shift', shiftThreshold: 8, lunchMins: 30,
+              schedStart: '14:00', schedEnd: '22:30',
+              workDays: [true, true, true, true, true, false, false],
+              holidays: [], banks: [], daysOff: [], periodAnchor: '2026-08-09' };
+  const on = (d, h = 0, mi = 0) => +new Date(2026, 7, d, h, mi);
+  const AFTER = on(15, 12);                       // the whole week is behind us
+
+  near('a scheduled day is worth its paid hours', E.schedHoursOn(c, on(10)), 8);
+  near('lunch comes out of it, so it is not 8.5', E.schedHoursOn(c, on(10)), 8);
+  near('a day you are not rostered for is worth nothing', E.schedHoursOn(c, on(14)), 0);
+  ok('and the day is only judged once it has ended',
+     E.schedEndMs(c, on(10)) === on(10, 22, 30), String(new Date(E.schedEndMs(c, on(10)))));
+
+  // Nothing missed: a full week is no hole at all.
+  const full = [10, 11, 12, 13].map((d, i) => ({ id: 'f' + i, start: on(d, 14), end: on(d, 22, 30) }))
+    .concat([{ id: 'f4', start: on(9, 14), end: on(9, 22, 30) }]);
+  near('working every scheduled shift owes nothing',
+       E.makeUpOwed(full, c, [], on(9), on(16), AFTER), 0);
+
+  // A whole day missed with nothing recorded.
+  const missed = full.filter(s => s.id !== 'f1');            // Tue Aug 11 gone
+  near('a missed day is eight hours in the hole',
+       E.makeUpOwed(missed, c, [], on(9), on(16), AFTER), 8);
+  const gapRow = E.scheduleGaps(missed, c, [], on(9), on(16), AFTER).filter(g => g.short > 0)[0];
+  ok('and it is flagged as unaccounted, so the app can ask rather than assume',
+     gapRow.unaccounted === 8, String(gapRow.unaccounted));
+
+  // Labelling it does not change the hole — it only stops the app asking.
+  const abs = [{ id: 'a1', date: '2026-08-11', kind: 'fmla', hours: 8 }];
+  near('labelling it FMLA leaves the hole exactly where it was',
+       E.makeUpOwed(missed, c, abs, on(9), on(16), AFTER), 8);
+  const labelled = E.scheduleGaps(missed, c, abs, on(9), on(16), AFTER).filter(g => g.short > 0)[0];
+  near('but there is nothing left to ask about', labelled.unaccounted, 0);
+
+  // Curtis's own example: half of Monday, all of Tuesday, back Wednesday.
+  const partial = [
+    { id: 'p0', start: on(9, 14), end: on(9, 22, 30) },       // Sun, full
+    // Left after four paid hours. Short of five, so no lunch is deducted from it.
+    { id: 'p1', start: on(10, 14), end: on(10, 18) },         // Mon, half a day
+    { id: 'p3', start: on(12, 14), end: on(12, 22, 30) },     // Wed, back
+    { id: 'p4', start: on(13, 14), end: on(13, 22, 30) }      // Thu
+  ];
+  near('half a Monday and all of Tuesday is twelve hours in the hole',
+       E.makeUpOwed(partial, c, [], on(9), on(16), AFTER), 12);
+
+  // A day off that earns overtime credit fills the schedule; one that does not, does not.
+  const withFloat = { ...c,
+    banks: [{ id: 'float', name: 'Floating holiday', count: 4, hours: 8, ot: true, slots: [] },
+            { id: 'sick',  name: 'Sick day',        count: 5, hours: 8, ot: false, slots: [] }],
+    daysOff: [{ id: 'd1', bank: 'float', slot: 0, date: '2026-08-11', hours: 8 }] };
+  near('a floater counts toward overtime, so it leaves no hole',
+       E.makeUpOwed(missed, withFloat, [], on(9), on(16), AFTER), 0);
+  const withSick = { ...withFloat,
+    daysOff: [{ id: 'd1', bank: 'sick', slot: 0, date: '2026-08-11', hours: 8 }] };
+  near('a sick day earns no overtime credit, so it does',
+       E.makeUpOwed(missed, withSick, [], on(9), on(16), AFTER), 8);
+  const sickGap = E.scheduleGaps(missed, withSick, [], on(9), on(16), AFTER).filter(g => g.short > 0)[0];
+  near('though the app has nothing to ask about — the day is accounted for', sickGap.unaccounted, 0);
+
+  // A day that has not finished yet is not a day you missed.
+  near('mid-shift on a scheduled day owes nothing yet',
+       E.makeUpOwed(full, c, [], on(9), on(16), on(13, 18)), 0);
+  ok('and a day still to come is not even listed',
+     E.scheduleGaps(full, c, [], on(9), on(16), on(11, 12)).every(g => g.dayMs <= on(10)),
+     JSON.stringify(E.scheduleGaps(full, c, [], on(9), on(16), on(11, 12)).map(g => g.dayMs)));
+
+  // Hours worked are attributed to the day the shift belongs to.
+  near('a night shift counts once, against its own day',
+       E.workedPaidOn([{ id: 'n', start: on(10, 22), end: on(11, 6) }],
+                      { ...c, schedStart: '22:00', schedEnd: '06:00' }, on(11)), 7.5);
+  near('an unscheduled Saturday is pure surplus, owing nothing',
+       E.makeUpOwed(full.concat([{ id: 'sat', start: on(15, 8), end: on(15, 16, 30) }]),
+                    c, [], on(9), on(16), AFTER), 0);
+
+  ok('every absence kind has a name', E.ABSENCE_KINDS().every(k => k.id && k.name));
+  ok('FMLA is one of them', E.absenceKindName('fmla') === 'FMLA', E.absenceKindName('fmla'));
+  ok('and an unknown kind still reads as something',
+     E.absenceKindName('zzz') === 'Absence', E.absenceKindName('zzz'));
+  near('absence hours are totalled per date', E.absenceHoursOn(
+       [{ date: '2026-08-11', hours: 4 }, { date: '2026-08-11', hours: 2 },
+        { date: '2026-08-12', hours: 8 }], on(11)), 6);
 }
 
 /* ------------------------------------------------------------------ */

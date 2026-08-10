@@ -422,6 +422,19 @@
   .holpill{color:var(--cal-hol);border:1px solid var(--cal-hol);border-radius:5px;
     padding:1px 5px;font-size:9.5px;letter-spacing:.8px;font-weight:800}
   tr.holrowlog td{background:rgba(255,180,84,.07)}
+  /* time missed against your schedule — never paid, so it reads as a subtraction */
+  .abslbl{color:var(--bad);font-size:10.5px;font-weight:800}
+  .abspill{color:var(--bad);border:1px solid var(--bad);border-radius:5px;
+    padding:1px 5px;font-size:9.5px;letter-spacing:.8px;font-weight:800;white-space:nowrap}
+  tr.absrowlog td{background:rgba(255,93,108,.07)}
+  .absh{color:var(--bad);font-weight:800}
+  /* a scheduled day that has ended with nothing at all against it — a question, not a verdict */
+  .gaplbl{color:var(--muted);font-size:10.5px;font-weight:700}
+  .gappill{color:var(--muted);border:1px dashed var(--muted);border-radius:5px;
+    padding:1px 5px;font-size:9.5px;letter-spacing:.8px;font-weight:800}
+  tr.gaprowlog td{background:rgba(255,255,255,.03)}
+  .fmlarow{display:flex;justify-content:center;margin-top:10px}
+  button.mini.fmla{border-color:var(--bad);color:var(--bad)}
   /* where each holiday stands, under the calendar */
   .calhol .s{font-size:9.6px;letter-spacing:.9px;font-weight:800;padding:1px 5px;border-radius:5px}
   .calhol .s.paid{color:var(--cal-fill);border:1px solid var(--cal-fill)}
@@ -595,6 +608,10 @@
   /* Touch devices: every control needs a finger-sized target, not a cursor-sized one. */
   @media(pointer:coarse){
     button.mini{min-height:44px;padding:10px 15px;font-size:13.4px}
+    /* The smaller .btn variants sit a few pixels under a finger-sized target on their own.
+       They used to reach 44 only by being stretched to the height of a taller button beside
+       them, which is not a guarantee — change what shares the row and the target shrinks. */
+    button.btn{min-height:44px}
     .seg button{min-height:44px;padding:0 22px}
     .emode button,.schoice button{min-height:44px}
     /* Safari zooms the whole page whenever a focused field is under 16px, and there is
@@ -745,6 +762,11 @@
 
     <div class="actions">
       <button class="btn go" id="punch">▶ Clock In</button>
+    </div>
+    <!-- Leaving on FMLA is a clock-out plus a record of the hours you did not work, and
+         doing it in one tap is the difference between it getting logged and not. -->
+    <div class="fmlarow hide" id="fmlaRow">
+      <button class="mini fmla" id="fmlaOut">⏻ Clock out — FMLA</button>
     </div>
     <div class="backrow" id="backrow">
       <button class="mini" id="backOpen">⏱ Already started earlier?</button>
@@ -1018,8 +1040,29 @@
       </div>
     </div>
 
+    <!-- Time missed, rather than time worked. Separate from the shift editor because an
+         absence has no clock times to enter and nothing to pay. -->
+    <div class="editor hide" id="absEdit">
+      <div class="etitle" id="absTitle">Record an absence</div>
+      <div class="egrid">
+        <div class="f"><label for="aDate">Date</label><input type="date" id="aDate"></div>
+        <div class="f"><label for="aKind">What was it</label><select id="aKind"></select></div>
+        <div class="f"><label for="aHours">Hours missed</label>
+          <input type="number" id="aHours" min="0.25" max="24" step="0.25" value="8"></div>
+        <div class="f"><label for="aNote">Note (optional)</label>
+          <input type="text" id="aNote" maxlength="60" placeholder="e.g. approved 8/12"></div>
+      </div>
+      <div class="epreview" id="aPreview"></div>
+      <div class="eerr hide" id="aErr"></div>
+      <div class="eactions">
+        <button class="btn go" id="aSave">Save</button>
+        <button class="btn ghost" id="aCancel">Cancel</button>
+      </div>
+    </div>
+
     <div class="actions" style="justify-content:flex-start;margin-top:15px" id="logActions">
       <button class="btn add" id="addShift">+ Add a shift</button>
+      <button class="mini" id="absAdd">− Record an absence</button>
       <button class="mini" id="pickEdit">✎ Edit a shift</button>
       <button class="mini danger" id="pickDelete">✕ Delete a shift</button>
       <button class="mini" id="exportCsv">⇩ Export CSV</button>
@@ -1300,6 +1343,22 @@
           <input type="number" id="cSkewMins" min="-30" max="30" step="1"></div>
       </div>
       <div class="note" id="cSkewNote" style="margin-top:8px"></div>
+
+      <div class="f" style="margin-top:18px"><label for="cMakeUp">Watch my schedule for missed days</label>
+        <div class="note">Some contracts only pay overtime once you have actually worked your
+        scheduled hours — miss a day and you have to work back out of it before overtime
+        starts again. Turn this on and the app watches for scheduled days you did not work
+        and asks what they were: a call-off, a sick day, FMLA. Nothing is ever assumed, and
+        recording one changes no pay — it only ever affects overtime.</div>
+      </div>
+      <div class="cfgrid">
+        <div class="f"><label for="cMakeUp">Missed days</label>
+          <select id="cMakeUp">
+            <option value="0">Ignore them</option>
+            <option value="1">Ask me about them</option>
+          </select></div>
+      </div>
+      <div class="note" id="cMakeUpNote" style="margin-top:8px"></div>
       <div class="note" id="cShiftDayNote" style="margin-top:8px"></div>
 
       <div class="f" style="margin-top:18px"><label>Days you are scheduled to work</label>
@@ -1500,6 +1559,11 @@ var DEFAULTS = {
      move. Positive minutes mean this phone runs ahead of the machine. */
   skewOn: false,
   skewMins: 0,
+  /* Watch the schedule for days you were rostered and did not work. Off by default: on a
+     job without a make-up rule it is noise, and on a log that is not kept religiously it is
+     worse than noise. Absences you record by hand always show, switch or no switch — those
+     are facts you entered rather than gaps the app inferred. */
+  makeUpOn: false,
   schedStart: '09:00',       // the scheduled shift, for working out extra time
   schedEnd: '17:00',
   /* Which days of the week you are rostered for, Sunday first. Holiday eligibility is
@@ -2287,6 +2351,113 @@ function daysOffOutlook(cfg, year){
   return out.sort(function(a, b){ return a.ms - b.ms; });
 }
 
+/* ---- absences ----
+   Time you were scheduled for and did not work: a call-off, a sick day taken without an
+   allowance to draw on, FMLA leave. These are deliberately NOT sessions. A session is time
+   you were paid for; an absence is the opposite, and letting one into the ledger would pay
+   you for staying home. They exist so the app can answer one question a daily or per-shift
+   overtime rule cannot answer on its own — "did you actually work your schedule?" — which
+   is what the make-up rule is built on.
+
+   Kinds differ only in what they are called. The arithmetic treats them identically, because
+   as far as your schedule is concerned an hour missed is an hour missed. */
+function ABSENCE_KINDS(){
+  return [
+    { id: 'fmla',    name: 'FMLA' },
+    { id: 'calloff', name: 'Called off' },
+    { id: 'noshow',  name: 'No call, no show' },
+    { id: 'unpaid',  name: 'Unpaid leave' },
+    { id: 'other',   name: 'Other absence' }
+  ];
+}
+function absenceKindName(id){
+  var k = ABSENCE_KINDS();
+  for (var i = 0; i < k.length; i++) if (k[i].id === id) return k[i].name;
+  return 'Absence';
+}
+
+/* The paid hours a scheduled day is worth — the rostered span less the unpaid lunch, so it
+   is measured the same way the hours you actually work are. A day you are not rostered for
+   is worth nothing, which is what makes an unscheduled Saturday pure surplus. */
+function schedHoursOn(cfg, dayMs){
+  if (!isWorkDay(cfg, new Date(dayMs).getDay())) return 0;
+  var ss = hhmmToMin(cfg.schedStart), se = hhmmToMin(cfg.schedEnd);
+  if (ss == null || se == null) return 0;
+  var span = (se <= ss ? se + 24 * 60 - ss : se - ss) / 60;
+  return Math.max(0, span - (cfg.lunchMins || 0) / 60);
+}
+/* The moment a scheduled day is over and can be judged. Before this, a day with nothing on
+   it is a day you have not worked yet, not a day you missed. */
+function schedEndMs(cfg, dayMs){
+  var ss = hhmmToMin(cfg.schedStart), se = hhmmToMin(cfg.schedEnd);
+  if (ss == null || se == null) return dayMs + DAY_MS;
+  return dayMs + se * 60000 + (se <= ss ? DAY_MS : 0);
+}
+function absenceHoursOn(absences, dayMs){
+  var key = dkey(new Date(dayMs).getFullYear(), new Date(dayMs).getMonth(), new Date(dayMs).getDate());
+  var t = 0;
+  (absences || []).forEach(function(a){ if (a && a.date === key) t += (+a.hours || 0); });
+  return t;
+}
+/* Paid hours worked on a day, attributed the way the rest of the app attributes them: to the
+   day the shift belongs to, not split at midnight. A night shift counts once, against its
+   own day. */
+function workedPaidOn(sessions, cfg, dayMs){
+  var t = 0;
+  (sessions || []).forEach(function(s){
+    if (!(s.end > s.start)) return;
+    if (shiftDayMs(shopSession(s, cfg), cfg) !== dayMs) return;
+    paidSpans(s, cfg).forEach(function(sp){ t += (sp.end - sp.start) / HOUR_MS; });
+  });
+  return t;
+}
+
+/* Day-by-day: what you were scheduled for, what you actually did, and what is missing.
+   `short` is the hole the make-up rule works from, so it subtracts only credit that counts
+   toward overtime — a sick day that earns no overtime credit still leaves you short, which
+   is exactly the arrangement most contracts describe. `unaccounted` is different and softer:
+   it means nothing at all is recorded against a scheduled day that has ended, so the app can
+   offer to label it rather than quietly assume you were absent. */
+function scheduleGaps(sessions, cfg, absences, fromMs, toMs, nowMs){
+  var now = nowMs == null ? Date.now() : nowMs;
+  var out = [];
+  if (!anyWorkDay(cfg)) return out;
+  var hol = {}, credit = {}, other = {};
+  holidayCredits(sessions, cfg).forEach(function(h){
+    var d = +midnight(h.start);
+    var hrs = (h.end - h.start) / HOUR_MS;
+    if (h.adj && h.adj.noOt) other[d] = (other[d] || 0) + hrs; else credit[d] = (credit[d] || 0) + hrs;
+    hol[d] = true;
+  });
+  bankCredits(cfg).forEach(function(o){
+    var d = +midnight(o.start);
+    var hrs = (o.end - o.start) / HOUR_MS;
+    if (o.adj && o.adj.noOt) other[d] = (other[d] || 0) + hrs; else credit[d] = (credit[d] || 0) + hrs;
+  });
+  var d = midnight(fromMs);
+  while (+d < toMs){
+    var day = +d;
+    var sched = schedHoursOn(cfg, day);
+    if (sched > 0 && schedEndMs(cfg, day) <= now){
+      var worked = workedPaidOn(sessions, cfg, day);
+      var cred = credit[day] || 0, oth = other[day] || 0, abs = absenceHoursOn(absences, day);
+      out.push({
+        dayMs: day, scheduled: sched, worked: worked, credited: cred, other: oth, absent: abs,
+        short:       Math.max(0, sched - worked - cred),
+        unaccounted: Math.max(0, sched - worked - cred - oth - abs)
+      });
+    }
+    d = addDays(d, 1);
+  }
+  return out;
+}
+/* What is still owed before overtime can accrue again, for a window. */
+function makeUpOwed(sessions, cfg, absences, fromMs, toMs, nowMs){
+  var t = 0;
+  scheduleGaps(sessions, cfg, absences, fromMs, toMs, nowMs).forEach(function(g){ t += g.short; });
+  return Math.round(t * 100) / 100;
+}
+
 /* ---- completed pay periods ----
    A period that has rolled over otherwise disappears from the app entirely, which is
    exactly when you want to check it against the stub that is about to land. Walks back
@@ -2474,9 +2645,9 @@ var STORAGE_OK = (function(){
 var state = load();
 
 function load(){
-  var base = { cfg: Object.assign({}, DEFAULTS), sessions: [], activeStart: null, activeAdj: null,
-               unit: 'sec', planOn: false, plannedHours: 8, sound: true, configured: false,
-               autoOn: false, autoAt: '', autoDays: null, autoLast: '' };
+  var base = { cfg: Object.assign({}, DEFAULTS), sessions: [], absences: [], activeStart: null,
+               activeAdj: null, unit: 'sec', planOn: false, plannedHours: 8, sound: true,
+               configured: false, autoOn: false, autoAt: '', autoDays: null, autoLast: '' };
   try {
     var raw = localStorage.getItem(KEY);
     if (raw){
@@ -2484,6 +2655,9 @@ function load(){
       base = Object.assign(base, s);
       base.cfg = Object.assign({}, DEFAULTS, s.cfg || {});
       base.sessions = (s.sessions || []).filter(function(x){ return x && x.end > x.start; });
+      // Absences arrived after the first backups were written, so a restore predating them
+      // comes back with none rather than with undefined.
+      base.absences = (s.absences || []).filter(function(x){ return x && x.date && +x.hours > 0; });
     }
   } catch(e){ /* corrupt storage — fall back to defaults rather than dying */ }
   return base;
@@ -2577,6 +2751,35 @@ function clockOut(atMs, silent){
   state.activeStart = null; state.activeAdj = null; tickWhileActive = 0;
   save(); chime(false); render();
   if (!silent) toast('Clocked out — ' + hhmmss(end - began) + ' on the clock');
+}
+
+/* ---- clocking out on FMLA ----
+   Ends the shift and records the rest of the scheduled day as leave in one action. Doing it
+   in two — clock out, then remember to record an absence — is how it ends up not recorded.
+   The hours are what is left of your scheduled day after what you actually worked, so
+   leaving twenty minutes before the end books twenty minutes, not a whole day. */
+function clockOutFmla(){
+  if (!state.activeStart) return;
+  var began = state.activeStart, end = Date.now();
+  var day = shiftDayMs(shopSession({ start: began, end: end }, state.cfg), state.cfg);
+  clockOut(end, true);
+  var sched = schedHoursOn(state.cfg, day);
+  var worked = workedPaidOn(state.sessions, state.cfg, day);
+  var missed = Math.round(Math.max(0, sched - worked) * 100) / 100;
+  if (missed >= 0.01){
+    addAbsence(day, 'fmla', missed, '');
+    toast('Clocked out on FMLA — ' + missed.toFixed(2) + ' h of today\'s schedule recorded as leave.');
+  } else {
+    toast('Clocked out on FMLA — you had already worked your scheduled hours.');
+  }
+  lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+}
+function addAbsence(dayMs, kind, hours, note){
+  var d = new Date(dayMs);
+  if (!state.absences) state.absences = [];
+  state.absences.push({ id: uid(), date: dkey(d.getFullYear(), d.getMonth(), d.getDate()),
+                        kind: kind, hours: hours, note: note || '' });
+  save();
 }
 
 /* ---- reopening a shift that was ended by accident ----
@@ -3153,6 +3356,9 @@ function render(){
   var punch = document.getElementById('punch');
   punch.textContent = active ? '■ Clock Out' : '▶ Clock In';
   punch.className = 'btn ' + (active ? 'stop' : 'go');
+  /* Leaving on FMLA is only a thing you can do while you are on the clock, and only worth
+     offering to someone rostered today — there is no schedule to fall short of otherwise. */
+  show('fmlaRow', !!active && schedHoursOn(state.cfg, +midnight(now)) > 0);
   // "Started earlier" only makes sense before a shift is running.
   if (active){ show('backrow', false); show('backdate', false); show('resumeConfirm', false); }
   else if (document.getElementById('backdate').classList.contains('hide')) show('backrow', true);
@@ -3758,6 +3964,27 @@ function renderLog(ledger, period, active, now){
   bankCredits(state.cfg).forEach(function(o){
     if (o.end > period.startMs && o.start < period.endMs) rows.push(Object.assign({}, o, { off: true }));
   });
+  /* Time you were scheduled for and did not work. It pays nothing, so it is not in the
+     footer — but a period where you missed two days should not look identical to one where
+     you worked them. */
+  (state.absences || []).forEach(function(a){
+    var d = +ymd(a.date);
+    if (isNaN(d) || !(d >= period.startMs && d < period.endMs)) return;
+    rows.push({ id: '__abs:' + a.id, absId: a.id, start: d, end: d, abs: true,
+                absKind: absenceKindName(a.kind), absHours: +a.hours || 0, note: a.note || '' });
+  });
+  /* A scheduled day that has ended with nothing at all against it. Offered, never assumed:
+     a day you simply forgot to log would otherwise invent an absence you never had. Only
+     when you have asked the app to watch your schedule — otherwise every gap in a log
+     nobody keeps perfectly turns into a row demanding an explanation. */
+  if (state.cfg.makeUpOn){
+    scheduleGaps(state.sessions, state.cfg, state.absences, period.startMs, period.endMs, now)
+      .forEach(function(g){
+        if (g.unaccounted < 0.01) return;
+        rows.push({ id: '__gap:' + g.dayMs, gapMs: g.dayMs, start: g.dayMs, end: g.dayMs,
+                    gap: true, gapHours: g.unaccounted });
+      });
+  }
   rows.sort(function(a, b){ return b.start - a.start; });
 
   var box = document.getElementById('logBody');
@@ -3784,8 +4011,9 @@ function renderLog(ledger, period, active, now){
     /* A holiday is not a shift: it has no clock times, and it cannot be edited or deleted
        from here — it is earned by the shifts either side of it, and those are the rows to
        change. So it carries no data-row and drops out of pick mode entirely. */
-    var synth = s.hol || s.off;
-    html += '<tr' + (synth ? ' class="' + (s.hol ? 'holrowlog' : 'offrowlog') + '"'
+    var synth = s.hol || s.off || s.abs || s.gap;
+    html += '<tr' + (synth ? ' class="' + (s.hol ? 'holrowlog' : s.abs ? 'absrowlog'
+                                         : s.gap ? 'gaprowlog' : 'offrowlog') + '"'
       : ' data-row="' + s.id + '" class="'
       + (t.otHours > 0.0001 ? 'otrow ' : '') + (s.live ? 'live' : '') + (asking ? ' pending' : '') + '"') + '>'
       /* The day the shift IS, not the date it began on — a 10 PM Sunday start reads Mon,
@@ -3796,18 +4024,33 @@ function renderLog(ledger, period, active, now){
       + (t.clipped ? ' <span class="clipped">· split across periods</span>' : '')
       + (s.hol ? ' <span class="hollbl">· ' + esc(s.holiday) + '</span>' : '')
       + (s.off ? ' <span class="offlbl">· ' + esc(s.dayOff) + '</span>' : '')
+      + (s.abs ? ' <span class="abslbl">· ' + esc(s.absKind)
+                 + (s.note ? ' · ' + esc(s.note) : '') + '</span>' : '')
+      + (s.gap ? ' <span class="gaplbl">· scheduled ' + s.gapHours.toFixed(2) + ' h, nothing logged</span>' : '')
       + (!synth && s.adj ? ' <span style="opacity:.65;font-size:10.5px">· ' + (s.adj.noOt ? 'PTO' : s.adj.mult ? '×' + s.adj.mult : s.adj.diff ? '+$' + s.adj.diff + '/h' : 'no lunch') + '</span>' : '')
       + '</td><td class="c-in">' + (s.hol ? '<span class="holpill">HOLIDAY</span>'
-          : s.off ? '<span class="offpill">DAY OFF</span>' : ptime(s.start)) + '</td>'
+          : s.off ? '<span class="offpill">DAY OFF</span>'
+          : s.abs ? '<span class="abspill">' + esc(s.absKind.toUpperCase()) + '</span>'
+          : s.gap ? '<span class="gappill">MISSING</span>' : ptime(s.start)) + '</td>'
       + '<td class="c-out">' + (synth ? '' : s.live ? '<span class="running">running</span>' : ptime(s.end)) + '</td>'
-      + '<td class="num c-hours">' + t.hours.toFixed(2) + '</td>'
+      + '<td class="num c-hours">'
+      + (s.abs ? '<span class="absh">−' + s.absHours.toFixed(2) + '</span>'
+       : s.gap ? '<span class="absh">−' + s.gapHours.toFixed(2) + '</span>' : t.hours.toFixed(2)) + '</td>'
       + '<td class="num g otcol' + (t.otHours > 0.0001 ? '' : ' noot') + '">'
       + (t.otHours > 0.0001 ? t.otHours.toFixed(2) : '—') + '</td>'
       + '<td class="num c-gross">' + money(t.gross) + '</td>'
       /* Nothing but the shift itself sits in a row. Editing and deleting are started
          from the buttons under the log and finished by tapping the row you mean, so
          no control ever has to share space with the figures. */
-      + '<td class="act">' + (!synth && !s.live && asking
+      /* An absence is the one synthetic row you can act on from here. A holiday is earned by
+         the shifts either side of it and a booked day belongs to its allowance, but an
+         absence is only ever something you told the app, so this is the place to change it. */
+      + '<td class="act">' + (s.gap
+            ? '<button class="mini" data-gap="' + s.gapMs + '">Why?</button>'
+          : s.abs
+            ? '<button class="mini" data-absedit="' + s.absId + '">✎</button> '
+              + '<button class="mini danger" data-absdel="' + s.absId + '">✕</button>'
+          : !synth && !s.live && asking
             ? 'Delete? <button class="mini danger" data-del-yes="' + s.id + '">yes</button> '
               + '<button class="mini" data-del-no="1">no</button>'
             : '') + '</td></tr>';
@@ -4800,6 +5043,70 @@ function previewBackdate(){
         + ' logged shift' + (clash === 1 ? '' : 's') + ' — those hours would be counted twice.</span>' : '');
 }
 
+/* ---- the absence editor ----
+   Deliberately thin. An absence is a date, a label and a number of hours; it has no clock
+   times because you were not there, and no money because it pays nothing. */
+var absEditing = null;
+function absKindOptions(){
+  return ABSENCE_KINDS().map(function(k){
+    return '<option value="' + k.id + '">' + esc(k.name) + '</option>';
+  }).join('');
+}
+function openAbsence(id, dayMs){
+  absEditing = id || null;
+  var a = id ? (state.absences || []).filter(function(x){ return x.id === id; })[0] : null;
+  el('aKind').innerHTML = absKindOptions();
+  el('absTitle').textContent = a ? 'Edit this absence' : 'Record an absence';
+  var when = a ? +ymd(a.date) : (dayMs != null ? dayMs : Date.now());
+  el('aDate').value = dateValue(when);
+  el('aKind').value = a ? a.kind : 'calloff';
+  /* Pre-filled with what the schedule says you were short, since that is the answer nine
+     times in ten — and it is the number the make-up rule will work from. */
+  el('aHours').value = a ? a.hours
+    : (function(){
+        var g = scheduleGaps(state.sessions, state.cfg, state.absences,
+                             when, when + DAY_MS, Date.now())[0];
+        var h = g ? g.unaccounted : schedHoursOn(state.cfg, +midnight(when));
+        return h >= 0.01 ? h.toFixed(2) : (state.cfg.holidayHours || 8);
+      })();
+  el('aNote').value = a ? (a.note || '') : '';
+  show('absEdit', true); show('aErr', false); show('logActions', false);
+  previewAbsence();
+}
+function closeAbsence(){ absEditing = null; show('absEdit', false); show('logActions', true); }
+function previewAbsence(){
+  var box = el('aPreview'), d = el('aDate').value, h = parseFloat(el('aHours').value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || !isFinite(h) || h <= 0){
+    box.innerHTML = '<span style="opacity:.6">Pick the date and how many hours you missed.</span>';
+    return;
+  }
+  var day = +ymd(d), sched = schedHoursOn(state.cfg, day);
+  box.innerHTML = '<b>' + fdate(new Date(day)) + '</b> · ' + h.toFixed(2) + ' h missed'
+    + (sched > 0 ? '<br><span style="opacity:.7">Scheduled for ' + sched.toFixed(2)
+                   + ' h that day.</span>'
+                 : '<br><span style="opacity:.7">You are not rostered that day, so this costs you nothing.</span>')
+    + '<br><span style="opacity:.7">Pays nothing and is never counted as time worked.</span>';
+}
+function saveAbsence(){
+  var d = el('aDate').value, h = parseFloat(el('aHours').value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)){ el('aErr').textContent = 'Pick the date you missed.'; show('aErr', true); return; }
+  if (!isFinite(h) || h <= 0 || h > 24){ el('aErr').textContent = 'Hours missed has to be between 0 and 24.'; show('aErr', true); return; }
+  h = Math.round(h * 100) / 100;
+  if (absEditing){
+    (state.absences || []).forEach(function(a){
+      if (a.id !== absEditing) return;
+      a.date = d; a.kind = el('aKind').value; a.hours = h; a.note = el('aNote').value.slice(0, 60);
+    });
+    save(); toast('Absence updated.');
+  } else {
+    if (!state.absences) state.absences = [];
+    state.absences.push({ id: uid(), date: d, kind: el('aKind').value, hours: h,
+                          note: el('aNote').value.slice(0, 60) });
+    save(); toast(absenceKindName(el('aKind').value) + ' recorded — ' + h.toFixed(2) + ' h.');
+  }
+  closeAbsence(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+}
+
 function openBackdate(){
   var now = new Date(Date.now() - 2 * HOUR_MS);        // a sensible default: two hours ago
   el('bDate').value = shopDateValue(+now);
@@ -5119,6 +5426,10 @@ document.getElementById('cShiftDay').onchange = function(e){
   state.cfg.shiftDayRule = e.target.value;
   save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
 };
+document.getElementById('cMakeUp').onchange = function(e){
+  state.cfg.makeUpOn = e.target.value === '1';
+  save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+};
 document.getElementById('cSkewOn').onchange = function(e){
   state.cfg.skewOn = e.target.value === '1';
   save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
@@ -5350,7 +5661,21 @@ document.getElementById('logBody').addEventListener('click', function(e){
     pendingDelete = null; save(); render(); toast('Shift deleted.');
   }
   if (b.dataset.delNo){ pendingDelete = null; render(); }
+  if (b.dataset.gap) openAbsence(null, +b.dataset.gap);
+  if (b.dataset.absedit) openAbsence(b.dataset.absedit);
+  if (b.dataset.absdel){
+    state.absences = (state.absences || []).filter(function(a){ return a.id !== b.dataset.absdel; });
+    save(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render(); toast('Absence removed.');
+  }
 });
+document.getElementById('absAdd').onclick = function(){ openAbsence(null); };
+document.getElementById('aSave').onclick = saveAbsence;
+document.getElementById('aCancel').onclick = closeAbsence;
+['aDate', 'aKind', 'aHours'].forEach(function(id){
+  document.getElementById(id).addEventListener('input', previewAbsence);
+  document.getElementById(id).addEventListener('change', previewAbsence);
+});
+document.getElementById('fmlaOut').onclick = function(){ clockOutFmla(); };
 document.getElementById('xChartBtn').addEventListener('click', function(e){
   e.stopPropagation();                                // the section header is not what was tapped
   toggleChart();
@@ -5845,6 +6170,19 @@ function syncControls(){
       : 'Right now this phone reads <b>' + ftime(_now) + '</b> and the machine reads <b>'
         + ptime(_now) + '</b>. Punch times through the app are the machine\'s — the shift log, '
         + 'the decimal time card, the slip figures. Your hours and pay are untouched.';
+  el('cMakeUp').value = state.cfg.makeUpOn ? '1' : '0';
+  /* Says where you actually stand rather than describing the rule again — the number is the
+     point of the setting. */
+  var _mu = el('cMakeUpNote');
+  if (!state.cfg.makeUpOn){
+    _mu.textContent = 'Off — a scheduled day with nothing logged is left alone.';
+  } else {
+    var _p = periodInfo(Date.now(), state.cfg);
+    var _owed = makeUpOwed(state.sessions, state.cfg, state.absences, _p.startMs, _p.endMs, Date.now());
+    _mu.innerHTML = _owed >= 0.01
+      ? 'You are <b>' + _owed.toFixed(2) + ' h</b> short of your schedule this pay period.'
+      : 'You have worked every scheduled hour this pay period.';
+  }
   renderWorkDays();
   renderHolidayList();
   renderBankCfg();
