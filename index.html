@@ -764,9 +764,14 @@
       <button class="btn go" id="punch">▶ Clock In</button>
     </div>
     <!-- Leaving on FMLA is a clock-out plus a record of the hours you did not work, and
-         doing it in one tap is the difference between it getting logged and not. -->
+         doing it in one tap is the difference between it getting logged and not. Offered off
+         the clock as well, because calling off means never coming in at all. -->
     <div class="fmlarow hide" id="fmlaRow">
       <button class="mini fmla" id="fmlaOut">⏻ Clock out — FMLA</button>
+    </div>
+    <!-- What you owe your schedule before overtime starts paying again. -->
+    <div class="confirm hide" id="makeUpBar" style="border-color:var(--warn);background:rgba(255,180,84,.10)">
+      <span id="makeUpTxt"></span>
     </div>
     <div class="backrow" id="backrow">
       <button class="mini" id="backOpen">⏱ Already started earlier?</button>
@@ -1062,7 +1067,7 @@
 
     <div class="actions" style="justify-content:flex-start;margin-top:15px" id="logActions">
       <button class="btn add" id="addShift">+ Add a shift</button>
-      <button class="mini" id="absAdd">− Record an absence</button>
+      <button class="mini hide" id="absAdd">− Record an absence</button>
       <button class="mini" id="pickEdit">✎ Edit a shift</button>
       <button class="mini danger" id="pickDelete">✕ Delete a shift</button>
       <button class="mini" id="exportCsv">⇩ Export CSV</button>
@@ -1346,16 +1351,24 @@
 
       <div class="f" style="margin-top:18px"><label for="cMakeUp">Watch my schedule for missed days</label>
         <div class="note">Some contracts only pay overtime once you have actually worked your
-        scheduled hours — miss a day and you have to work back out of it before overtime
-        starts again. Turn this on and the app watches for scheduled days you did not work
-        and asks what they were: a call-off, a sick day, FMLA. Nothing is ever assumed, and
-        recording one changes no pay — it only ever affects overtime.</div>
+        scheduled hours — miss a day and you work back out of it before overtime starts
+        again. Turn this on and hours past your daily threshold pay the hole down first;
+        only what is left over pays at the overtime rate. It settles the whole window, so
+        calling off on Wednesday takes back Monday's overtime — though not for nothing,
+        since those hours go straight onto the hole. Applies to the daily and per-shift
+        rules only: a weekly or pay-period threshold already handles a missed day by never
+        reaching forty. You are never paid less for hours you worked.</div>
       </div>
       <div class="cfgrid">
         <div class="f"><label for="cMakeUp">Missed days</label>
           <select id="cMakeUp">
             <option value="0">Ignore them</option>
-            <option value="1">Ask me about them</option>
+            <option value="1">Hold overtime until they are made up</option>
+          </select></div>
+        <div class="f"><label for="cMakeUpWin">The hole resets</label>
+          <select id="cMakeUpWin">
+            <option value="period">Each pay period</option>
+            <option value="week">Each week</option>
           </select></div>
       </div>
       <div class="note" id="cMakeUpNote" style="margin-top:8px"></div>
@@ -1564,6 +1577,7 @@ var DEFAULTS = {
      worse than noise. Absences you record by hand always show, switch or no switch — those
      are facts you entered rather than gaps the app inferred. */
   makeUpOn: false,
+  makeUpWindow: 'period',    // the hole resets each pay period; 'week' resets each week
   schedStart: '09:00',       // the scheduled shift, for working out extra time
   schedEnd: '17:00',
   /* Which days of the week you are rostered for, Sunday first. Holiday eligibility is
@@ -1761,7 +1775,7 @@ function calendarPay(days, cfg, style, after){
   return { byDay: byDay, byPeriod: byPeriod };
 }
 
-function buildLedger(sessions, cfg){
+function buildLedger(sessions, cfg, nowMs){
   var threshold = otThresholdOf(cfg), otRate = cfg.rate * cfg.otMultiplier;
   var bucket = {}, parts = [];
   /* Earned holidays join the walk as ordinary sessions. Doing it here rather than at each
@@ -1804,7 +1818,11 @@ function buildLedger(sessions, cfg){
                    gross: reg * base + ot * base * cfg.otMultiplier });
     }
   }
-  return { parts: parts, bucket: bucket, threshold: threshold, otRate: otRate };
+  /* The bucket is left alone on purpose: it tracks accrual toward the threshold, which is
+     what the overtime bar is asking about and is true whatever you owe. Only what gets paid
+     at the overtime rate is settled against the balance. */
+  return { parts: applyMakeUp(parts, sessions, cfg, nowMs), bucket: bucket,
+           threshold: threshold, otRate: otRate };
 }
 
 /* Sum the ledger over a time window. Parts never straddle a day, and every window we ask
@@ -2451,11 +2469,105 @@ function scheduleGaps(sessions, cfg, absences, fromMs, toMs, nowMs){
   }
   return out;
 }
-/* What is still owed before overtime can accrue again, for a window. */
+/* ---- the make-up balance ----
+   One running total for the window: everything you worked, less everything you were
+   scheduled for on days that have finished. Negative means you are in the hole.
+
+   Two deliberate asymmetries, and they are the whole behaviour:
+
+     Hours worked count the moment you work them, including the shift you are on right now,
+     so you can watch yourself digging out live. Scheduled hours only count once that day's
+     shift has ended, so today never counts against you while you are still working it.
+
+     It is a net total, not a pile of per-day shortfalls. An extra unscheduled Saturday is
+     eight hours of balance even though it never passes a daily threshold — you are no
+     longer short, and that is what being short means.
+
+   Absences are not an input here. Missing a day puts you in the hole because you did not
+   work it, not because you labelled it; the label only stops the app asking what happened.
+   That is why recording one can never change a figure. */
+function makeUpBalance(sessions, cfg, fromMs, toMs, nowMs){
+  var now = nowMs == null ? Date.now() : nowMs;
+  var worked = 0, credit = 0, scheduled = 0;
+  (sessions || []).forEach(function(s){
+    if (!(s.end > s.start)) return;
+    var day = shiftDayMs(shopSession(s, cfg), cfg);
+    if (day < fromMs || day >= toMs) return;
+    paidSpans(s, cfg).forEach(function(sp){ worked += (sp.end - sp.start) / HOUR_MS; });
+  });
+  // Only credit that counts toward overtime fills a schedule. A floater does; a sick day
+  // does not, which is why taking one still leaves you to work it back.
+  holidayCredits(sessions, cfg).concat(bankCredits(cfg)).forEach(function(h){
+    var day = +midnight(h.start);
+    if (day < fromMs || day >= toMs) return;
+    if (h.adj && h.adj.noOt) return;
+    credit += (h.end - h.start) / HOUR_MS;
+  });
+  var d = midnight(fromMs);
+  while (+d < toMs){
+    if (schedHoursOn(cfg, +d) > 0 && schedEndMs(cfg, +d) <= now) scheduled += schedHoursOn(cfg, +d);
+    d = addDays(d, 1);
+  }
+  return Math.round((worked + credit - scheduled) * 100) / 100;
+}
+/* What is still to be worked off before overtime can accrue again. */
 function makeUpOwed(sessions, cfg, absences, fromMs, toMs, nowMs){
-  var t = 0;
-  scheduleGaps(sessions, cfg, absences, fromMs, toMs, nowMs).forEach(function(g){ t += g.short; });
-  return Math.round(t * 100) / 100;
+  return Math.max(0, -makeUpBalance(sessions, cfg, fromMs, toMs, nowMs));
+}
+function makeUpWindowOf(t, cfg){
+  return (cfg.makeUpWindow === 'week') ? weekInfo(t, cfg) : periodInfo(t, cfg);
+}
+
+/* ---- settling overtime against the make-up balance ----
+   A daily or per-shift threshold hands out overtime day by day and cannot know that you
+   missed a shift on Tuesday. This settles the window afterwards: overtime is capped at what
+   the balance can cover, and the excess reverts to straight time.
+
+   Settled, not merely gated going forward — call off on Wednesday and Monday's overtime
+   goes too. It is not wasted, though: it pays the hole down, which is why missing eight
+   hours after a ten-hour Monday leaves six to work back rather than eight.
+
+   The earliest overtime is demoted first, so what survives is the most recent. That is the
+   order that reads correctly: you are digging out, and the hours at the far end of the dig
+   are the ones that finally count.
+
+   Only under 'daily' and 'shift'. Under a weekly or pay-period threshold the hole is
+   already inherent — miss a day and you simply never reach forty — so settling again would
+   dock the same absence twice. */
+function applyMakeUp(parts, sessions, cfg, nowMs){
+  if (!cfg.makeUpOn) return parts;
+  if (cfg.otMode !== 'daily' && cfg.otMode !== 'shift') return parts;
+  var mult = cfg.otMultiplier || 1.5;
+  var byWin = {};
+  parts.forEach(function(p){
+    var k = (cfg.makeUpWindow === 'week') ? p.weekKey : p.periodKey;
+    (byWin[k] || (byWin[k] = [])).push(p);
+  });
+  Object.keys(byWin).forEach(function(k){
+    var list = byWin[k], ot = 0;
+    list.forEach(function(p){ ot += p.otHours; });
+    if (ot <= 0.0001) return;
+    var w = makeUpWindowOf(list[0].start, cfg);
+    var bal = makeUpBalance(sessions, cfg, w.startMs, w.endMs, nowMs);
+    var demote = ot - Math.max(0, Math.min(ot, bal));
+    if (demote <= 0.0001) return;
+    list.sort(function(a, b){ return a.start - b.start; });
+    for (var i = 0; i < list.length && demote > 0.0001; i++){
+      var p = list[i];
+      if (p.otHours <= 0.0001) continue;
+      /* The part's own base rate, recovered from what it was priced at — a differential or
+         a holiday multiplier has already been folded in, and rebuilding it from cfg.rate
+         would quietly strip that back off. */
+      var denom = p.regHours + p.otHours * mult;
+      var base = denom > 0 ? p.gross / denom : 0;
+      var take = Math.min(p.otHours, demote);
+      p.otHours -= take; p.regHours += take;
+      p.gross -= take * base * (mult - 1);
+      p.madeUp = (p.madeUp || 0) + take;
+      demote -= take;
+    }
+  });
+  return parts;
 }
 
 /* ---- completed pay periods ----
@@ -3356,9 +3468,26 @@ function render(){
   var punch = document.getElementById('punch');
   punch.textContent = active ? '■ Clock Out' : '▶ Clock In';
   punch.className = 'btn ' + (active ? 'stop' : 'go');
-  /* Leaving on FMLA is only a thing you can do while you are on the clock, and only worth
-     offering to someone rostered today — there is no schedule to fall short of otherwise. */
-  show('fmlaRow', !!active && schedHoursOn(state.cfg, +midnight(now)) > 0);
+  /* Offered whenever the schedule is being watched, on the clock or off it — calling off
+     means never coming in, and that is the case most worth one tap. */
+  var mkOn = !!state.cfg.makeUpOn;
+  show('fmlaRow', mkOn);
+  if (mkOn) document.getElementById('fmlaOut').textContent =
+    active ? '⏻ Clock out — FMLA' : '⏻ Record FMLA';
+  /* What you owe your schedule. Only under the two rules that need it — a weekly or
+     pay-period threshold already accounts for a missed day by never reaching forty. */
+  var mkGate = mkOn && (state.cfg.otMode === 'daily' || state.cfg.otMode === 'shift');
+  var mkWin = mkGate ? makeUpWindowOf(now, state.cfg) : null;
+  var mkOwed = mkGate ? makeUpOwed(state.sessions, state.cfg, state.absences,
+                                   mkWin.startMs, mkWin.endMs, now) : 0;
+  show('absAdd', mkOn);
+  show('makeUpBar', mkOwed >= 0.01);
+  if (mkOwed >= 0.01){
+    document.getElementById('makeUpTxt').innerHTML =
+      '<b>' + mkOwed.toFixed(2) + ' h to work off before overtime.</b> You are that far short of '
+      + 'your scheduled hours ' + (state.cfg.makeUpWindow === 'week' ? 'this week' : 'this pay period')
+      + '. Hours past ' + otThresholdOf(state.cfg) + ' pay it down first.';
+  }
   // "Started earlier" only makes sense before a shift is running.
   if (active){ show('backrow', false); show('backdate', false); show('resumeConfirm', false); }
   else if (document.getElementById('backdate').classList.contains('hide')) show('backrow', true);
@@ -5052,14 +5181,14 @@ function absKindOptions(){
     return '<option value="' + k.id + '">' + esc(k.name) + '</option>';
   }).join('');
 }
-function openAbsence(id, dayMs){
+function openAbsence(id, dayMs, kind){
   absEditing = id || null;
   var a = id ? (state.absences || []).filter(function(x){ return x.id === id; })[0] : null;
   el('aKind').innerHTML = absKindOptions();
   el('absTitle').textContent = a ? 'Edit this absence' : 'Record an absence';
   var when = a ? +ymd(a.date) : (dayMs != null ? dayMs : Date.now());
   el('aDate').value = dateValue(when);
-  el('aKind').value = a ? a.kind : 'calloff';
+  el('aKind').value = a ? a.kind : (kind || 'calloff');
   /* Pre-filled with what the schedule says you were short, since that is the answer nine
      times in ten — and it is the number the make-up rule will work from. */
   el('aHours').value = a ? a.hours
@@ -5426,6 +5555,10 @@ document.getElementById('cShiftDay').onchange = function(e){
   state.cfg.shiftDayRule = e.target.value;
   save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
 };
+document.getElementById('cMakeUpWin').onchange = function(e){
+  state.cfg.makeUpWindow = e.target.value === 'week' ? 'week' : 'period';
+  save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+};
 document.getElementById('cMakeUp').onchange = function(e){
   state.cfg.makeUpOn = e.target.value === '1';
   save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
@@ -5675,7 +5808,12 @@ document.getElementById('aCancel').onclick = closeAbsence;
   document.getElementById(id).addEventListener('input', previewAbsence);
   document.getElementById(id).addEventListener('change', previewAbsence);
 });
-document.getElementById('fmlaOut').onclick = function(){ clockOutFmla(); };
+document.getElementById('fmlaOut').onclick = function(){
+  /* On the clock it is a clock-out; off it, there is no shift to end, so it opens the
+     editor pre-set to FMLA with today filled in — a called-off day is entered, not ended. */
+  if (state.activeStart) clockOutFmla();
+  else openAbsence(null, Date.now(), 'fmla');
+};
 document.getElementById('xChartBtn').addEventListener('click', function(e){
   e.stopPropagation();                                // the section header is not what was tapped
   toggleChart();
@@ -6171,6 +6309,7 @@ function syncControls(){
         + ptime(_now) + '</b>. Punch times through the app are the machine\'s — the shift log, '
         + 'the decimal time card, the slip figures. Your hours and pay are untouched.';
   el('cMakeUp').value = state.cfg.makeUpOn ? '1' : '0';
+  el('cMakeUpWin').value = state.cfg.makeUpWindow === 'week' ? 'week' : 'period';
   /* Says where you actually stand rather than describing the rule again — the number is the
      point of the setting. */
   var _mu = el('cMakeUpNote');

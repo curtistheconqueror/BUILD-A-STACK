@@ -36,7 +36,7 @@ const E = new Function(m[1] + `
            payMonths, currentPayMonth, shiftDayMs, toMinute,
            skewMs, shopTime, phoneTime, shopSession,
            ABSENCE_KINDS, absenceKindName, schedHoursOn, schedEndMs, absenceHoursOn,
-           workedPaidOn, scheduleGaps, makeUpOwed };
+           workedPaidOn, scheduleGaps, makeUpOwed, makeUpBalance, applyMakeUp };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -1283,6 +1283,111 @@ group('Robustness');
   near('absence hours are totalled per date', E.absenceHoursOn(
        [{ date: '2026-08-11', hours: 4 }, { date: '2026-08-11', hours: 2 },
         { date: '2026-08-12', hours: 8 }], on(11)), 6);
+}
+
+/* ---------------- the make-up rule: work the hole off before overtime ---------------- */
+{
+  /* Sun-Thu, 2 PM - 10:30 PM, half-hour lunch, per-shift overtime after 8 paid hours.
+     Pay period starts Sun Aug 9. */
+  const c = { ...E.DEFAULTS, rate: 38, otMultiplier: 1.5, otMode: 'shift', shiftThreshold: 8,
+              dailyThreshold: 8, lunchMins: 30, schedStart: '14:00', schedEnd: '22:30',
+              workDays: [true, true, true, true, true, false, false],
+              holidays: [], banks: [], daysOff: [], periodAnchor: '2026-08-09',
+              periodLengthDays: 14, makeUpOn: true, makeUpWindow: 'period' };
+  const off = { ...c, makeUpOn: false };
+  const on = (d, h = 0, mi = 0) => +new Date(2026, 7, d, h, mi);
+  const P0 = on(9), P1 = on(23);
+  // A shift of n paid hours starting at 2 PM. Over five hours it carries the unpaid lunch.
+  const shift = (d, paid) => ({ id: 'd' + d, start: on(d, 14),
+                                end: on(d, 14) + (paid + (paid > 5 ? 0.5 : 0)) * 3600000 });
+  const sum = (ss, cfg, now) => E.sumRange(E.buildLedger(ss, cfg, now).parts, P0, P1);
+
+  /* Curtis's own case. Monday ten hours, Wednesday called off, Thursday however long.
+     Sunday is worked to schedule so it neither helps nor hurts. */
+  const week = x => [shift(9, 8), shift(10, 10), shift(11, 8), shift(13, x)];
+  const AFTER = on(14, 12);
+
+  near('a ten-hour Monday on its own is two hours of overtime',
+       sum([shift(9, 8), shift(10, 10)], c, on(11, 12)).otHours, 2);
+
+  let t = sum(week(8), c, AFTER);
+  near('call off Wednesday and Monday\'s overtime is gone', t.otHours, 0);
+  near('the hours worked are untouched', t.hours, 34);
+  near('and all of it is paid straight', t.gross, 34 * 38);
+
+  near('working thirteen on Thursday is still not enough', sum(week(13), c, AFTER).otHours, 0);
+  near('fourteen gets you exactly square',                 sum(week(14), c, AFTER).otHours, 0);
+  near('and the fifteenth hour is the first that pays overtime',
+       sum(week(15), c, AFTER).otHours, 1);
+  near('sixteen gives two',                                sum(week(16), c, AFTER).otHours, 2);
+
+  // The balance is what drives it, and it reads the way you would say it out loud.
+  near('after Monday you are two hours up',
+       E.makeUpBalance([shift(9, 8), shift(10, 10)], c, P0, P1, on(11, 12)), 2);
+  /* Read on Thursday, before Thursday's shift has ended — so Wednesday is the only day
+     missing. Reading it on Friday would count Thursday as missed too. */
+  const THU = on(13, 12);
+  near('after calling off Wednesday you are six down',
+       E.makeUpBalance([shift(9, 8), shift(10, 10), shift(11, 8)], c, P0, P1, THU), -6);
+  near('so the app says six hours to work off',
+       E.makeUpOwed([shift(9, 8), shift(10, 10), shift(11, 8)], c, [], P0, P1, THU), 6);
+  near('and a fourteen-hour Thursday clears it',
+       E.makeUpBalance(week(14), c, P0, P1, AFTER), 0);
+
+  /* Without the rule, the same week pays the daily overtime it always did — which is the
+     under-reporting the rule exists to correct, seen from the other side. */
+  near('with the rule off, Monday keeps its two hours', sum(week(8), off, AFTER).otHours, 2);
+  near('and the week is worth $76 more', sum(week(8), off, AFTER).gross - sum(week(8), c, AFTER).gross,
+       2 * 38 * 0.5);
+
+  // What survives is the most recent overtime, not the earliest.
+  const settled = E.buildLedger(week(15), c, AFTER).parts.filter(p => p.otHours > 0.0001);
+  ok('the overtime that survives is Thursday\'s, not Monday\'s',
+     settled.every(p => +new Date(p.start).getDate() === 13 || +new Date(p.start).getDate() === 14),
+     JSON.stringify(settled.map(p => new Date(p.start).toDateString())));
+
+  // Today is not held against you while you are still working it.
+  near('mid-shift on a scheduled day owes nothing',
+       E.makeUpOwed([shift(9, 8), shift(10, 8)], c, [], P0, P1, on(11, 18)), 0);
+
+  // An unscheduled day is pure balance even though it never passes a daily threshold.
+  const satWeek = [shift(9, 8), shift(10, 8), shift(12, 8), shift(13, 8),
+                   { id: 'sat', start: on(15, 8), end: on(15, 16, 30) }];
+  near('a missed Tuesday made up on Saturday leaves you square',
+       E.makeUpBalance(satWeek, c, P0, P1, on(16, 12)), 0);
+  // Sunday the 16th is rostered too, so it has to be worked for the next week to start clean.
+  near('so a later ten-hour day pays its overtime in full',
+       sum(satWeek.concat([shift(16, 8), shift(17, 10)]), c, on(18, 12)).otHours, 2);
+
+  // Paid time off behaves the way its overtime flag says it does.
+  const withBanks = { ...c,
+    banks: [{ id: 'float', name: 'Floating holiday', count: 4, hours: 8, ot: true, slots: [] },
+            { id: 'sick',  name: 'Sick day',        count: 5, hours: 8, ot: false, slots: [] }] };
+  const gone = [shift(9, 8), shift(10, 10), shift(13, 8)];        // Tue and Wed missing
+  const floated = { ...withBanks,
+    daysOff: [{ id: 'f1', bank: 'float', slot: 0, date: '2026-08-11', hours: 8 },
+              { id: 'f2', bank: 'float', slot: 1, date: '2026-08-12', hours: 8 }] };
+  near('two floaters fill the schedule, so Monday keeps its overtime',
+       sum(gone, floated, AFTER).otHours, 2);
+  const sicked = { ...withBanks,
+    daysOff: [{ id: 's1', bank: 'sick', slot: 0, date: '2026-08-11', hours: 8 },
+              { id: 's2', bank: 'sick', slot: 0, date: '2026-08-12', hours: 8 }] };
+  near('two sick days do not, so it does not', sum(gone, sicked, AFTER).otHours, 0);
+
+  // Only the two rules that need it.
+  ['weekly', 'period'].forEach(function(mode){
+    const m = { ...c, otMode: mode, weeklyThreshold: 40, periodThreshold: 80 };
+    ok('under the ' + mode + ' rule the hole is already inherent, so nothing is settled twice',
+       JSON.stringify(sum(week(8), m, AFTER)) === JSON.stringify(sum(week(8), { ...m, makeUpOn: false }, AFTER)),
+       JSON.stringify(sum(week(8), m, AFTER)));
+  });
+
+  // The window is a setting.
+  const wk = { ...c, makeUpWindow: 'week', weekStartDay: 0 };
+  near('on a weekly window, last week\'s hole does not follow you into this one',
+       sum(week(8).concat([shift(16, 10)]), wk, on(17, 12)).otHours, 2);
+  near('on a pay-period window it does',
+       sum(week(8).concat([shift(16, 10)]), c, on(17, 12)).otHours, 0);
 }
 
 /* ------------------------------------------------------------------ */
