@@ -433,6 +433,19 @@
   .gappill{color:var(--muted);border:1px dashed var(--muted);border-radius:5px;
     padding:1px 5px;font-size:9.5px;letter-spacing:.8px;font-weight:800}
   tr.gaprowlog td{background:rgba(255,255,255,.03)}
+  /* approved leave — paid, and visibly not a shift */
+  .vaclbl{color:var(--acc2);font-size:10.5px;font-weight:800}
+  .vacpill{color:var(--acc2);border:1px solid var(--acc2);border-radius:5px;
+    padding:1px 5px;font-size:9.5px;letter-spacing:.8px;font-weight:800}
+  tr.vacrowlog td{background:rgba(183,140,255,.08)}
+  .calcell.vac{background:rgba(183,140,255,.16)}
+  .calcell.vac .dnum{color:var(--acc2);font-weight:800}
+  .calcell .vacdot{position:absolute;bottom:2px;right:3px;width:5px;height:5px;border-radius:50%;
+    background:var(--acc2);pointer-events:none;z-index:2}
+  .vaccfg{border:1px solid var(--border);border-radius:11px;padding:11px 13px;margin-bottom:9px;
+    display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+  .vaccfg .vwhen{font-weight:800}
+  .vaccfg .vsub{color:var(--muted);font-size:12.4px}
   .fmlarow{display:flex;justify-content:center;margin-top:10px}
   button.mini.fmla{border-color:var(--bad);color:var(--bad)}
   /* where each holiday stands, under the calendar */
@@ -1423,6 +1436,37 @@
         <button class="mini" id="cBankReset">↺ Back to the defaults</button>
       </div>
 
+      <div class="f" style="margin-top:18px"><label>Vacation</label>
+        <div class="note">A block of dates rather than days you spend one at a time. Every day
+        inside it that you were rostered for pays flat; days you were not rostered for pay
+        nothing, because a vacation does not invent shifts you never had. It shows on the
+        calendar and in the shift log, and you are never asked to make the hours up.</div>
+      </div>
+      <div id="cVacList"></div>
+      <div class="actions" style="justify-content:flex-start;margin-top:10px">
+        <button class="mini" id="cVacAdd">+ Add a vacation</button>
+      </div>
+      <div class="editor hide" id="vacEdit">
+        <div class="etitle" id="vacTitle">Add a vacation</div>
+        <div class="egrid">
+          <div class="f"><label for="vName">Name</label>
+            <input type="text" id="vName" maxlength="40" placeholder="Vacation"></div>
+          <div class="f"><label for="vFrom">First day off</label><input type="date" id="vFrom"></div>
+          <div class="f"><label for="vTo">Last day off</label><input type="date" id="vTo"></div>
+          <div class="f"><label for="vHours">Hours a day</label>
+            <input type="number" id="vHours" min="0.5" max="24" step="0.5" value="8"></div>
+          <div class="f"><label for="vOt">Counts toward OT</label>
+            <select id="vOt"><option value="0">No — flat hours</option>
+              <option value="1">Yes</option></select></div>
+        </div>
+        <div class="epreview" id="vPreview"></div>
+        <div class="eerr hide" id="vErr"></div>
+        <div class="eactions">
+          <button class="btn go" id="vSave">Save</button>
+          <button class="btn ghost" id="vCancel">Cancel</button>
+        </div>
+      </div>
+
       <div class="editor hide" id="holEdit">
         <div class="etitle" id="holTitle">Add a holiday</div>
         <div class="egrid">
@@ -1529,12 +1573,12 @@ var HOUR_MS = 3600000, DAY_MS = 86400000;
    threshold. Both live per holiday because contracts do not treat them all alike. */
 function HOLIDAY_DEFAULTS(){
   return [
-    { id: 'newyear', name: "New Year's Day",    rule: { kind: 'md',  month: 0,  day: 1 },            on: true, ot: true },
-    { id: 'memorial',name: 'Memorial Day',      rule: { kind: 'nth', month: 4,  dow: 1, n: -1 },     on: true, ot: true },
-    { id: 'july4',   name: 'Independence Day',  rule: { kind: 'md',  month: 6,  day: 4 },            on: true, ot: true },
-    { id: 'labor',   name: 'Labor Day',         rule: { kind: 'nth', month: 8,  dow: 1, n: 1 },      on: true, ot: true },
-    { id: 'thanks',  name: 'Thanksgiving Day',  rule: { kind: 'nth', month: 10, dow: 4, n: 4 },      on: true, ot: true },
-    { id: 'xmas',    name: 'Christmas Day',     rule: { kind: 'md',  month: 11, day: 25 },           on: true, ot: true }
+    { id: 'newyear', name: "New Year's Day",    rule: { kind: 'md',  month: 0,  day: 1 },            on: true, ot: false , makeUp: false },
+    { id: 'memorial',name: 'Memorial Day',      rule: { kind: 'nth', month: 4,  dow: 1, n: -1 },     on: true, ot: false , makeUp: false },
+    { id: 'july4',   name: 'Independence Day',  rule: { kind: 'md',  month: 6,  day: 4 },            on: true, ot: false , makeUp: false },
+    { id: 'labor',   name: 'Labor Day',         rule: { kind: 'nth', month: 8,  dow: 1, n: 1 },      on: true, ot: false , makeUp: false },
+    { id: 'thanks',  name: 'Thanksgiving Day',  rule: { kind: 'nth', month: 10, dow: 4, n: 4 },      on: true, ot: false , makeUp: false },
+    { id: 'xmas',    name: 'Christmas Day',     rule: { kind: 'md',  month: 11, day: 25 },           on: true, ot: false , makeUp: false }
   ];
 }
 
@@ -1543,9 +1587,12 @@ function HOLIDAY_DEFAULTS(){
    slots — sick days — is a plain count. */
 function BANK_DEFAULTS(){
   return [
-    { id: 'float', name: 'Floating holiday', count: 4, hours: 8, ot: true,
-      slots: ['Birthday', 'Anniversary', 'MLK Day', 'Extra floater'] },
-    { id: 'sick',  name: 'Sick day',        count: 5, hours: 8, ot: false, slots: [] }
+    { id: 'float', name: 'Floating holiday', count: 3, hours: 8, ot: true,  makeUp: false,
+      slots: ['MLK Day', 'Birthday', 'Anniversary'] },
+    { id: 'sick',  name: 'Sick day',        count: 5, hours: 8, ot: false, makeUp: true,  slots: [] },
+    /* Vacation random days: a block of vacation you split up however you like, paid flat.
+       Approved time off, so unlike a sick day it leaves you owing nothing. */
+    { id: 'vrd',   name: 'Vacation random day', count: 5, hours: 8, ot: false, makeUp: false, slots: [] }
   ];
 }
 
@@ -1578,6 +1625,7 @@ var DEFAULTS = {
      are facts you entered rather than gaps the app inferred. */
   makeUpOn: false,
   makeUpWindow: 'period',    // the hole resets each pay period; 'week' resets each week
+  vacations: [],             // blocks of approved leave: {id, name, from, to, hours, ot}
   schedStart: '09:00',       // the scheduled shift, for working out extra time
   schedEnd: '17:00',
   /* Which days of the week you are rostered for, Sunday first. Holiday eligibility is
@@ -1783,7 +1831,8 @@ function buildLedger(sessions, cfg, nowMs){
      bar cannot disagree about whether a holiday counted — there is one answer, computed
      from the same shifts every caller already passed in. Eligibility is a fact about
      those shifts, so this stays pure and the tests stay honest. */
-  var withHols = sessions.concat(holidayCredits(sessions, cfg), bankCredits(cfg));
+  var withHols = sessions.concat(holidayCredits(sessions, cfg), bankCredits(cfg),
+                                 vacationCredits(cfg));
   var sorted = withHols.filter(function(s){ return s.end > s.start; })
                        .slice().sort(function(a,b){ return a.start - b.start; });
   for (var i = 0; i < sorted.length; i++){
@@ -2264,7 +2313,7 @@ function holidayCredits(sessions, cfg, nowMs){
     holidaysInYear(cfg, y).forEach(function(h){
       if (!holidayEligibility(h, sessions, cfg, nowMs).paid) return;
       out.push({ id: '__hol:' + h.key, start: h.ms, end: h.ms + hours * HOUR_MS,
-                 holiday: h.name, holidayId: h.id,
+                 holiday: h.name, holidayId: h.id, owed: bankOwes({ ot: h.ot, makeUp: h.makeUp }),
                  adj: h.ot === false ? { noOt: true, noLunch: true }
                                      : { straight: true, noLunch: true } });
     });
@@ -2349,10 +2398,64 @@ function bankCredits(cfg){
     var day = ymd(d.date);
     if (isNaN(+day)) return;
     out.push({ id: '__off:' + d.id, start: +day, end: +day + hours * HOUR_MS,
-               dayOff: dayOffName(cfg, d), bank: b.id, dayOffId: d.id,
+               dayOff: dayOffName(cfg, d), bank: b.id, dayOffId: d.id, owed: bankOwes(b),
                adj: b.ot ? { straight: true, noLunch: true } : { noOt: true, noLunch: true } });
   });
   return out;
+}
+/* Two separate questions, and conflating them was wrong.
+
+     ot      do these hours push you toward the overtime threshold?
+     makeUp  having taken one, do you still owe your schedule those hours?
+
+   A sick day answers no and yes: it pays, it earns no overtime credit, and under a
+   make-up rule you work it back. Approved time off — a floater, a vacation day, a
+   holiday — answers no to the second whatever it answers to the first: nobody expected
+   you in. Reading the second off the first would have put someone two weeks in the hole
+   for going on holiday.
+
+   Left unset, makeUp follows ot, which is how allowances behaved before the two were
+   told apart — so a stored config keeps the meaning it was saved with. */
+function bankOwes(b){ return b && b.makeUp == null ? !b.ot : !!(b && b.makeUp); }
+
+/* ---- vacation ----
+   A block of dates rather than days you spend one at a time. Every scheduled day inside it
+   pays flat; the days you were not rostered for pay nothing, because a vacation does not
+   invent shifts you never had. Always excused — being on approved leave is the clearest
+   case there is of not owing anyone the hours. */
+function vacationCredits(cfg){
+  var out = [];
+  (cfg.vacations || []).forEach(function(v){
+    var from = ymd(v.from), to = ymd(v.to);
+    if (isNaN(+from) || isNaN(+to) || +to < +from) return;
+    var hours = v.hours == null ? 8 : v.hours;
+    if (!(hours > 0)) return;
+    var d = midnight(+from), guard = 0;
+    while (+d <= +to && guard++ < 400){
+      if (isWorkDay(cfg, d.getDay())){
+        out.push({ id: '__vac:' + v.id + ':' + dkey(d.getFullYear(), d.getMonth(), d.getDate()),
+                   start: +d, end: +d + hours * HOUR_MS,
+                   vacation: v.name || 'Vacation', vacationId: v.id, owed: false,
+                   adj: v.ot ? { straight: true, noLunch: true } : { noOt: true, noLunch: true } });
+      }
+      d = addDays(d, 1);
+    }
+  });
+  return out;
+}
+/* Which vacation, if any, covers a date — for the calendar and the shift log. */
+function vacationOn(cfg, dayMs){
+  var key = dkey(new Date(dayMs).getFullYear(), new Date(dayMs).getMonth(), new Date(dayMs).getDate());
+  var hit = null;
+  (cfg.vacations || []).forEach(function(v){
+    if (key >= String(v.from) && key <= String(v.to)) hit = v;
+  });
+  return hit;
+}
+function vacationDays(cfg, v){
+  var n = 0;
+  vacationCredits({ vacations: [v], workDays: cfg.workDays }).forEach(function(){ n++; });
+  return n;
 }
 /* Every spent day in a year with what it cost the balance and what it paid. */
 function daysOffOutlook(cfg, year){
@@ -2444,13 +2547,13 @@ function scheduleGaps(sessions, cfg, absences, fromMs, toMs, nowMs){
   holidayCredits(sessions, cfg).forEach(function(h){
     var d = +midnight(h.start);
     var hrs = (h.end - h.start) / HOUR_MS;
-    if (h.adj && h.adj.noOt) other[d] = (other[d] || 0) + hrs; else credit[d] = (credit[d] || 0) + hrs;
+    if (h.owed) other[d] = (other[d] || 0) + hrs; else credit[d] = (credit[d] || 0) + hrs;
     hol[d] = true;
   });
-  bankCredits(cfg).forEach(function(o){
+  bankCredits(cfg).concat(vacationCredits(cfg)).forEach(function(o){
     var d = +midnight(o.start);
     var hrs = (o.end - o.start) / HOUR_MS;
-    if (o.adj && o.adj.noOt) other[d] = (other[d] || 0) + hrs; else credit[d] = (credit[d] || 0) + hrs;
+    if (o.owed) other[d] = (other[d] || 0) + hrs; else credit[d] = (credit[d] || 0) + hrs;
   });
   var d = midnight(fromMs);
   while (+d < toMs){
@@ -2495,12 +2598,14 @@ function makeUpBalance(sessions, cfg, fromMs, toMs, nowMs){
     if (day < fromMs || day >= toMs) return;
     paidSpans(s, cfg).forEach(function(sp){ worked += (sp.end - sp.start) / HOUR_MS; });
   });
-  // Only credit that counts toward overtime fills a schedule. A floater does; a sick day
-  // does not, which is why taking one still leaves you to work it back.
-  holidayCredits(sessions, cfg).concat(bankCredits(cfg)).forEach(function(h){
+  /* Credit fills a schedule unless taking it still leaves you owing the hours. A sick day
+     does; a floater, a vacation day and a holiday do not — see bankOwes. Note this is not
+     the overtime flag: a holiday pays flat and earns no overtime credit, yet nobody expects
+     you in on Christmas. */
+  holidayCredits(sessions, cfg).concat(bankCredits(cfg), vacationCredits(cfg)).forEach(function(h){
     var day = +midnight(h.start);
     if (day < fromMs || day >= toMs) return;
-    if (h.adj && h.adj.noOt) return;
+    if (h.owed) return;
     credit += (h.end - h.start) / HOUR_MS;
   });
   var d = midnight(fromMs);
@@ -3133,12 +3238,95 @@ function renderBankCfg(){
       + '<div class="f"><label>Counts toward OT</label>'
       + '<select data-bf="ot" data-b="' + i + '"><option value="1"' + (b.ot ? ' selected' : '') + '>Yes</option>'
       + '<option value="0"' + (b.ot ? '' : ' selected') + '>No</option></select></div>'
+      /* Separate from the overtime question on purpose — a sick day earns no overtime credit
+         AND leaves you owing the hours, while a vacation day earns none and owes nothing. */
+      + '<div class="f"><label>Still owe the hours</label>'
+      + '<select data-bf="makeUp" data-b="' + i + '"><option value="1"' + (bankOwes(b) ? ' selected' : '') + '>Yes</option>'
+      + '<option value="0"' + (bankOwes(b) ? '' : ' selected') + '>No</option></select></div>'
       + '</div>'
       + '<div class="slotwrap"><label class="swrap"><input type="checkbox" data-bnamed="' + i + '"'
       + (named ? ' checked' : '') + '> Name each one</label>'
       + (named ? '<div class="slots">' + slots + '</div>' : '') + '</div>'
       + '</div>';
   }).join('') : '<div class="holnone">No allowances. Add one, or put the defaults back.</div>';
+}
+
+/* ---- vacation blocks ---- */
+var vacEditing = null;
+function renderVacList(){
+  var vs = (state.cfg.vacations || []).slice().sort(function(a, b){
+    return String(a.from) < String(b.from) ? -1 : 1;
+  });
+  el('cVacList').innerHTML = vs.length ? vs.map(function(v){
+    var days = vacationDays(state.cfg, v), hours = (v.hours == null ? 8 : v.hours) * days;
+    return '<div class="vaccfg"><div>'
+      + '<div class="vwhen">' + esc(v.name || 'Vacation') + '</div>'
+      + '<div class="vsub">' + fdateY(ymd(v.from)) + ' – ' + fdateY(ymd(v.to)) + ' · '
+      + days + ' rostered day' + (days === 1 ? '' : 's') + ' · ' + hours.toFixed(2) + ' h'
+      + (v.ot ? '' : ' · flat, no OT credit') + '</div></div>'
+      + '<div><button class="mini" data-vedit="' + esc(v.id) + '">✎</button> '
+      + '<button class="mini danger" data-vdel="' + esc(v.id) + '">✕</button></div></div>';
+  }).join('') : '<div class="holnone">No vacation booked.</div>';
+}
+function openVacation(id){
+  vacEditing = id || null;
+  var v = id ? (state.cfg.vacations || []).filter(function(x){ return x.id === id; })[0] : null;
+  el('vacTitle').textContent = v ? 'Edit this vacation' : 'Add a vacation';
+  el('vName').value = v ? (v.name || '') : '';
+  el('vFrom').value = v ? v.from : dateValue(Date.now());
+  el('vTo').value = v ? v.to : dateValue(+addDays(Date.now(), 13));
+  el('vHours').value = v ? (v.hours == null ? 8 : v.hours) : 8;
+  el('vOt').value = v && v.ot ? '1' : '0';
+  show('vacEdit', true); show('vErr', false);
+  previewVacation();
+}
+function closeVacation(){ vacEditing = null; show('vacEdit', false); }
+function previewVacation(){
+  var box = el('vPreview'), from = el('vFrom').value, to = el('vTo').value;
+  var h = parseFloat(el('vHours').value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || !isFinite(h) || h <= 0){
+    box.innerHTML = '<span style="opacity:.6">Pick the first and last day you are off.</span>';
+    return;
+  }
+  if (+ymd(to) < +ymd(from)){
+    box.innerHTML = '<span style="opacity:.6">The last day is before the first.</span>';
+    return;
+  }
+  var v = { id: 'preview', from: from, to: to, hours: h };
+  var days = vacationDays(state.cfg, v);
+  var back = addDays(ymd(to), 1);
+  while (!isWorkDay(state.cfg, back.getDay())) back = addDays(back, 1);
+  box.innerHTML = days
+    ? '<b>' + days + ' rostered day' + (days === 1 ? '' : 's') + '</b> inside it · '
+      + '<b>' + (days * h).toFixed(2) + ' h</b> · <span class="pay">' + money(days * h * state.cfg.rate) + '</span>'
+      + '<br><span style="opacity:.7">Back on ' + fdate(back) + '.</span>'
+    : '<span style="opacity:.6">None of those days are ones you are rostered for, so nothing would pay.</span>';
+}
+function saveVacation(){
+  var from = el('vFrom').value, to = el('vTo').value, h = parseFloat(el('vHours').value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)){
+    el('vErr').textContent = 'Pick the first and last day you are off.'; show('vErr', true); return;
+  }
+  if (+ymd(to) < +ymd(from)){
+    el('vErr').textContent = 'The last day cannot be before the first.'; show('vErr', true); return;
+  }
+  if (!isFinite(h) || h <= 0 || h > 24){
+    el('vErr').textContent = 'Hours a day has to be between 0 and 24.'; show('vErr', true); return;
+  }
+  if (daysBetween(ymd(from), ymd(to)) > 365){
+    el('vErr').textContent = 'That is more than a year — book it in shorter blocks.'; show('vErr', true); return;
+  }
+  var rec = { name: el('vName').value.slice(0, 40) || 'Vacation', from: from, to: to,
+              hours: Math.round(h * 100) / 100, ot: el('vOt').value === '1' };
+  if (!state.cfg.vacations) state.cfg.vacations = [];
+  if (vacEditing){
+    state.cfg.vacations.forEach(function(v){ if (v.id === vacEditing) Object.assign(v, rec); });
+  } else {
+    state.cfg.vacations.push(Object.assign({ id: uid() }, rec));
+  }
+  save(); closeVacation(); syncControls();
+  lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+  toast(rec.name + ' booked.');
 }
 
 function renderHolidayList(){
@@ -4093,6 +4281,10 @@ function renderLog(ledger, period, active, now){
   bankCredits(state.cfg).forEach(function(o){
     if (o.end > period.startMs && o.start < period.endMs) rows.push(Object.assign({}, o, { off: true }));
   });
+  // Vacation the same way — paid, so already in the total, and listed so the total reads.
+  vacationCredits(state.cfg).forEach(function(v){
+    if (v.end > period.startMs && v.start < period.endMs) rows.push(Object.assign({}, v, { vac: true }));
+  });
   /* Time you were scheduled for and did not work. It pays nothing, so it is not in the
      footer — but a period where you missed two days should not look identical to one where
      you worked them. */
@@ -4140,9 +4332,9 @@ function renderLog(ledger, period, active, now){
     /* A holiday is not a shift: it has no clock times, and it cannot be edited or deleted
        from here — it is earned by the shifts either side of it, and those are the rows to
        change. So it carries no data-row and drops out of pick mode entirely. */
-    var synth = s.hol || s.off || s.abs || s.gap;
+    var synth = s.hol || s.off || s.abs || s.gap || s.vac;
     html += '<tr' + (synth ? ' class="' + (s.hol ? 'holrowlog' : s.abs ? 'absrowlog'
-                                         : s.gap ? 'gaprowlog' : 'offrowlog') + '"'
+                                         : s.gap ? 'gaprowlog' : s.vac ? 'vacrowlog' : 'offrowlog') + '"'
       : ' data-row="' + s.id + '" class="'
       + (t.otHours > 0.0001 ? 'otrow ' : '') + (s.live ? 'live' : '') + (asking ? ' pending' : '') + '"') + '>'
       /* The day the shift IS, not the date it began on — a 10 PM Sunday start reads Mon,
@@ -4156,11 +4348,13 @@ function renderLog(ledger, period, active, now){
       + (s.abs ? ' <span class="abslbl">· ' + esc(s.absKind)
                  + (s.note ? ' · ' + esc(s.note) : '') + '</span>' : '')
       + (s.gap ? ' <span class="gaplbl">· scheduled ' + s.gapHours.toFixed(2) + ' h, nothing logged</span>' : '')
+      + (s.vac ? ' <span class="vaclbl">· ' + esc(s.vacation) + '</span>' : '')
       + (!synth && s.adj ? ' <span style="opacity:.65;font-size:10.5px">· ' + (s.adj.noOt ? 'PTO' : s.adj.mult ? '×' + s.adj.mult : s.adj.diff ? '+$' + s.adj.diff + '/h' : 'no lunch') + '</span>' : '')
       + '</td><td class="c-in">' + (s.hol ? '<span class="holpill">HOLIDAY</span>'
           : s.off ? '<span class="offpill">DAY OFF</span>'
           : s.abs ? '<span class="abspill">' + esc(s.absKind.toUpperCase()) + '</span>'
-          : s.gap ? '<span class="gappill">MISSING</span>' : ptime(s.start)) + '</td>'
+          : s.gap ? '<span class="gappill">MISSING</span>'
+          : s.vac ? '<span class="vacpill">VACATION</span>' : ptime(s.start)) + '</td>'
       + '<td class="c-out">' + (synth ? '' : s.live ? '<span class="running">running</span>' : ptime(s.end)) + '</td>'
       + '<td class="num c-hours">'
       + (s.abs ? '<span class="absh">−' + s.absHours.toFixed(2) + '</span>'
@@ -4707,6 +4901,12 @@ function buildMonth(y, m){
   holidaysInYear(cfg, y).forEach(function(h){ hols[h.key] = h; });
   var offs = {};
   (cfg.daysOff || []).forEach(function(d){ offs[d.date] = dayOffName(cfg, d); });
+  // Every rostered day inside a vacation block, so the calendar shows the shape of it.
+  var vacs = {};
+  vacationCredits(cfg).forEach(function(v){
+    var d = new Date(v.start);
+    vacs[dkey(d.getFullYear(), d.getMonth(), d.getDate())] = v.vacation;
+  });
 
   var cells = '';
   for (var p = 0; p < lead; p++) cells += '<div class="calcell pad"></div>';
@@ -4714,13 +4914,15 @@ function buildMonth(y, m){
     var k = dkey(y, m, d);
     var per = periodInfo(+new Date(y, m, d), cfg);
     var isStart = +per.start === +new Date(y, m, d);
-    var hol = hols[k], off = offs[k];
+    var hol = hols[k], off = offs[k], vac = vacs[k];
     cells += '<div class="calcell' + (k === todayKey ? ' today' : '') + (isStart ? ' pstart' : '')
-      + (hol ? ' hol' : '') + (off ? ' off' : '') + '" data-d="' + k + '"'
+      + (hol ? ' hol' : '') + (off ? ' off' : '') + (vac ? ' vac' : '') + '" data-d="' + k + '"'
       + (hol ? ' data-hol="' + esc(hol.name) + '"' : '')
+      + (vac ? ' data-vac="' + esc(vac) + '"' : '')
       + (off ? ' data-off="' + esc(off) + '"' : '') + '>'
       + (hol ? '<span class="holdot"></span>' : '')
       + (off ? '<span class="offdot"></span>' : '')
+      + (vac ? '<span class="vacdot"></span>' : '')
       + '<span class="dnum">' + d + '</span>'
       + '<input type="number" min="0" max="24" step="0.25" inputmode="decimal" data-d="' + k + '"'
       + ' value="' + (cc.hours[k] || '') + '" aria-label="Hours worked ' + k + '">'
@@ -5704,7 +5906,10 @@ document.getElementById('cBankList').addEventListener('change', function(e){
     t.value = b.hours;
   }
   if (f === 'ot') b.ot = t.value === '1';
-  save(); renderBankCfg(); renderBanks(); render();
+  /* Written explicitly the moment it is touched, so it stops following the overtime flag
+     and starts meaning what you set it to. */
+  if (f === 'makeUp') b.makeUp = t.value === '1';
+  save(); renderBankCfg(); renderBanks(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
 });
 document.getElementById('cBankList').addEventListener('click', function(e){
   var b = e.target.closest('button[data-bdel]'); if (!b) return;
@@ -5718,6 +5923,22 @@ document.getElementById('cBankList').addEventListener('click', function(e){
   save(); renderBankCfg(); renderBanks(); drawCal(true); render();
   toast('Removed ' + bank.name + (spent ? ' and the ' + spent + ' day' + (spent === 1 ? '' : 's')
         + ' booked from it.' : '.'));
+});
+document.getElementById('cVacAdd').onclick = function(){ openVacation(null); };
+document.getElementById('vSave').onclick = saveVacation;
+document.getElementById('vCancel').onclick = closeVacation;
+['vName', 'vFrom', 'vTo', 'vHours', 'vOt'].forEach(function(id){
+  document.getElementById(id).addEventListener('input', previewVacation);
+  document.getElementById(id).addEventListener('change', previewVacation);
+});
+document.getElementById('cVacList').addEventListener('click', function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.vedit) openVacation(b.dataset.vedit);
+  if (b.dataset.vdel){
+    state.cfg.vacations = (state.cfg.vacations || []).filter(function(v){ return v.id !== b.dataset.vdel; });
+    save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+    toast('Vacation removed.');
+  }
 });
 document.getElementById('cBankAdd').onclick = function(){
   state.cfg.banks = state.cfg.banks || [];
@@ -6325,6 +6546,7 @@ function syncControls(){
   renderWorkDays();
   renderHolidayList();
   renderBankCfg();
+  renderVacList();
   renderBanks();
   document.getElementById('autoOn').checked = !!state.autoOn;
   var aA = document.getElementById('autoAt');

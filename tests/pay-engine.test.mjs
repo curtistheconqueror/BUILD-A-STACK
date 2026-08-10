@@ -36,7 +36,8 @@ const E = new Function(m[1] + `
            payMonths, currentPayMonth, shiftDayMs, toMinute,
            skewMs, shopTime, phoneTime, shopSession,
            ABSENCE_KINDS, absenceKindName, schedHoursOn, schedEndMs, absenceHoursOn,
-           workedPaidOn, scheduleGaps, makeUpOwed, makeUpBalance, applyMakeUp };
+           workedPaidOn, scheduleGaps, makeUpOwed, makeUpBalance, applyMakeUp,
+           bankOwes, vacationCredits, vacationOn, vacationDays };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -348,7 +349,10 @@ group('Robustness');
 /* ---------------- holiday pay ---------------- */
 {
   // $38/hr, weekly 40 h overtime, Sunday-start weeks, Curtis's Sun-Thu roster.
+  /* These cover a holiday that accrues toward overtime — still a supported arrangement,
+     just no longer the default, so the flag is set here rather than assumed. */
   const hcfg = { ...E.DEFAULTS, rate: 38, periodAnchor: '2026-11-22',
+                 holidays: E.HOLIDAY_DEFAULTS().map(h => ({ ...h, ot: true })),
                  workDays: [true, true, true, true, true, false, false] };
   const at = (y, mo, d, h) => new Date(y, mo, d, h).getTime();
   const sh = (id, mo, d, from, to) => ({ id, start: at(2026, mo, d, from), end: at(2026, mo, d, to) });
@@ -476,29 +480,29 @@ group('Robustness');
 /* ---------------- floaters and sick days ---------------- */
 {
   const B = E.BANK_DEFAULTS();
-  ok('two banks ship', B.length === 2, B.length);
+  ok('three banks ship', B.length === 3, B.length);
   const fl = E.bankById({ banks: B }, 'float'), sk = E.bankById({ banks: B }, 'sick');
-  ok('four floaters',  fl.count === 4, fl.count);
+  ok('three floaters', fl.count === 3, fl.count);
   ok('five sick days', sk.count === 5, sk.count);
   ok('both worth 8 h', fl.hours === 8 && sk.hours === 8);
   ok('floaters count toward overtime', fl.ot === true);
   ok('sick days do not',               sk.ot === false);
   ok('the floater slots are named',
-     JSON.stringify(fl.slots) === JSON.stringify(['Birthday','Anniversary','MLK Day','Extra floater']),
+     JSON.stringify(fl.slots) === JSON.stringify(['MLK Day','Birthday','Anniversary']),
      JSON.stringify(fl.slots));
 
   const cfg3 = { ...E.DEFAULTS, rate: 38, periodAnchor: '2026-01-04', banks: B,
                  workDays: [true,true,true,true,true,false,false], daysOff: [] };
 
-  ok('a fresh year has all four floaters', E.bankLeft(cfg3, 'float', 2026) === 4);
+  ok('a fresh year has all three floaters', E.bankLeft(cfg3, 'float', 2026) === 3);
   ok('and all five sick days',             E.bankLeft(cfg3, 'sick',  2026) === 5);
 
   // Spend the MLK floater on MLK day 2026 (Mon Jan 19) and a sick day in March.
   const spent = { ...cfg3, daysOff: [
-    { id: 'a', bank: 'float', slot: 2, date: '2026-01-19' },
+    { id: 'a', bank: 'float', slot: 0, date: '2026-01-19' },
     { id: 'b', bank: 'sick',  slot: null, date: '2026-03-10' }
   ]};
-  ok('spending a floater leaves three', E.bankLeft(spent, 'float', 2026) === 3, E.bankLeft(spent, 'float', 2026));
+  ok('spending a floater leaves two', E.bankLeft(spent, 'float', 2026) === 2, E.bankLeft(spent, 'float', 2026));
   ok('spending a sick day leaves four', E.bankLeft(spent, 'sick',  2026) === 4, E.bankLeft(spent, 'sick', 2026));
   ok('and it is named by its slot', E.dayOffName(spent, spent.daysOff[0]) === 'MLK Day',
      E.dayOffName(spent, spent.daysOff[0]));
@@ -506,13 +510,13 @@ group('Robustness');
      E.dayOffName(spent, spent.daysOff[1]) === 'Sick day', E.dayOffName(spent, spent.daysOff[1]));
 
   const slots = E.bankSlots(spent, 'float', 2026);
-  ok('four slots are reported', slots.length === 4);
-  ok('MLK Day shows as taken', slots[2].used && slots[2].used.date === '2026-01-19');
-  ok('the birthday is still free', slots[0].name === 'Birthday' && !slots[0].used);
+  ok('three slots are reported', slots.length === 3);
+  ok('MLK Day shows as taken', slots[0].used && slots[0].used.date === '2026-01-19');
+  ok('the birthday is still free', slots[1].name === 'Birthday' && !slots[1].used);
 
   // Allowances run by calendar year, so next year starts full without anything being cleared.
-  ok('next year is full again', E.bankLeft(spent, 'float', 2027) === 4);
-  ok('and last year is too',    E.bankLeft(spent, 'float', 2025) === 4);
+  ok('next year is full again', E.bankLeft(spent, 'float', 2027) === 3);
+  ok('and last year is too',    E.bankLeft(spent, 'float', 2025) === 3);
   ok('the used list is per year', E.daysOffUsed(spent, 'float', 2026).length === 1 &&
                                   E.daysOffUsed(spent, 'float', 2027).length === 0);
 
@@ -1388,6 +1392,92 @@ group('Robustness');
        sum(week(8).concat([shift(16, 10)]), wk, on(17, 12)).otHours, 2);
   near('on a pay-period window it does',
        sum(week(8).concat([shift(16, 10)]), c, on(17, 12)).otHours, 0);
+}
+
+/* ---------------- holidays, allowances and vacation, as the contract reads ------------- */
+{
+  const c = { ...E.DEFAULTS, rate: 38, otMultiplier: 1.5, otMode: 'shift', shiftThreshold: 8,
+              lunchMins: 30, schedStart: '14:00', schedEnd: '22:30',
+              workDays: [true, true, true, true, true, false, false],
+              periodAnchor: '2026-08-09', periodLengthDays: 14 };
+  const on = (d, h = 0) => +new Date(2026, 7, d, h);
+
+  // The six pay flat and earn no overtime credit.
+  ok('all six holidays are off the overtime clock',
+     E.HOLIDAY_DEFAULTS().every(h => h.ot === false),
+     JSON.stringify(E.HOLIDAY_DEFAULTS().map(h => h.ot)));
+  ok('and none of them has to be made up',
+     E.HOLIDAY_DEFAULTS().every(h => E.bankOwes({ ot: h.ot, makeUp: h.makeUp }) === false));
+
+  // Three floaters, five sick, five VRDs.
+  const B = E.BANK_DEFAULTS();
+  ok('three floaters', B[0].count === 3, String(B[0].count));
+  ok('named MLK, Birthday and Anniversary',
+     JSON.stringify(B[0].slots) === JSON.stringify(['MLK Day', 'Birthday', 'Anniversary']),
+     JSON.stringify(B[0].slots));
+  ok('five sick days', B[1].count === 5, String(B[1].count));
+  ok('and five vacation random days', B[2].id === 'vrd' && B[2].count === 5, JSON.stringify(B[2]));
+  ok('a floater earns overtime credit', B[0].ot === true);
+  ok('a sick day does not, and is owed back', B[1].ot === false && E.bankOwes(B[1]) === true);
+  ok('a VRD earns none but is owed nothing', B[2].ot === false && E.bankOwes(B[2]) === false);
+  ok('an allowance saved before the two were told apart keeps its old meaning',
+     E.bankOwes({ ot: false }) === true && E.bankOwes({ ot: true }) === false);
+
+  /* Working a holiday: the flat eight is paid on top, and only the hours you actually
+     worked push you toward overtime. Christmas 2026 is a Friday, which is not rostered,
+     so use Thanksgiving — Thursday Nov 26. */
+  const hc = { ...c, holidays: E.HOLIDAY_DEFAULTS(), banks: [], daysOff: [], vacations: [],
+               holidayNeedsAdjacent: false, periodAnchor: '2026-11-22' };
+  const nov = (d, h, len) => ({ id: 'n' + d, start: +new Date(2026, 10, d, h),
+                                end: +new Date(2026, 10, d, h) + len * 3600000 });
+  const worked = E.buildLedger([nov(26, 14, 10.5)], hc, +new Date(2026, 10, 30));
+  const tot = E.sumRange(worked.parts, +new Date(2026, 10, 22), +new Date(2026, 11, 6));
+  near('ten paid hours worked on the holiday, plus eight flat', tot.hours, 18);
+  near('the eight flat hours earn no overtime', tot.otHours, 2);
+  near('so it pays 16 straight and 2 at time and a half', tot.gross, 16 * 38 + 2 * 57);
+
+  /* Vacation: Sept 20 through Oct 3, back on the 4th. Ten rostered days inside it. */
+  const vc = { ...c, holidays: [], banks: [], daysOff: [],
+               vacations: [{ id: 'v1', name: 'Vacation', from: '2026-09-20', to: '2026-10-03', hours: 8 }] };
+  const cred = E.vacationCredits(vc);
+  near('ten rostered days are credited', cred.length, 10);
+  near('at eight hours each', cred.reduce((a, v) => a + (v.end - v.start) / E.HOUR_MS, 0), 80);
+  ok('starting Sunday Sep 20', new Date(cred[0].start).toDateString() === 'Sun Sep 20 2026',
+     new Date(cred[0].start).toDateString());
+  ok('and ending Thursday Oct 1 — the Friday and Saturday are not rostered',
+     new Date(cred[cred.length - 1].start).toDateString() === 'Thu Oct 01 2026',
+     new Date(cred[cred.length - 1].start).toDateString());
+  ok('every one of them is flat, earning no overtime credit',
+     cred.every(v => v.adj.noOt === true));
+  ok('and none is owed back', cred.every(v => v.owed === false));
+  ok('a date inside the block is recognised', !!E.vacationOn(vc, +new Date(2026, 8, 24)));
+  ok('and one after it is not', !E.vacationOn(vc, +new Date(2026, 9, 4)));
+
+  /* The point of telling the two flags apart: a fortnight off must not read as eighty
+     hours in the hole. */
+  const mk = { ...vc, makeUpOn: true, makeUpWindow: 'period', periodAnchor: '2026-09-20' };
+  near('two weeks of vacation leaves you owing nothing',
+       E.makeUpOwed([], mk, [], +new Date(2026, 8, 20), +new Date(2026, 9, 4), +new Date(2026, 9, 4)), 0);
+  const sickCfg = { ...c, holidays: [], vacations: [], makeUpOn: true, makeUpWindow: 'period',
+                    periodAnchor: '2026-09-20',
+                    banks: [{ id: 'sick', name: 'Sick day', count: 5, hours: 8, ot: false, makeUp: true, slots: [] }],
+                    daysOff: [{ id: 'd1', bank: 'sick', slot: 0, date: '2026-09-21', hours: 8 }] };
+  near('but a sick day still is',
+       E.makeUpOwed([{ id: 'a', start: +new Date(2026, 8, 20, 14), end: +new Date(2026, 8, 20, 22, 30) }],
+                    sickCfg, [], +new Date(2026, 8, 20), +new Date(2026, 9, 4), +new Date(2026, 8, 22, 12)), 8);
+
+  // Vacation pays.
+  const vpay = E.sumRange(E.buildLedger([], vc, +new Date(2026, 9, 4)).parts,
+                          +new Date(2026, 8, 20), +new Date(2026, 9, 4));
+  near('a fortnight off pays eighty flat hours', vpay.hours, 80);
+  near('none of it overtime',                    vpay.otHours, 0);
+  near('worth two normal weeks',                 vpay.gross, 80 * 38);
+
+  // Days you were not rostered for pay nothing, even mid-block.
+  const oneWeek = { ...c, holidays: [], banks: [], daysOff: [],
+                    vacations: [{ id: 'v2', from: '2026-08-14', to: '2026-08-15', hours: 8 }] };
+  near('a Friday-and-Saturday vacation credits nothing', E.vacationCredits(oneWeek).length, 0);
+  near('and vacationDays says so too', E.vacationDays(oneWeek, oneWeek.vacations[0]), 0);
 }
 
 /* ------------------------------------------------------------------ */
