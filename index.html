@@ -295,10 +295,13 @@
   .swrap input{accent-color:var(--acc);width:16px;height:16px;cursor:pointer}
   .eta{color:var(--acc);font-weight:700}
   /* which days auto clock-in is allowed to fire on — only shown once it is switched on */
-  .autodays{display:flex;align-items:center;justify-content:center;gap:5px;flex-wrap:wrap;margin-top:10px}
-  .autodays .adlbl{color:var(--muted);font-size:12.4px;margin-right:2px}
-  .autodays button{background:var(--card2);border:1px solid var(--border);color:var(--muted);
-    border-radius:8px;padding:6px 9px;font:inherit;font-size:12.4px;font-weight:700;cursor:pointer;
+  .autodays{display:flex;align-items:stretch;gap:5px;flex-wrap:nowrap;margin-top:10px}
+  .autodays .adlbl{color:var(--muted);font-size:12.4px;margin-right:2px;align-self:center;flex:none}
+  /* Equal shares of whatever room there is, rather than seven fixed widths that wrap into a
+     ragged second row on a narrow phone. */
+  .autodays button{flex:1 1 0;min-width:0;text-align:center;
+    background:var(--card2);border:1px solid var(--border);color:var(--muted);
+    border-radius:8px;padding:6px 4px;font:inherit;font-size:12.4px;font-weight:700;cursor:pointer;
     -webkit-tap-highlight-color:transparent}
   .autodays button.on{border-color:var(--acc);color:var(--acc);background:rgba(53,208,224,.12)}
   /* the editable holiday list */
@@ -624,7 +627,7 @@
     /* The day-of-week pickers — your roster in Settings and at setup, and the auto clock-in
        days. Seven small targets in a row is the worst case for a thumb, and these were the
        only controls in the app still under the minimum. */
-    .autodays button{min-height:44px;min-width:44px}
+    .autodays button{min-height:44px}
     /* The smaller .btn variants sit a few pixels under a finger-sized target on their own.
        They used to reach 44 only by being stretched to the height of a taller button beside
        them, which is not a guarantee — change what shares the row and the target shrinks. */
@@ -847,7 +850,7 @@
     </div>
     <div class="confirm hide" id="autoConfirm" style="border-color:var(--acc)">
       <span id="autoTxt"></span>
-      <button class="mini" id="autoUndo">↩ Undo — I wasn't working</button>
+      <button class="mini" id="autoUndo">↩ Undo shift for today (not working)</button>
     </div>
     <!-- Shown only once the calendar has moved past the year the tax tables are for, and
          only if net pay is switched on — a wrong take-home is worse than no take-home. -->
