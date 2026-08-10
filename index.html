@@ -5701,7 +5701,8 @@ function download(name, text, type){
 function backup(){
   var payload = JSON.stringify({
     app: 'pay-clock', version: 1, savedAt: new Date().toISOString(),
-    cfg: state.cfg, sessions: state.sessions, configured: state.configured, theme: state.theme, net: state.net, ui: state.ui,
+    cfg: state.cfg, sessions: state.sessions, absences: state.absences,
+    configured: state.configured, theme: state.theme, net: state.net, ui: state.ui,
     unit: state.unit, planOn: state.planOn, plannedHours: state.plannedHours, sound: state.sound, calc: state.calc, calCal: state.calCal, activeAdj: state.activeAdj,
     autoOn: state.autoOn, autoAt: state.autoAt, autoDays: state.autoDays
   }, null, 2);
@@ -5724,6 +5725,11 @@ function restoreFrom(text){
   });
   state.cfg = Object.assign({}, DEFAULTS, d.cfg || {});
   state.sessions = clean;
+  /* Replaced, never merged. Restoring is "make this device look like that file", so leaving
+     the absences already here would attach one person's call-offs to another person's
+     shifts. A backup written before absences existed restores none, which is correct. */
+  state.absences = (Array.isArray(d.absences) ? d.absences : [])
+    .filter(function(a){ return a && a.date && +a.hours > 0; });
   state.configured = d.configured !== false;
   state.unit = d.unit || 'sec';
   state.planOn = !!d.planOn;
