@@ -40,7 +40,8 @@ const E = new Function(m[1] + `
            bankOwes, vacationCredits, vacationOn, vacationDays,
            sumShiftDay, todayShiftDay,
            nightWindow, inNightWindow, splitNight, sumNight, scheduledWeekHours,
-           fedNotWithheld, netBreakdown, periodNetView };
+           fedNotWithheld, netBreakdown, periodNetView,
+           TAX_YEAR, TAX2026, bracketTax, fedWithholding };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -1692,6 +1693,123 @@ group('Robustness');
                                +new Date(2026, 6, 1), +new Date(2026, 6, 28));
   ok('and a per-check override is honoured', ovr.fed > 0 && ovr.fed !== jul.fed,
      '$' + ovr.fed.toFixed(2));
+
+  /* Overtime is not a separate calculation to bolt on — OT pay is inside the gross the
+     counterfactual taxes. These days are all plain eights, so nothing has been earned at
+     time and a half yet. */
+  near('plain weeks report no overtime', jul.otHours, 0);
+
+  /* Same fortnight, but four of the July days run four hours long. */
+  const otSs = ss.map(s => {
+    const d = new Date(s.start);
+    const long = d.getMonth() === 6 && [20, 21, 22, 23].indexOf(d.getDate()) >= 0;
+    return long ? { ...s, end: s.end + 4 * E.HOUR_MS } : s;
+  });
+  const otLed = E.buildLedger(otSs, c, at(6, 27, 12));
+  const withOt = E.fedNotWithheld(otLed.parts, c, nc,
+                                  +new Date(2026, 6, 1), +new Date(2026, 6, 28));
+  ok('overtime hours are reported', withOt.otHours > 0, E.chartHours(withOt.otHours) + ' h');
+  ok('the pay it is figured on includes them', withOt.pay > jul.pay,
+     `$${withOt.pay} vs $${jul.pay}`);
+  ok('and the tax not withheld goes up with them', withOt.fed > jul.fed,
+     `$${withOt.fed} vs $${jul.fed}`);
+
+  /* The overtime tax break is federal-income-tax only, so switching it off must raise the
+     figure — proof the break is being applied to the premium rather than ignored. */
+  const noBreak = E.fedNotWithheld(otLed.parts, c, { ...nc, otBreak: false },
+                                   +new Date(2026, 6, 1), +new Date(2026, 6, 28));
+  ok('without the overtime deduction more would have been withheld',
+     noBreak.fed > withOt.fed, `$${noBreak.fed} vs $${withOt.fed}`);
+  near('the hours are the same either way', noBreak.otHours, withOt.otHours);
+}
+
+/* ---------------- the 2026 federal table ----------------
+   Pinned to IRS Rev. Proc. 2025-32 (released 9 Oct 2025), the Social Security
+   Administration's 2026 wage-base announcement, and the OBBBA overtime deduction.
+   A stale table produces a wrong take-home rather than an obviously missing one, so the
+   numbers themselves are asserted, not just the arithmetic that uses them. */
+{
+  const T = E.TAX2026;
+  near('the table is for the year the app says it is', E.TAX_YEAR, 2026);
+  near('single standard deduction',  T.fed.single.std,  16100);
+  near('married standard deduction', T.fed.married.std, 32200);
+  near('head of household standard deduction', T.fed.hoh.std, 24150);
+
+  ['single', 'married', 'hoh'].forEach(f => {
+    const b = T.fed[f].brackets;
+    near(f + ' has seven brackets', b.length, 7);
+    ok(f + ' rates run 10 to 37',
+       b.map(x => x[1]).join() === '0.1,0.12,0.22,0.24,0.32,0.35,0.37',
+       b.map(x => x[1]).join());
+    ok(f + ' thresholds only ever climb',
+       b.every((x, i) => i === 0 ? x[0] === 0 : x[0] > b[i - 1][0]));
+  });
+
+  ok('single thresholds match the published table',
+     T.fed.single.brackets.map(x => x[0]).join() ===
+     '0,12400,50400,105700,201775,256225,640600');
+  ok('married thresholds match the published table',
+     T.fed.married.brackets.map(x => x[0]).join() ===
+     '0,24800,100800,211400,403550,512450,768700');
+  ok('head of household thresholds match the published table',
+     T.fed.hoh.brackets.map(x => x[0]).join() ===
+     '0,17700,67450,105700,201750,256200,640600');
+
+  near('Social Security wage base', T.ssWageBase, 184500);
+  near('Social Security rate',      T.ssRate,     0.062);
+  near('Medicare rate',             T.medicareRate, 0.0145);
+  near('dependent credit',          T.depCredit,  2200);
+  near('overtime deduction cap, single',  T.otCap.single,  12500);
+  near('overtime deduction cap, married', T.otCap.married, 25000);
+
+  /* The brackets are progressive, so crossing one only ever taxes the dollars above it.
+     $60,000 of taxable income as a single filer: 12,400 at 10, then 38,000 at 12,
+     then 9,600 at 22. */
+  near('bracket walk at $60,000 taxable',
+       E.bracketTax(60000, T.fed.single.brackets),
+       12400 * .10 + (50400 - 12400) * .12 + (60000 - 50400) * .22);
+  near('the first dollar is taxed at 10%', E.bracketTax(1, T.fed.single.brackets), 0.10);
+  near('no taxable income, no tax',        E.bracketTax(0, T.fed.single.brackets), 0);
+  near('exactly at a threshold, nothing above it is taxed yet',
+       E.bracketTax(12400, T.fed.single.brackets), 1240);
+
+  /* Crossing a threshold must move the marginal dollar, not the whole income. */
+  const justUnder = E.bracketTax(50399, T.fed.single.brackets);
+  const justOver  = E.bracketTax(50401, T.fed.single.brackets);
+  ok('crossing into 22% costs 22 cents on the two dollars, not a cliff',
+     Math.abs((justOver - justUnder) - (0.12 + 0.22)) < 1e-6,
+     '$' + (justOver - justUnder).toFixed(4));
+
+  /* One period of withholding, annualized and brought back. At $37.78 for 80 hours the
+     annual taxable is 26 periods of $3,022.40 less the standard deduction. */
+  const per = E.fedWithholding(3022.40, 26, 'single', 0);
+  const annual = 3022.40 * 26 - 16100;
+  near('a period of withholding is the annual figure divided back',
+       per, E.bracketTax(annual, T.fed.single.brackets) / 26);
+  ok('which at that wage is roughly a tenth of the check',
+     per / 3022.40 > 0.09 && per / 3022.40 < 0.14,
+     (100 * per / 3022.40).toFixed(1) + '%');
+
+  /* Effective rate rises with income; marginal rate is the higher number and always
+     above it. This is the whole point of the table being progressive. */
+  const eff = t => E.bracketTax(Math.max(0, t - 16100), T.fed.single.brackets) / t;
+  ok('effective rate climbs with income', eff(40000) < eff(90000) && eff(90000) < eff(300000),
+     [eff(40000), eff(90000), eff(300000)].map(x => (100 * x).toFixed(1) + '%').join(' < '));
+  ok('and stays below the top marginal rate', eff(300000) < 0.37,
+     (100 * eff(300000)).toFixed(1) + '%');
+
+  // Dependents come off the tax, not the income, and never below zero.
+  ok('two dependents cut a period more than one does',
+     E.fedWithholding(3022.40, 26, 'single', 2) < E.fedWithholding(3022.40, 26, 'single', 1));
+  near('enough dependents floor it at zero',
+       E.fedWithholding(3022.40, 26, 'single', 20), 0);
+  ok('married withholds less than single on the same check',
+     E.fedWithholding(3022.40, 26, 'married', 0) < per);
+  ok('head of household sits between the two',
+     E.fedWithholding(3022.40, 26, 'hoh', 0) < per &&
+     E.fedWithholding(3022.40, 26, 'hoh', 0) > E.fedWithholding(3022.40, 26, 'married', 0));
+  near('an unknown filing status falls back to single',
+       E.fedWithholding(3022.40, 26, 'nonsense', 0), per);
 }
 
 /* ------------------------------------------------------------------ */
