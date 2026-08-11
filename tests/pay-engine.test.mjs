@@ -38,7 +38,8 @@ const E = new Function(m[1] + `
            ABSENCE_KINDS, absenceKindName, schedHoursOn, schedEndMs, absenceHoursOn,
            workedPaidOn, scheduleGaps, makeUpOwed, makeUpBalance, applyMakeUp,
            bankOwes, vacationCredits, vacationOn, vacationDays,
-           sumShiftDay, todayShiftDay };
+           sumShiftDay, todayShiftDay,
+           nightWindow, inNightWindow, splitNight, sumNight };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -1532,6 +1533,88 @@ group('Robustness');
   const led3 = E.buildLedger([], hc, +new Date(2026, 10, 30));
   near('a holiday counts on the holiday', E.sumShiftDay(led3.parts, [], hc, nov26).hours, 8);
   near('and not on the day after', E.sumShiftDay(led3.parts, [], hc, nov26 + 86400000).hours, 0);
+}
+
+/* ---------------- a shift differential on part of a shift ---------------- */
+{
+  /* 2 PM - 10:30 PM with a half-hour lunch, 15 cents an hour after 6 PM. The lunch falls at
+     7 PM, so four of the eight paid hours qualify — exactly half, which is what the stub
+     this was built from shows. */
+  const c = { ...E.DEFAULTS, rate: 37.78, otMultiplier: 1.5, otMode: 'shift', shiftThreshold: 8,
+              lunchMins: 30, schedStart: '14:00', schedEnd: '22:30',
+              workDays: [true, true, true, true, true, false, false],
+              holidays: [], banks: [], daysOff: [], vacations: [],
+              periodAnchor: '2026-07-12', periodLengthDays: 14,
+              nightOn: true, nightFrom: '18:00', nightTo: '06:00', nightRate: 0.15 };
+  const off = { ...c, nightOn: false };
+  const on = (d, h = 0, mi = 0) => +new Date(2026, 6, d, h, mi);
+  const shift = (d) => ({ id: 's' + d, start: on(d, 14), end: on(d, 22, 30) });
+  const span = (ss, cfg) => {
+    const led = E.buildLedger(ss, cfg, on(26));
+    return { t: E.sumRange(led.parts, on(12), on(26)), n: E.sumNight(led.parts, on(12), on(26)) };
+  };
+
+  let r = span([shift(12)], c);
+  near('eight paid hours in the shift', r.t.hours, 8);
+  near('four of them after six', r.n.hours, 4);
+  near('worth sixty cents', r.n.pay, 0.6);
+  near('and the shift is worth base plus that', r.t.gross, 8 * 37.78 + 0.6);
+
+  // Eight shifts, the shape of a fortnight.
+  const two = [12, 13, 14, 15, 19, 20, 21, 22].map(shift);
+  r = span(two, c);
+  near('sixty-four paid hours', r.t.hours, 64);
+  near('half of them qualify', r.n.hours, 32);
+  near('worth $4.80',          r.n.pay, 4.8);
+
+  // Turned off it changes nothing at all.
+  near('off, the hours are the same', span(two, off).t.hours, 64);
+  near('and the money is base only',  span(two, off).t.gross, 64 * 37.78);
+  near('with no differential to report', span(two, off).n.hours, 0);
+
+  // A day shift never touches the window.
+  const daycfg = { ...c, schedStart: '06:00', schedEnd: '14:30' };
+  near('a 6 AM to 2:30 PM shift earns none',
+       span([{ id: 'd', start: on(12, 6), end: on(12, 14, 30) }], daycfg).n.hours, 0);
+
+  // A window that wraps midnight is one night, not a contradiction.
+  const night = { ...c, schedStart: '22:00', schedEnd: '06:00' };
+  const nr = span([{ id: 'n', start: on(12, 22), end: on(13, 6) }], night);
+  near('a 10 PM to 6 AM shift qualifies throughout', nr.n.hours, nr.t.hours);
+  near('which is seven and a half paid hours',       nr.n.hours, 7.5);
+
+  // Overtime is worked out on rate plus differential, as the regular rate of pay requires.
+  const long = span([{ id: 'L', start: on(12, 14), end: on(13, 0, 30) }], c);
+  near('ten paid hours', long.t.hours, 10);
+  near('two of them overtime', long.t.otHours, 2);
+  near('six qualify for the differential', long.n.hours, 6);
+  near('and it is paid at time and a half on the overtime part',
+       long.n.pay, (4 + 2 * 1.5) * 0.15);
+  /* Four hours before six at base, four after it at base plus the differential, then the
+     last two at time and a half on the higher rate. Not the whole shift at the higher rate:
+     the premium only ever touches the hours inside the window. */
+  near('the shift totals base outside the window and base-plus inside it',
+       long.t.gross, 4 * 37.78 + 4 * 37.93 + 2 * 37.93 * 1.5);
+
+  // Paid leave is not time on the clock.
+  const withHol = { ...c, holidays: E.HOLIDAY_DEFAULTS(), holidayNeedsAdjacent: false,
+                    periodAnchor: '2026-07-01' };
+  const hled = E.buildLedger([], withHol, +new Date(2026, 6, 10));
+  near('a holiday earns no differential',
+       E.sumNight(hled.parts, +new Date(2026, 6, 1), +new Date(2026, 6, 15)).hours, 0);
+  const vac = { ...c, vacations: [{ id: 'v', from: '2026-07-13', to: '2026-07-17', hours: 8 }] };
+  const vled = E.buildLedger([], vac, on(26));
+  near('nor does a vacation day', E.sumNight(vled.parts, on(12), on(26)).hours, 0);
+
+  // The window itself.
+  ok('a zero rate is the same as off', E.nightWindow({ ...c, nightRate: 0 }) === null);
+  ok('and a missing time is too',      E.nightWindow({ ...c, nightFrom: '' }) === null);
+  const w = E.nightWindow(c);
+  ok('7 PM is inside',  E.inNightWindow(on(12, 19), w));
+  ok('2 AM is inside',  E.inNightWindow(on(12, 2), w));
+  ok('noon is not',    !E.inNightWindow(on(12, 12), w));
+  ok('6 PM exactly is inside',  E.inNightWindow(on(12, 18), w));
+  ok('6 AM exactly is outside', !E.inNightWindow(on(12, 6), w));
 }
 
 /* ------------------------------------------------------------------ */

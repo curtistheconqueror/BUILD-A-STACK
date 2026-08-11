@@ -1042,6 +1042,8 @@
     <h2>Shift log — this period<span class="colsum" id="sum_log"></span></h2>
     <div class="colbody">
     <div id="logBody"></div>
+    <!-- Printed the way a stub prints it, so the two can be held side by side. -->
+    <div class="note hide" id="nightNote" style="margin-top:10px"></div>
 
     <div class="editor hide" id="editor">
       <div class="etitle" id="eTitle">Add a shift</div>
@@ -1352,6 +1354,23 @@
         <div class="f"><label for="cSchedEnd2">Scheduled end</label><input type="time" id="cSchedEnd2"></div>
       </div>
 
+      <div class="f" style="margin-top:18px"><label for="cNightOn">Shift differential</label>
+        <div class="note">Extra money per hour for the part of a shift inside a window — the
+        night or evening premium a lot of contracts pay. It is paid on the hours that fall
+        inside it, not on the whole shift, and it rides on your base rate, so overtime is
+        worked out on rate plus differential. Paid days off never earn it.</div>
+      </div>
+      <div class="cfgrid">
+        <div class="f"><label for="cNightOn">Pay a differential</label>
+          <select id="cNightOn"><option value="0">No</option><option value="1">Yes</option></select></div>
+        <div class="f"><label for="cNightRate">Extra per hour</label>
+          <div class="prefixed"><span>$</span>
+            <input type="number" id="cNightRate" min="0" max="100" step="0.01" inputmode="decimal"></div></div>
+        <div class="f"><label for="cNightFrom">From</label><input type="time" id="cNightFrom"></div>
+        <div class="f"><label for="cNightTo">Until</label><input type="time" id="cNightTo"></div>
+      </div>
+      <div class="note" id="cNightNote" style="margin-top:8px"></div>
+
       <div class="f" style="margin-top:18px"><label for="cShiftDay">Which day a shift belongs to</label>
         <div class="note">A shift that crosses midnight is still one shift, and it belongs to
         one day. By default that is whichever day holds most of it — so a 10 PM start is the
@@ -1643,6 +1662,13 @@ var DEFAULTS = {
      job without a make-up rule it is noise, and on a log that is not kept religiously it is
      worse than noise. Absences you record by hand always show, switch or no switch — those
      are facts you entered rather than gaps the app inferred. */
+  /* A shift differential paid on the clock hours that fall inside a window — "anything
+     after 6 PM" and the like. Off by default with nothing on it, so it changes nobody's
+     figures until it is set. */
+  nightOn: false,
+  nightFrom: '18:00',
+  nightTo: '06:00',
+  nightRate: 0,
   makeUpOn: false,
   makeUpWindow: 'period',    // the hole resets each pay period; 'week' resets each week
   vacations: [],             // blocks of approved leave: {id, name, from, to, hours, ot}
@@ -1851,15 +1877,20 @@ function buildLedger(sessions, cfg, nowMs){
      bar cannot disagree about whether a holiday counted — there is one answer, computed
      from the same shifts every caller already passed in. Eligibility is a fact about
      those shifts, so this stays pure and the tests stay honest. */
-  var withHols = sessions.concat(holidayCredits(sessions, cfg), bankCredits(cfg),
-                                 vacationCredits(cfg));
+  var nw = nightWindow(cfg);
+  /* Marked so the differential can skip them — see nightWindow. */
+  var credits = holidayCredits(sessions, cfg).concat(bankCredits(cfg), vacationCredits(cfg));
+  credits.forEach(function(c){ c.paidLeave = true; });
+  var withHols = sessions.concat(credits);
   var sorted = withHols.filter(function(s){ return s.end > s.start; })
                        .slice().sort(function(a,b){ return a.start - b.start; });
   for (var i = 0; i < sorted.length; i++){
     var s = sorted[i];
     var chunks = [];
     paidSpans(s, cfg).forEach(function(sp){
-      chunks = chunks.concat(splitSession(sp.start, sp.end, cfg));
+      splitSession(sp.start, sp.end, cfg).forEach(function(ch){
+        chunks = chunks.concat(s.paidLeave ? [ch] : splitNight(ch, nw));
+      });
     });
     /* Per-shift pay adjustments:
          adj.diff  extra dollars per hour (an overnight differential)
@@ -1868,7 +1899,8 @@ function buildLedger(sessions, cfg, nowMs){
     var adj = s.adj || {};
     for (var j = 0; j < chunks.length; j++){
       var c = chunks[j], hours = (c.end - c.start) / HOUR_MS;
-      var base = (rateAt(c.start, cfg) + (adj.diff || 0)) * (adj.mult || 1);
+      var nightOn = !!(nw && c.night && !s.paidLeave);
+      var base = (rateAt(c.start, cfg) + (adj.diff || 0) + (nightOn ? nw.rate : 0)) * (adj.mult || 1);
       var key = otBucketKey(c, cfg, s.id);
       var before = bucket[key] || 0;
       var reg, ot;
@@ -1884,6 +1916,9 @@ function buildLedger(sessions, cfg, nowMs){
       }
       parts.push({ start: c.start, end: c.end, dayMs: c.dayMs, weekKey: c.weekKey, periodKey: c.periodKey,
                    sessionId: s.id, hours: hours, regHours: reg, otHours: ot,
+                   nightHours: nightOn ? hours : 0,
+                   // What the differential alone added, so it can be shown the way a stub prints it.
+                   nightPay: nightOn ? (reg + ot * cfg.otMultiplier) * nw.rate * (adj.mult || 1) : 0,
                    gross: reg * base + ot * base * cfg.otMultiplier });
     }
   }
@@ -2693,6 +2728,63 @@ function applyMakeUp(parts, sessions, cfg, nowMs){
     }
   });
   return parts;
+}
+
+/* ---- the shift differential ----
+   Paid per hour on the part of a shift inside a window, not on the shift as a whole, so a
+   2 PM to 10:30 PM shift earns it from 6 PM onward and nowhere else. It rides on the base
+   rate the way an overnight premium does, which means overtime is worked out on rate plus
+   differential — the federal "regular rate of pay" includes it.
+
+   Paid leave never earns it: a holiday or a booked day off is not time on the clock, and
+   paying a night premium on a day you were at home would be inventing money. */
+function nightWindow(cfg){
+  if (!cfg || !cfg.nightOn) return null;
+  var f = hhmmToMin(cfg.nightFrom), t = hhmmToMin(cfg.nightTo), r = +cfg.nightRate;
+  if (f == null || t == null || !isFinite(r) || r <= 0) return null;
+  return { from: f, to: t, rate: r };
+}
+/* A window that ends before it starts wraps midnight — 18:00 to 06:00 is one night, not a
+   contradiction. */
+function inNightWindow(ms, w){
+  var d = new Date(ms), m = d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+  return w.to <= w.from ? (m >= w.from || m < w.to) : (m >= w.from && m < w.to);
+}
+/* Cut a chunk where it crosses the window edge, so every piece is wholly in or wholly out.
+   Chunks never cross midnight by the time this sees them, so the only possible cuts are the
+   window's two edges on that one day. */
+function splitNight(ch, w){
+  if (!w) return [ch];
+  var day = +midnight(ch.start), pts = [ch.start];
+  [w.from, w.to].forEach(function(m){
+    var t = day + m * 60000;
+    if (t > ch.start && t < ch.end) pts.push(t);
+  });
+  pts.push(ch.end);
+  pts.sort(function(a, b){ return a - b; });
+  var out = [];
+  for (var i = 0; i < pts.length - 1; i++){
+    if (pts[i + 1] <= pts[i]) continue;
+    var seg = {};
+    for (var k in ch) if (Object.prototype.hasOwnProperty.call(ch, k)) seg[k] = ch[k];
+    seg.start = pts[i]; seg.end = pts[i + 1];
+    seg.night = inNightWindow(pts[i], w);
+    out.push(seg);
+  }
+  return out;
+}
+/* The differential as your stub prints it: the hours that earned it, and what they came to. */
+function sumNight(parts, fromMs, toMs){
+  var t = { hours: 0, pay: 0 };
+  for (var i = 0; i < parts.length; i++){
+    var p = parts[i];
+    if (!p.nightHours) continue;
+    if (!(p.start >= fromMs && p.end <= toMs)) continue;
+    t.hours += p.nightHours; t.pay += p.nightPay;
+  }
+  t.hours = Math.round(t.hours * 100) / 100;
+  t.pay = Math.round(t.pay * 100) / 100;
+  return t;
 }
 
 /* ---- one day's work, by the day the shift belongs to ----
@@ -4453,6 +4545,17 @@ function renderLog(ledger, period, active, now){
        + (tot.otHours > 0.0001 ? tot.otHours.toFixed(2) : '—') + '</b></td>'
        + '<td class="num"><b>' + money(tot.gross) + '</b></td><td class="act"></td></tr></tfoot></table></div>';
   box.innerHTML = html;
+
+  /* Named the way a stub names it — hours, rate, money — so the app and the paper can be
+     held side by side without arithmetic. */
+  var nt = sumNight(ledger.parts, period.startMs, period.endMs);
+  show('nightNote', nt.hours > 0.005);
+  if (nt.hours > 0.005){
+    el('nightNote').innerHTML = 'Shift differential — <b>' + nt.hours.toFixed(2) + ' h</b> after '
+      + ftime(+midnight(now) + hhmmToMin(state.cfg.nightFrom) * 60000)
+      + ' at <b>' + money(state.cfg.nightRate, 2) + '/h</b> = <span class="pay">'
+      + money(nt.pay) + '</span>, included in the totals above.';
+  }
 }
 
 /* ============================ first run ============================
@@ -5845,6 +5948,23 @@ document.getElementById('cShiftDay').onchange = function(e){
   state.cfg.shiftDayRule = e.target.value;
   save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
 };
+document.getElementById('cNightOn').onchange = function(e){
+  state.cfg.nightOn = e.target.value === '1';
+  save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+};
+document.getElementById('cNightRate').onchange = function(e){
+  var v = parseFloat(e.target.value);
+  state.cfg.nightRate = isFinite(v) && v >= 0 ? Math.min(100, Math.round(v * 100) / 100) : 0;
+  e.target.value = state.cfg.nightRate.toFixed(2);
+  save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+};
+['cNightFrom', 'cNightTo'].forEach(function(id){
+  document.getElementById(id).onchange = function(e){
+    if (hhmmToMin(e.target.value) == null){ syncControls(); return; }
+    state.cfg[id === 'cNightFrom' ? 'nightFrom' : 'nightTo'] = e.target.value;
+    save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+  };
+});
 document.getElementById('cMakeUpWin').onchange = function(e){
   state.cfg.makeUpWindow = e.target.value === 'week' ? 'week' : 'period';
   save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
@@ -6623,6 +6743,35 @@ function syncControls(){
       : 'Right now this phone reads <b>' + ftime(_now) + '</b> and the machine reads <b>'
         + ptime(_now) + '</b>. Punch times through the app are the machine\'s — the shift log, '
         + 'the decimal time card, the slip figures. Your hours and pay are untouched.';
+  el('cNightOn').value = state.cfg.nightOn ? '1' : '0';
+  var _nr = el('cNightRate');
+  if (document.activeElement !== _nr) _nr.value = (+state.cfg.nightRate || 0).toFixed(2);
+  var _nf = el('cNightFrom'), _nt = el('cNightTo');
+  if (document.activeElement !== _nf) _nf.value = state.cfg.nightFrom || '18:00';
+  if (document.activeElement !== _nt) _nt.value = state.cfg.nightTo || '06:00';
+  /* Worked through their own scheduled shift, because "how much of my shift is inside the
+     window" is the only thing anyone actually wants to know here. */
+  var _nw = nightWindow(state.cfg);
+  if (!_nw){
+    el('cNightNote').textContent = 'Off — every hour pays the same rate.';
+  } else {
+    var _ss2 = hhmmToMin(state.cfg.schedStart), _se2 = hhmmToMin(state.cfg.schedEnd);
+    if (_ss2 == null || _se2 == null){
+      el('cNightNote').textContent = 'Set your scheduled shift and this will say how much of it qualifies.';
+    } else {
+      var _d0 = +midnight(Date.now());
+      var _sh = { id: '__ex', start: _d0 + _ss2 * 60000,
+                  end: _d0 + _se2 * 60000 + (_se2 <= _ss2 ? DAY_MS : 0) };
+      var _l = buildLedger([_sh], Object.assign({}, state.cfg, { otMode: 'weekly', weeklyThreshold: 999 }));
+      var _t = sumRange(_l.parts, _sh.start - 1, _sh.end + 1);
+      var _n = sumNight(_l.parts, _sh.start - 1, _sh.end + 1);
+      el('cNightNote').innerHTML = _n.hours > 0
+        ? '<b>' + _n.hours.toFixed(2) + ' h</b> of your ' + _t.hours.toFixed(2)
+          + ' h shift falls inside it — worth <span class="pay">' + money(_n.pay)
+          + '</span> a shift on top of your rate.'
+        : 'None of your scheduled shift falls inside that window.';
+    }
+  }
   el('cMakeUp').value = state.cfg.makeUpOn ? '1' : '0';
   el('cMakeUpWin').value = state.cfg.makeUpWindow === 'week' ? 'week' : 'period';
   /* Says where you actually stand rather than describing the rule again — the number is the
