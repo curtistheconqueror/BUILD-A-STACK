@@ -37,7 +37,8 @@ const E = new Function(m[1] + `
            skewMs, shopTime, phoneTime, shopSession,
            ABSENCE_KINDS, absenceKindName, schedHoursOn, schedEndMs, absenceHoursOn,
            workedPaidOn, scheduleGaps, makeUpOwed, makeUpBalance, applyMakeUp,
-           bankOwes, vacationCredits, vacationOn, vacationDays };
+           bankOwes, vacationCredits, vacationOn, vacationDays,
+           sumShiftDay, todayShiftDay };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -1478,6 +1479,59 @@ group('Robustness');
                     vacations: [{ id: 'v2', from: '2026-08-14', to: '2026-08-15', hours: 8 }] };
   near('a Friday-and-Saturday vacation credits nothing', E.vacationCredits(oneWeek).length, 0);
   near('and vacationDays says so too', E.vacationDays(oneWeek, oneWeek.vacations[0]), 0);
+}
+
+/* ---------------- a day's total follows the shift, not the calendar ---------------- */
+{
+  const c = { ...E.DEFAULTS, rate: 38, otMultiplier: 1.5, otMode: 'shift', shiftThreshold: 8,
+              lunchMins: 30, schedStart: '14:00', schedEnd: '22:30',
+              workDays: [true, true, true, true, true, false, false],
+              holidays: [], banks: [], daysOff: [], vacations: [], periodAnchor: '2026-08-09' };
+  const at = (d, h = 0, mi = 0) => +new Date(2026, 7, d, h, mi);
+  const SUN = at(9), MON = at(10), TUE = at(11);
+  // 12:15 PM Sunday to 12:45 AM Monday: 12 paid hours, and one day's work.
+  const night = { id: 'n', start: at(9, 12, 15), end: at(10, 0, 45) };
+  const led = E.buildLedger([night], c, at(10, 12));
+
+  const bySpan = (from) => E.sumRange(led.parts, from, from + 86400000);
+  near('summed between midnights, Sunday keeps only part of it', bySpan(SUN).hours, 11.25);
+  near('and the rest lands on Monday',                            bySpan(MON).hours, 0.75);
+
+  const byShift = (d) => E.sumShiftDay(led.parts, [night], c, d);
+  near('summed by shift day, Sunday has all of it', byShift(SUN).hours, 12);
+  near('worth the whole shift',                     byShift(SUN).gross, 8 * 38 + 4 * 57);
+  near('and Monday has none of it',                 byShift(MON).hours, 0);
+
+  // Which day "today" means, hour by hour across the boundary.
+  ok('on the clock before midnight it is Sunday',
+     E.todayShiftDay([], night.start, c, at(9, 23)) === SUN);
+  ok('on the clock after midnight it is still Sunday',
+     E.todayShiftDay([], night.start, c, at(10, 0, 30)) === SUN);
+  ok('just clocked out, it stays on that shift',
+     E.todayShiftDay([night], null, c, at(10, 0, 50)) === SUN,
+     new Date(E.todayShiftDay([night], null, c, at(10, 0, 50))).toDateString());
+  ok('later the same day, still that shift',
+     E.todayShiftDay([night], null, c, at(10, 9)) === SUN);
+  ok('a new day with nothing worked is simply today',
+     E.todayShiftDay([night], null, c, at(11, 14)) === TUE,
+     new Date(E.todayShiftDay([night], null, c, at(11, 14))).toDateString());
+  ok('and with nothing on file at all it is today',
+     E.todayShiftDay([], null, c, at(11, 9)) === TUE);
+
+  // Two shifts in one day still add up.
+  const twice = [{ id: 'a', start: at(12, 6), end: at(12, 10) },
+                 { id: 'b', start: at(12, 14), end: at(12, 18) }];
+  const led2 = E.buildLedger(twice, c, at(12, 20));
+  near('two shifts on one day are one figure',
+       E.sumShiftDay(led2.parts, twice, c, at(12)).hours, 8);
+
+  // A credit with a date of its own stays on that date.
+  const hc = { ...c, holidays: E.HOLIDAY_DEFAULTS(), holidayNeedsAdjacent: false,
+               periodAnchor: '2026-11-22' };
+  const nov26 = +new Date(2026, 10, 26);
+  const led3 = E.buildLedger([], hc, +new Date(2026, 10, 30));
+  near('a holiday counts on the holiday', E.sumShiftDay(led3.parts, [], hc, nov26).hours, 8);
+  near('and not on the day after', E.sumShiftDay(led3.parts, [], hc, nov26 + 86400000).hours, 0);
 }
 
 /* ------------------------------------------------------------------ */

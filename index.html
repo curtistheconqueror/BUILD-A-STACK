@@ -957,7 +957,7 @@
     <h2>Earnings <span id="otBadge"></span><span class="colsum" id="sum_totals"></span></h2>
     <div class="colbody">
     <div class="tgrid">
-      <div class="tile"><div class="k">Today</div><div class="big" id="dGross">$0.00</div>
+      <div class="tile"><div class="k" id="dayKey">Today</div><div class="big" id="dGross">$0.00</div>
         <div class="det" id="dDet">0.00 h</div></div>
       <div class="tile"><div class="k" id="wkKey">This week</div><div class="big" id="wGross">$0.00</div>
         <div class="det" id="wDet">0.00 h</div></div>
@@ -2695,6 +2695,48 @@ function applyMakeUp(parts, sessions, cfg, nowMs){
   return parts;
 }
 
+/* ---- one day's work, by the day the shift belongs to ----
+   Everything else in the app files a shift under one day — the log, the time card, the slip
+   figures, the make-up balance — so a total for "a day" has to do the same. Summed between
+   two midnights instead, a 12:15 PM start running to 12:45 AM reads as 11.25 h on the Sunday
+   and 0.75 h on the Monday: the same shift, cut in half by a boundary payroll does not use.
+
+   Credits that carry a date of their own — a holiday, a booked day off, a vacation day —
+   stay on that date, because that is the day they are. */
+function sumShiftDay(parts, sessions, cfg, dayMs){
+  var owner = {};
+  (sessions || []).forEach(function(s){
+    if (s && s.end > s.start) owner[s.id] = shiftDayMs(shopSession(s, cfg), cfg);
+  });
+  var t = { hours: 0, regHours: 0, otHours: 0, gross: 0 };
+  for (var i = 0; i < parts.length; i++){
+    var p = parts[i];
+    var d = owner[p.sessionId];
+    if (d == null) d = +midnight(p.start);
+    if (d !== dayMs) continue;
+    t.hours += p.hours; t.regHours += p.regHours; t.otHours += p.otHours; t.gross += p.gross;
+  }
+  return t;
+}
+/* Which shift day "today" means right now.
+
+   While you are on the clock it is the day your shift belongs to, so a night that runs past
+   midnight keeps reading as one day's work. Once you clock out it stays on that shift until
+   a new one starts — otherwise finishing at 12:45 AM would drop the figure from a full day
+   to zero at the moment you punched out, which is the same fault the other way round.
+   With nothing worked since midnight it is simply today. */
+function todayShiftDay(sessions, activeStart, cfg, nowMs){
+  var now = nowMs == null ? Date.now() : nowMs;
+  if (activeStart) return shiftDayMs(shopSession({ start: activeStart, end: now }, cfg), cfg);
+  var mid = +midnight(now), best = null, latest = -Infinity;
+  (sessions || []).forEach(function(s){
+    if (!(s && s.end > s.start)) return;
+    if (s.end <= mid || s.start > now) return;        // ended before today, or not started
+    if (s.end > latest){ latest = s.end; best = s; }
+  });
+  return best ? shiftDayMs(shopSession(best, cfg), cfg) : mid;
+}
+
 /* ---- completed pay periods ----
    A period that has rolled over otherwise disappears from the app entirely, which is
    exactly when you want to check it against the stub that is about to land. Walks back
@@ -3572,8 +3614,11 @@ function render(){
   });
 
   var period = periodInfo(now, cfg), week = weekInfo(now, cfg);
-  var dayStart = +midnight(now), dayEnd = dayStart + DAY_MS;
-  var day = sumRange(ledger.parts, dayStart, dayEnd);
+  /* By shift day, not between midnights — see sumShiftDay. The live shift is in the ledger
+     under '__active', so it has to be in the list this reads ownership from too. */
+  var dayMs = todayShiftDay(state.sessions, active, cfg, now);
+  var dayOwners = active ? state.sessions.concat([liveSession('__active', now)]) : state.sessions;
+  var day = sumShiftDay(ledger.parts, dayOwners, cfg, dayMs);
   var wk = sumRange(ledger.parts, week.startMs, week.endMs);
   var per = sumRange(ledger.parts, period.startMs, period.endMs);
 
@@ -3757,6 +3802,10 @@ function render(){
       + '<br>' + t.regHours.toFixed(2) + ' h reg @ ' + money(cfg.rate)
       + (t.otHours > 0.0001 ? '<br>' + t.otHours.toFixed(2) + ' h OT @ ' + money(ledger.otRate) : '');
   }
+  /* Named, because a night shift makes "Today" mean the day the shift belongs to rather
+     than the date on the calendar, and a figure you cannot place is a figure you distrust. */
+  document.getElementById('dayKey').textContent =
+    dayMs === +midnight(now) ? 'Today' : fdate(new Date(dayMs));
   document.getElementById('dGross').textContent = money(day.gross);
   document.getElementById('dDet').innerHTML = det(day);
   document.getElementById('wGross').textContent = money(wk.gross);
@@ -6699,12 +6748,11 @@ try {
     var now = Date.now();
     var active = state.activeStart;
     var cfg = state.cfg;
-    var dayStart = midnight(now).getTime();
-    var dayEnd = dayStart + DAY_MS;
-    var today = state.sessions.filter(function(s){ return s.end > dayStart && s.start < dayEnd; });
-    if (active) today.push({ start: active, end: now });
-    var led = buildLedger(today, cfg);
-    var tot = sumRange(led.parts, dayStart, dayEnd);
+    var dayMs = todayShiftDay(state.sessions, active, cfg, now);
+    var owners = state.sessions.slice();
+    if (active) owners.push({ id: '__active', start: active, end: now });
+    var led = buildLedger(owners, cfg, now);
+    var tot = sumShiftDay(led.parts, owners, cfg, dayMs);
     var gross = tot.gross, hrs = tot.hours;
     var wnc = netCfg();
     if (wnc.enabled && wnc.configured){
