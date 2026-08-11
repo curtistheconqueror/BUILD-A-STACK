@@ -39,7 +39,7 @@ const E = new Function(m[1] + `
            workedPaidOn, scheduleGaps, makeUpOwed, makeUpBalance, applyMakeUp,
            bankOwes, vacationCredits, vacationOn, vacationDays,
            sumShiftDay, todayShiftDay,
-           nightWindow, inNightWindow, splitNight, sumNight };
+           nightWindow, inNightWindow, splitNight, sumNight, scheduledWeekHours };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -1615,6 +1615,25 @@ group('Robustness');
   ok('noon is not',    !E.inNightWindow(on(12, 12), w));
   ok('6 PM exactly is inside',  E.inNightWindow(on(12, 18), w));
   ok('6 AM exactly is outside', !E.inNightWindow(on(12, 6), w));
+}
+
+/* ---------------- a week of your roster, for the projection ---------------- */
+{
+  const five8 = { ...E.DEFAULTS, schedStart: '14:00', schedEnd: '22:30', lunchMins: 30,
+                  workDays: [true, true, true, true, true, false, false] };
+  near('five eight-hour days is a 40 h week', E.scheduledWeekHours(five8), 40);
+
+  const four10 = { ...five8, schedStart: '06:00', schedEnd: '16:30',
+                   workDays: [false, true, true, true, true, false, false] };
+  near('four tens is also 40', E.scheduledWeekHours(four10), 40);
+
+  const part = { ...five8, workDays: [false, true, true, true, false, false, false] };
+  near('three eights is 24, not the 40 h threshold', E.scheduledWeekHours(part), 24);
+
+  const noSched = { ...E.DEFAULTS, schedStart: '', schedEnd: '', weeklyThreshold: 40 };
+  near('with no schedule it falls back to the threshold', E.scheduledWeekHours(noSched), 40);
+  near('and follows that threshold when it is not 40',
+       E.scheduledWeekHours({ ...noSched, weeklyThreshold: 37.5 }), 37.5);
 }
 
 /* ------------------------------------------------------------------ */

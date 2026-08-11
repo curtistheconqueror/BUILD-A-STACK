@@ -1205,8 +1205,10 @@
       enough by itself; add hours and overtime if the stub shows them — that makes the overtime
       tax-break cap accurate too.</div>
       <div class="egrid">
-        <div class="f"><label for="yBaseGross">YTD earnings before tracking here</label>
+        <div class="f"><label for="yBaseGross">YTD earnings on that stub</label>
           <div class="prefixed"><span>$</span><input type="number" id="yBaseGross" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div></div>
+        <div class="f"><label for="yBaseThrough">That stub covers you through</label>
+          <input type="date" id="yBaseThrough"></div>
         <div class="f"><label for="yBaseHours">Hours so far (optional)</label>
           <input type="number" id="yBaseHours" min="0" step="0.25" placeholder="unknown"></div>
         <div class="f"><label for="yBaseOt">Of which overtime h (optional)</label>
@@ -2730,6 +2732,16 @@ function applyMakeUp(parts, sessions, cfg, nowMs){
   return parts;
 }
 
+/* The paid hours a full week of your roster comes to — five eights, four tens, whatever it
+   is. Better than assuming the overtime threshold is also your schedule: someone on four
+   tens has a 40 h week, someone part-time does not, and a forecast built on the threshold
+   would be wrong for both. Falls back to the threshold when no schedule is set. */
+function scheduledWeekHours(cfg){
+  var t = 0;
+  for (var d = 0; d < 7; d++) t += schedHoursOn(cfg, +addDays(new Date(2026, 0, 4), d));
+  return t > 0 ? t : (cfg.weeklyThreshold || 40);
+}
+
 /* ---- the shift differential ----
    Paid per hour on the part of a shift inside a window, not on the shift as a whole, so a
    2 PM to 10:30 PM shift earns it from 6 PM onward and nowhere else. It rides on the base
@@ -3962,10 +3974,14 @@ function renderYtd(ledger, now){
   var prem = otPremiumOf(t) + ytdBasePremium();
   document.getElementById('ytdYear').textContent = y;
   document.getElementById('yGross').textContent = money(gross);
+  /* Spelled out as a sum. A single total gives you no way to tell a carried-in figure that
+     is right from one that is quietly counting the same weeks twice. */
   document.getElementById('yDet').innerHTML =
     (base.hours != null ? (t.hours + base.hours).toFixed(2) + ' h worked'
                         : t.hours.toFixed(2) + ' h tracked here')
-    + (base.gross ? '<br>incl. ' + money(base.gross) + ' carried in' : '')
+    + (base.gross ? '<br>' + money(base.gross) + ' carried in'
+        + (base.through ? ' through ' + fdate(ymd(base.through)) : '')
+        + ' + ' + money(t.gross) + ' tracked' + (base.through ? ' since' : ' here') : '')
     + '<br>' + t.regHours.toFixed(2) + ' h straight · ' + t.otHours.toFixed(2) + ' h OT tracked';
   document.getElementById('yOt').textContent = otH.toFixed(2) + ' h';
   document.getElementById('yOtDet').innerHTML = money(otH * cfg.rate * (cfg.otMultiplier || 1.5)) + ' of OT pay'
@@ -3998,11 +4014,27 @@ function renderYtd(ledger, now){
   var yc = document.getElementById('yCommit');
   // Never overwrite the field mid-typing — render runs several times a second.
   if (document.activeElement !== yc) yc.value = commit;
-  var weeksLeft = Math.max(0, (+new Date(y + 1, 0, 1) - now) / (7 * DAY_MS));
-  var weekBase = (cfg.weeklyThreshold || 40) * cfg.rate;
+  /* A forecast, so it is built from work that is finished and from whole days left. Counting
+     the shift you are standing in made it climb every second, which is not what "by Dec 31"
+     means and made the number impossible to hold in your head. It moves when you clock out,
+     when you change the plan, and once a day — not otherwise. */
+  var daysLeft = Math.max(0, Math.ceil((+new Date(y + 1, 0, 1) - +midnight(now)) / DAY_MS));
+  var weeksLeft = daysLeft / 7;
+  var schedWeek = scheduledWeekHours(cfg);
+  var weekBase = schedWeek * cfg.rate;
   var weekOt = commit * cfg.rate * (cfg.otMultiplier || 1.5);
-  var proj = gross + weeksLeft * (weekBase + weekOt);
-  var projPrem = prem + weeksLeft * commit * cfg.rate * ((cfg.otMultiplier || 1.5) - 1);
+  /* Cached: this rebuilds the whole year from closed shifts, and renderYtd runs on every
+     frame. Uncached it put a second full ledger build in the live loop, which is exactly
+     the cost the caching elsewhere exists to avoid. Keyed on the data and the day, since
+     nothing else about it can change between frames. */
+  var closedLed = cachedLedger('closed', dataVer + '|' + (+midnight(now)), function(){
+    return buildLedger(state.sessions, cfg, now);
+  });
+  var closed = ytdSums(closedLed, now);
+  var settled = closed.gross + (base.gross || 0) - extraLunchMoney();
+  var settledPrem = otPremiumOf(closed) + ytdBasePremium();
+  var proj = settled + weeksLeft * (weekBase + weekOt);
+  var projPrem = settledPrem + weeksLeft * commit * cfg.rate * ((cfg.otMultiplier || 1.5) - 1);
   document.getElementById('yProj').textContent = money(proj);
   var capLine = '';
   if (capOn && commit > 0 && prem < cap){
@@ -4013,7 +4045,8 @@ function renderYtd(ledger, now){
       : '<br>stays under the tax-free cap all year';
   }
   document.getElementById('yProjDet').innerHTML =
-    'at ' + (cfg.weeklyThreshold || 40) + ' h + ' + commit.toFixed(1) + ' OT h a week'
+    money(settled) + ' banked + ' + Math.round(daysLeft) + ' days at '
+    + schedWeek.toFixed(0) + ' h + ' + commit.toFixed(1) + ' OT h a week'
     + (capOn ? '<br>~' + money(projPrem) + ' OT premium by Dec 31' + capLine : '');
 }
 function dayOfYear(now){
@@ -4063,7 +4096,7 @@ function extraLunchMoney(){
 }
 
 /* Carry-in for mid-year adoption: the YTD line off the last paystub before this app. */
-function ytdBase(){ return netCfg().ytdBase || { gross: 0, hours: null, ot: null }; }
+function ytdBase(){ return netCfg().ytdBase || { gross: 0, hours: null, ot: null, through: '' }; }
 function ytdBasePremium(){
   var b = ytdBase();
   return (b.ot || 0) * state.cfg.rate * ((state.cfg.otMultiplier || 1.5) - 1);
@@ -4074,6 +4107,7 @@ function openYtdBase(){
   el('yBaseGross').value = b.gross || '';
   el('yBaseHours').value = b.hours == null ? '' : b.hours;
   el('yBaseOt').value = b.ot == null ? '' : b.ot;
+  el('yBaseThrough').value = b.through || '';
   show('yBase', true);
 }
 function saveYtdBase(){
@@ -4088,9 +4122,14 @@ function saveYtdBase(){
     el('yBaseErr').textContent = 'Overtime hours cannot exceed total hours.'; show('yBaseErr', true); return;
   }
   show('yBaseErr', false);
-  netCfg().ytdBase = { gross: isFinite(g) ? Math.max(0, g) : 0, hours: h, ot: o };
-  save(); show('yBase', false); render();
-  toast('Year-so-far saved — YTD now includes it.');
+  var thr = el('yBaseThrough').value;
+  if (thr && !/^\d{4}-\d{2}-\d{2}$/.test(thr)){
+    el('yBaseErr').textContent = 'That date could not be read.'; show('yBaseErr', true); return;
+  }
+  netCfg().ytdBase = { gross: isFinite(g) ? Math.max(0, g) : 0, hours: h, ot: o, through: thr || '' };
+  save(); show('yBase', false); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+  toast(thr ? 'Saved — shifts through ' + fdate(ymd(thr)) + ' are counted as part of it.'
+            : 'Year-so-far saved — YTD now includes it.');
 }
 
 /* Pay-period progress: what each week contributed, and the running period total that
@@ -5269,9 +5308,22 @@ function calJumpToday(){
 }
 
 /* This calendar year's totals from an already-built ledger, live. */
+/* Everything tracked here this year that a carried-in stub does not already include.
+
+   The stub's year-to-date figure covers every hour up to the date it was cut, including the
+   ones logged in this app. Adding the two without a cut-off counts that overlap twice, which
+   is exactly what happens to anyone who logs their shifts and then types in the stub total.
+   The date settles it: shifts on or before it belong to the stub, and only what came after
+   is added on. */
 function ytdSums(ledger, now){
   var y = new Date(now).getFullYear();
-  return sumRange(ledger.parts, +new Date(y, 0, 1), +new Date(y + 1, 0, 1));
+  var from = +new Date(y, 0, 1);
+  var through = ytdBase().through;
+  if (through){
+    var cut = ymd(through);
+    if (!isNaN(+cut)) from = Math.max(from, +addDays(cut, 1));
+  }
+  return sumRange(ledger.parts, from, +new Date(y + 1, 0, 1));
 }
 function otPremiumOf(t){ return (t.otHours || 0) * state.cfg.rate * ((state.cfg.otMultiplier || 1.5) - 1); }
 
