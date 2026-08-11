@@ -449,6 +449,11 @@
     display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
   .vaccfg .vwhen{font-weight:800}
   .vaccfg .vsub{color:var(--muted);font-size:12.4px}
+  .exbox{border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:12px;
+    background:var(--card2)}
+  .exbox .big{font-size:27px;font-weight:800;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+  .exbox .sub{color:var(--muted);font-size:12.8px;margin-top:5px;line-height:1.5}
+  .exbox .warnline{color:var(--warn);font-weight:700}
   .fmlarow{display:flex;justify-content:center;margin-top:10px}
   button.mini.fmla{border-color:var(--bad);color:var(--bad)}
   /* where each holiday stands, under the calendar */
@@ -1193,6 +1198,24 @@
     <div class="planrow" style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
       <span>Overtime I plan to work each week:</span>
       <input type="number" id="yCommit" min="0" max="80" step="0.5" value="0"> <span>h</span>
+    </div>
+
+    <!-- Going exempt from federal withholding. Deliberately never called money owed: some
+         people genuinely owe nothing, and the app has no way to know which you are. -->
+    <div class="planrow" style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px">
+      <label class="swrap"><input type="checkbox" id="exOn"> Federal tax exempt</label>
+      <span class="eta" id="exEta"></span>
+    </div>
+    <div class="hide" id="exBody">
+      <div class="cfgrid" style="margin-top:10px">
+        <div class="f"><label for="exFrom">Exempt since</label><input type="date" id="exFrom"></div>
+        <div class="f"><label for="exTo">Until (leave blank if still exempt)</label>
+          <input type="date" id="exTo"></div>
+        <div class="f"><label for="exCarried">Not withheld before you tracked here</label>
+          <div class="prefixed"><span>$</span>
+            <input type="number" id="exCarried" min="0" step="0.01" inputmode="decimal" placeholder="0.00"></div></div>
+      </div>
+      <div class="exbox" id="exOut"></div>
     </div>
 
     <div class="planrow" style="margin-top:4px">
@@ -2225,6 +2248,49 @@ function periodNetView(gross, hours, items, n, cfg, mode, otHours, otPremYtdBefo
   bd.otDeducted = n2.fedDeduct || 0;
   bd.fixedTotal = pre + post; bd.fixedApplied = (pre + post) * frac; bd.stdHours = stdHours;
   return bd;
+}
+
+/* ---- going exempt from federal withholding ----
+   Two people do this for opposite reasons. One is genuinely exempt and will owe nothing at
+   filing; for them this is a record. The other has claimed exempt for a stretch to take
+   home a bigger cheque, and every dollar here is a dollar they will hand back in April.
+   The app cannot tell which you are, so it never calls it "owed" — it reports what was not
+   withheld and leaves the meaning to you.
+
+   Worked out by asking the net calculator the same question it always answers — what would
+   this pay period have withheld — with the exemption switched off, then taking the share of
+   that period's pay that actually falls inside your exempt window. Using the app's own
+   figures rather than a flat percentage means it moves with your filing status, dependents,
+   pre-tax deductions and the overtime tax break, exactly as a real cheque would. */
+function fedNotWithheld(parts, cfg, nc, fromMs, toMs){
+  var out = { pay: 0, fed: 0, periods: 0 };
+  if (!(toMs > fromMs)) return out;
+  var notExempt = Object.assign({}, nc, { fedExempt: false });
+  var p = periodInfo(fromMs, cfg), guard = 0, premBefore = 0;
+  /* The premium already used this year matters, because the overtime tax break is capped
+     annually — so the walk starts at the year's first period, and only periods inside the
+     window contribute. */
+  var yStart = +new Date(new Date(fromMs).getFullYear(), 0, 1);
+  p = periodInfo(yStart, cfg);
+  while (p.startMs < toMs && guard++ < 400){
+    var whole = sumRange(parts, p.startMs, p.endMs);
+    if (whole.gross > 0 && p.endMs > fromMs){
+      var a = Math.max(p.startMs, fromMs), b = Math.min(p.endMs, toMs);
+      var inWin = sumRange(parts, a, b);
+      if (inWin.gross > 0){
+        var bd = periodNetView(whole.gross, whole.hours, nc.items || [], notExempt, cfg,
+                               'hole', whole.otHours, premBefore);
+        out.fed += bd.fed * (inWin.gross / whole.gross);
+        out.pay += inWin.gross;
+        out.periods++;
+      }
+    }
+    if (whole.gross > 0) premBefore += whole.otHours * (cfg.rate || 0) * ((cfg.otMultiplier || 1.5) - 1);
+    p = periodInfo(p.endMs, cfg);
+  }
+  out.fed = Math.round(out.fed * 100) / 100;
+  out.pay = Math.round(out.pay * 100) / 100;
+  return out;
 }
 
 /* ============================ holidays and the roster ============================ */
@@ -4044,11 +4110,59 @@ function renderYtd(ledger, now){
       ? '<br>hits the tax-free cap ~' + fdate(new Date(now + weeksToCap * 7 * DAY_MS))
       : '<br>stays under the tax-free cap all year';
   }
+  renderExempt(ledger, now);
   document.getElementById('yProjDet').innerHTML =
     money(settled) + ' banked + ' + Math.round(daysLeft) + ' days at '
     + schedWeek.toFixed(0) + ' h + ' + commit.toFixed(1) + ' OT h a week'
     + (capOn ? '<br>~' + money(projPrem) + ' OT premium by Dec 31' + capLine : '');
 }
+/* The exempt tracker. One switch drives both this and the deductions screen, so the two
+   can never disagree about whether you are exempt. */
+function renderExempt(ledger, now){
+  var nc = netCfg(), cfg = state.cfg, y = new Date(now).getFullYear();
+  var on = !!nc.fedExempt;
+  document.getElementById('exOn').checked = on;
+  show('exBody', on);
+  if (!on){ el('exEta').textContent = ''; return; }
+
+  var fFrom = el('exFrom'), fTo = el('exTo'), fC = el('exCarried');
+  if (document.activeElement !== fFrom) fFrom.value = nc.exemptFrom || '';
+  if (document.activeElement !== fTo)   fTo.value = nc.exemptTo || '';
+  if (document.activeElement !== fC)    fC.value = nc.exemptCarried || '';
+
+  var carried = Math.max(0, parseFloat(nc.exemptCarried) || 0);
+  if (!nc.exemptFrom){
+    el('exEta').textContent = '';
+    el('exOut').innerHTML = '<div class="sub">Put in the date you went exempt and this will '
+      + 'add up the federal tax that has not been withheld since.</div>';
+    return;
+  }
+  var from = +ymd(nc.exemptFrom);
+  if (isNaN(from)){ el('exOut').innerHTML = '<div class="sub">That start date could not be read.</div>'; return; }
+  var yearEnd = +new Date(y + 1, 0, 1);
+  var to = nc.exemptTo && !isNaN(+ymd(nc.exemptTo)) ? +addDays(ymd(nc.exemptTo), 1) : +midnight(now) + DAY_MS;
+  to = Math.min(to, yearEnd);
+
+  var r = fedNotWithheld(ledger.parts, cfg, nc, Math.max(from, +new Date(y, 0, 1)), to);
+  var total = r.fed + carried;
+  var days = Math.max(0, Math.round((Math.min(to, +midnight(now) + DAY_MS) - from) / DAY_MS));
+  var still = !nc.exemptTo;
+
+  el('exEta').textContent = money(total) + ' not withheld';
+  el('exOut').innerHTML =
+    '<div class="big">' + money(total) + '</div>'
+    + '<div class="sub">federal tax not withheld · ' + days + ' day' + (days === 1 ? '' : 's')
+    + (still ? ' and counting' : '') + ' since ' + fdate(ymd(nc.exemptFrom))
+    + (nc.exemptTo ? ' through ' + fdate(ymd(nc.exemptTo)) : '')
+    + '<br>on ' + money(r.pay) + ' of pay tracked here across ' + r.periods
+    + ' pay period' + (r.periods === 1 ? '' : 's')
+    + (carried ? '<br>including ' + money(carried) + ' carried in from before you tracked here' : '')
+    + '</div>'
+    + '<div class="sub"><span class="warnline">If you claimed exempt to take home more,</span> this is '
+    + 'roughly what to set aside — it is not withheld, not forgiven. If you are genuinely exempt '
+    + 'and will owe nothing at filing, it is simply a record of what you kept.</div>';
+}
+
 function dayOfYear(now){
   var d = new Date(now);
   return Math.max(1, Math.round((d - new Date(d.getFullYear(), 0, 1)) / DAY_MS));
@@ -6484,6 +6598,26 @@ document.getElementById('nItems').addEventListener('click', function(e){
   var b = e.target.closest('button[data-del-item]'); if (!b) return;
   netCfg().items = netCfg().items.filter(function(x){ return x.id !== b.dataset.delItem; });
   save(); renderNetItems(); previewNet();
+});
+document.getElementById('exOn').onchange = function(e){
+  /* The same flag the deductions screen sets, so being exempt is one fact rather than two
+     that can disagree. */
+  netCfg().fedExempt = e.target.checked;
+  save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+};
+['exFrom', 'exTo', 'exCarried'].forEach(function(id){
+  document.getElementById(id).onchange = function(e){
+    var nc = netCfg();
+    if (id === 'exCarried'){
+      var v = parseFloat(e.target.value);
+      nc.exemptCarried = isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : 0;
+    } else {
+      var d = e.target.value;
+      if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+      nc[id === 'exFrom' ? 'exemptFrom' : 'exemptTo'] = d;
+    }
+    save(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+  };
 });
 document.getElementById('yBaseBtn').onclick = openYtdBase;
 document.getElementById('yBaseCancel').onclick = function(){ show('yBase', false); };

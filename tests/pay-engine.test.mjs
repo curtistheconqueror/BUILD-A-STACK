@@ -39,7 +39,8 @@ const E = new Function(m[1] + `
            workedPaidOn, scheduleGaps, makeUpOwed, makeUpBalance, applyMakeUp,
            bankOwes, vacationCredits, vacationOn, vacationDays,
            sumShiftDay, todayShiftDay,
-           nightWindow, inNightWindow, splitNight, sumNight, scheduledWeekHours };
+           nightWindow, inNightWindow, splitNight, sumNight, scheduledWeekHours,
+           fedNotWithheld, netBreakdown, periodNetView };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -1634,6 +1635,63 @@ group('Robustness');
   near('with no schedule it falls back to the threshold', E.scheduledWeekHours(noSched), 40);
   near('and follows that threshold when it is not 40',
        E.scheduledWeekHours({ ...noSched, weeklyThreshold: 37.5 }), 37.5);
+}
+
+/* ---------------- federal tax not withheld while exempt ---------------- */
+{
+  const c = { ...E.DEFAULTS, rate: 37.78, otMultiplier: 1.5, otMode: 'weekly', weeklyThreshold: 40,
+              lunchMins: 30, schedStart: '14:00', schedEnd: '22:30',
+              workDays: [false, true, true, true, true, true, false],
+              holidays: [], banks: [], daysOff: [], vacations: [],
+              periodAnchor: '2026-06-01', periodLengthDays: 14 };
+  const nc = { filing: 'single', dependents: 0, ficaOn: true, statePct: 4.95, items: [],
+               otBreak: true, fedExempt: true };
+  const at = (m, d, h = 14, mi = 0) => +new Date(2026, m, d, h, mi);
+  const ss = [];
+  [[5, [1,2,3,4,5,8,9,10,11,12,15,16,17,18,19]], [6, [6,7,8,9,10,13,14,15,16,17,20,21,22,23,24]]]
+    .forEach(([m, days]) => days.forEach(d =>
+      ss.push({ id: 'w' + m + d, start: at(m, d), end: at(m, d, 22, 30) })));
+  const led = E.buildLedger(ss, c, at(6, 27, 12));
+
+  const jul = E.fedNotWithheld(led.parts, c, nc, +new Date(2026, 6, 1), +new Date(2026, 6, 28));
+  ok('July alone is a real figure', jul.fed > 0, '$' + jul.fed.toFixed(2));
+  ok('on the pay inside that window', jul.pay > 0, '$' + jul.pay.toFixed(2));
+  ok('the effective rate is plausible for a single filer',
+     jul.fed / jul.pay > 0.05 && jul.fed / jul.pay < 0.18,
+     (100 * jul.fed / jul.pay).toFixed(1) + '%');
+
+  const both = E.fedNotWithheld(led.parts, c, nc, +new Date(2026, 5, 1), +new Date(2026, 6, 28));
+  ok('a longer window is worth more', both.fed > jul.fed, `${both.fed} vs ${jul.fed}`);
+  ok('and covers more pay',           both.pay > jul.pay, `${both.pay} vs ${jul.pay}`);
+
+  // Nothing worked inside it, nothing to report.
+  const none = E.fedNotWithheld(led.parts, c, nc, +new Date(2026, 3, 1), +new Date(2026, 3, 30));
+  near('a window with no work reports nothing', none.fed, 0);
+  near('and no pay',                            none.pay, 0);
+  near('an empty window is empty too',
+       E.fedNotWithheld(led.parts, c, nc, +new Date(2026, 6, 1), +new Date(2026, 6, 1)).fed, 0);
+
+  /* It is a counterfactual: what would have come out. So the exempt flag on the config must
+     not silence it — that is the whole point. */
+  const notEx = E.fedNotWithheld(led.parts, c, { ...nc, fedExempt: false },
+                                 +new Date(2026, 6, 1), +new Date(2026, 6, 28));
+  near('being flagged exempt does not zero the counterfactual', notEx.fed, jul.fed);
+
+  // It follows the things a real cheque follows.
+  const married = E.fedNotWithheld(led.parts, c, { ...nc, filing: 'married' },
+                                   +new Date(2026, 6, 1), +new Date(2026, 6, 28));
+  ok('married withholds less than single', married.fed < jul.fed, `${married.fed} vs ${jul.fed}`);
+  const kids = E.fedNotWithheld(led.parts, c, { ...nc, dependents: 2 },
+                                +new Date(2026, 6, 1), +new Date(2026, 6, 28));
+  ok('dependents withhold less too', kids.fed < jul.fed, `${kids.fed} vs ${jul.fed}`);
+  const pre = E.fedNotWithheld(led.parts, c,
+                { ...nc, items: [{ id: 'k', name: '401k', amount: 200, pretax: true }] },
+                +new Date(2026, 6, 1), +new Date(2026, 6, 28));
+  ok('a pre-tax deduction lowers it', pre.fed < jul.fed, `${pre.fed} vs ${jul.fed}`);
+  const ovr = E.fedNotWithheld(led.parts, c, { ...nc, fedOverride: 300 },
+                               +new Date(2026, 6, 1), +new Date(2026, 6, 28));
+  ok('and a per-check override is honoured', ovr.fed > 0 && ovr.fed !== jul.fed,
+     '$' + ovr.fed.toFixed(2));
 }
 
 /* ------------------------------------------------------------------ */
