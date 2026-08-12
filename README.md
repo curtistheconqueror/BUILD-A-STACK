@@ -56,7 +56,7 @@ The published URL is what you install from on a phone. Pages on a private reposi
 This branch is an orphan: no shared history, no files from the parent project, app at the root. Moving it is a push, not a migration.
 
 ```sh
-# create an empty repo on GitHub first (no README, no .gitignore), then:
+# create an empty repo on GitHub first (no README, no .gitignore, no licence), then:
 git clone --single-branch --branch pay-clock <this-repo-url> pay-clock
 cd pay-clock
 git remote set-url origin <new-repo-url>
@@ -66,13 +66,22 @@ git push -u origin main
 
 Full history comes with it, nothing needs rewriting, and the Pages setting moves to `main` / `(root)`.
 
+The empty repo matters: an auto-created README or `.gitignore` gives the new repository a root
+commit of its own, and this branch has no ancestor in common with it — the push is then rejected
+as unrelated history. Starting empty makes it an ordinary first push.
+
+The published URL changes, which means re-adding the home-screen icon once. Data lives in the
+browser's storage per origin and does not follow the move, so **export a backup from the old URL
+before switching and import it at the new one**. The old URL keeps working until Pages is turned
+off there, so there is no rush and nothing is lost if the two overlap for a while.
+
 ## Tests
 
 ```sh
 npm test
 ```
 
-62 assertions, no dependencies. They cover period and week boundaries, both overtime rules, mid-shift threshold crossings, overnight and DST-spanning shifts, period rollover, auto-stop targets, and the SEC/MIN/HR stepping.
+548 assertions, no dependencies. They cover period and week boundaries, all four overtime rules, mid-shift threshold crossings, overnight and DST-spanning shifts, period rollover, auto-stop targets, the SEC/MIN/HR stepping, holidays and banked days off, absences and the make-up rule, vacation blocks, the shop-clock offset, the shift differential, and the federal tax table.
 
 The suite extracts the pay engine directly out of `index.html`, so what's tested is exactly what ships — there's no second copy to fall out of sync.
 
