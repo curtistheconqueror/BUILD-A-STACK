@@ -1,0 +1,204 @@
+# Build plan: professions, and more than one job
+
+This is the roadmap for turning Pay Clock from one person's hourly clock into an app that
+knows what you do for a living and can hold more than one employer at once.
+
+**If you are a session picking this repo up: read this before adding a feature.** There is
+already one case in this repository's history — PR #6 — where a second lineage of this app
+grew a feature the main lineage already had, because neither knew about the other. The
+engine here is 548 assertions deep. Extend it; do not restart it.
+
+---
+
+## The idea underneath
+
+What varies between professions is not a setting. It is **how money accrues**. There are
+three models, and everything else follows from which one applies:
+
+| Model | Money comes from | Examples |
+|---|---|---|
+| `clock` | Punch in, accrues per second, overtime rules apply | Nurse, transit operator, most hourly work |
+| `units` | Log production, pays per unit above a threshold | Surgeon (wRVU), commission, piecework |
+| `contract` | Fixed annual sum ÷ pay dates, plus stipends | Teacher |
+
+Everything downstream of gross pay — the tax engine, year-to-date, projection, the net
+breakdown, the exempt tracker, backup and restore — is **identical across all three** and is
+already built. That shared half is the reason this is one codebase and not three apps.
+
+A profession is therefore a **data record, not a code path**:
+
+```js
+var PROFESSIONS = {
+  transit_operator: { group:'Transit',   role:'Operator', model:'clock',
+                      otDefault:'weekly', premiums:['night'] },
+  nurse:            { group:'Medical',   role:'Nurse',    model:'clock',
+                      otDefault:'eighty80', otModes:['eighty80','weekly','daily'],
+                      premiums:['night','weekend','charge','oncall','callback'],
+                      callbackMin:2, deductions:['403b','457b'] },
+  surgeon:          { group:'Medical',   role:'Surgeon',  model:'units', unit:'wRVU',
+                      otModes:[], exempt:'29 CFR 541.304' },
+  teacher:          { group:'Education', role:'Teacher',  model:'contract',
+                      otModes:[], workMonths:10, payMonths:12,
+                      stipends:true, pension:'TRS', ssExempt:true }
+};
+```
+
+### Why a profession has to reach the tax engine, not just the UI
+
+Illinois teachers in TRS pay **no Social Security at all**. They contribute 9% of creditable
+earnings to TRS and pay Medicare only. Run a teacher through the current app and it deducts
+6.2% that never leaves their check while omitting the 9% that does — wrong in both
+directions at once. No checkbox fixes that. The profile has to drive `netBreakdown`.
+
+The same logic runs the other way. Surgeons are exempt from overtime under 29 CFR 541.304,
+teachers under the professional exemption. For those profiles the overtime engine should not
+be *configured off* — it should not render at all.
+
+---
+
+## More than one job
+
+The second employer is the deepest change in this plan, so it lands early and carefully.
+
+### The shape
+
+```js
+state.jobs = [
+  { id:'j1', name:'Pace', profession:'transit_operator', cfg:{…}, primary:true },
+  { id:'j2', name:'…',    profession:'nurse',            cfg:{…} }
+];
+state.sessions = [ { …, jobId:'j1' }, … ];
+```
+
+Each job carries its **own complete `cfg`** — rate, schedule, overtime rule, holidays, banks,
+differentials — and its **own profession**, because a second job is usually a different line
+of work entirely.
+
+### Each job builds its own ledger
+
+This is the load-bearing decision. `buildLedger(sessions, cfg, now)` is called once per job
+over that job's sessions, and the results are combined afterwards.
+
+It is also legally correct. **Overtime does not combine across unrelated employers**: each
+job has its own workweek and its own threshold. Forty hours at one employer plus ten at
+another is not ten hours of overtime; it is fifty straight hours. Building separate ledgers
+gets this right for free — and it means **the core of the engine does not change at all**.
+
+### What *does* combine
+
+Tax is per person, not per employer, and that gap is where the value is:
+
+- **Year-to-date gross, hours and overtime** — summed across jobs.
+- **Social Security overpayment.** Each employer withholds to the wage base independently.
+  Two jobs can therefore push combined withholding past the annual maximum, and the excess is
+  refundable as a credit at filing. The app can name the dollar figure.
+- **Under-withholding.** Every employer withholds as though its job is your only income, so a
+  second job is taxed from the bottom bracket up a second time while the combined total sits
+  in a higher bracket. This is the single most common and most painful surprise of taking a
+  second job, and the app already has everything needed to compute it exactly: withhold
+  per job, compute the real liability on the combined figure, show the difference.
+
+### Seamlessness rules
+
+1. **One job looks exactly like today.** No switcher, no chips, no combined view, no new
+   vocabulary. A user who never adds a second job never learns this exists.
+2. **Migration is silent and idempotent.** On load, an old save has its `state.cfg` wrapped
+   into `jobs[0]` and every session stamped with that job's id. It runs once and is a no-op
+   thereafter.
+3. **Two clocks cannot run unnoticed.** Clocking in on a second job while the first is
+   running is allowed — people do work back-to-back shifts and split days — but overlapping
+   time is flagged plainly rather than silently double-counted.
+
+---
+
+## Stages
+
+Every stage ends with the full harness green and its own new suite. **No stage begins before
+the previous one's smoke test is reported.**
+
+### Stage 1 — Fix what is already wrong
+
+No new UI. These are live defects in the shipped app.
+
+| Fix | Why |
+|---|---|
+| **8/80 overtime mode** | FLSA §7(j) lets hospitals pay overtime over 8 in a day *or* 80 in 14 days, both at once with a credit rule. Not one of the four current modes. Worth ~$12,480/yr to a nurse on three 12s. |
+| **Cumulative Social Security** | The cap is applied per period (`wageBase / periodsPerYear`) instead of against year-to-date wages. Annual total is right; the per-check distribution is wrong for anyone crossing the base. |
+| **Additional Medicare 0.9%** | Not modeled at all. Owed on wages above $200,000. |
+| **FLSA qualified-overtime premium** | Only the half-time premium on hours over 40 in a workweek is deductible, regardless of the payroll multiplier or rule. Currently derived from the configured multiplier, which over-claims at 2× and on non-weekly rules. From PR #6. |
+| **Move the UI suite into the repo** | ~1,780 assertions across 49 suites currently live in an ephemeral scratchpad. This was the audit's number one finding, and it is now blocking: nothing below is safe to attempt without them under version control. |
+
+*Smoke test:* full engine suite plus new assertions for each fix; the whole UI harness green
+from its new home in `tests/`.
+
+### Stage 2 — The job layer, invisible
+
+Introduce `state.jobs`, the migration, `jobId` on sessions, per-job ledgers and the combining
+layer. **Ship it with the UI completely unchanged and exactly one job.**
+
+*Smoke test:* every pre-existing UI suite passes **untouched**. That is the proof the
+refactor is safe — if the app looks identical to a test written before the refactor, the
+refactor did not break it.
+
+### Stage 3 — The second job, visible
+
+Add, name, edit and remove jobs. A job switcher that only appears at two or more. Clocking in
+against a specific job. The overlap guard. Per-job and combined views of every tile.
+
+*Smoke test:* a new suite covering add/switch/remove, overlap, per-job overtime independence,
+and — critically — that removing the second job returns the interface exactly to Stage 2.
+
+### Stage 4 — Cross-job tax intelligence
+
+Combined year-to-date. Social Security overpayment detection with the refundable figure.
+The under-withholding estimate with what to do about it.
+
+*Smoke test:* engine assertions against hand-computed two-job scenarios, including one that
+crosses the wage base and one that crosses a bracket.
+
+### Stage 5 — The profession layer
+
+The `PROFESSIONS` table, the setup wizard (field → role → state), and profile-driven
+rendering. Ships with `transit_operator` and `nurse` — both `clock`, so the mechanism is
+proven without new pay maths.
+
+Existing users are migrated to `transit_operator` silently and see no change.
+
+*Smoke test:* each profile renders only its own controls; switching profession does not
+destroy data; the Illinois and Indiana legal notes appear on the right profiles.
+
+### Stage 6 — The `units` model
+
+The surgeon profile. wRVU logging with a built-in procedure table, threshold and conversion
+factor with optional tiers, and the pace projection — year-to-date ÷ elapsed year, projected
+to 31 December, with a "what if I run at 110%?" control built on the existing what-if panel.
+
+Values are stamped with the fee-schedule year they came from, the same way the tax table is,
+because CMS revises them annually — the 2026 schedule cut wRVUs for several proceduralist
+specialties.
+
+*Smoke test:* pace projection against hand-computed run rates; threshold and tier boundaries;
+no clock or overtime controls render anywhere in this profile.
+
+### Stage 7 — The `contract` model
+
+The teacher profile. Annual salary over a 10-month-worked / 12-month-paid calendar so summer
+checks show correctly, stipends as discrete line items, and the pension/no-Social-Security
+handling.
+
+*Smoke test:* the summer months pay correctly; TRS replaces Social Security in the net
+breakdown; stipends fall outside the base contract.
+
+---
+
+## Ordering, and why
+
+Fixes first, because they are wrong today and every later stage inherits them.
+
+The job layer before the profession layer, because it touches deeper structure — sessions and
+config — and the profession layer should land on ground that has stopped moving. A second job
+is also usually a different profession, so the job record has to exist before `profession` has
+anywhere to live.
+
+The invisible refactor (Stage 2) before the visible feature (Stage 3), so that the risky part
+is proven by tests that predate it.
