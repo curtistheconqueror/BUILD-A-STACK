@@ -19,6 +19,10 @@
   body.widget #wcard{margin:0;border-radius:0;min-height:100vh;
     display:flex;flex-direction:column;justify-content:center}
   #wcard{--ca:var(--acc)}
+  .wbrand{font-size:11px;letter-spacing:3px;text-transform:uppercase;font-weight:800;
+    margin-bottom:10px;
+    background:linear-gradient(90deg,#35d0e0,#b78cff,#ff6fb5);
+    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
   .wstat{display:flex;align-items:center;gap:8px;font-size:12px;letter-spacing:1.4px;
     text-transform:uppercase;color:var(--muted);font-weight:800;margin-bottom:6px}
   .wstat .blip{width:8px;height:8px;border-radius:50%;background:var(--muted)}
@@ -664,6 +668,10 @@
 <div class="wrap">
   <!-- ================= WIDGET MODE ================= -->
   <section class="card hide" id="wcard">
+    <!-- Widget mode hides the page header, so the name is carried here instead. Otherwise the
+         one view launched straight from a home-screen shortcut is the one that never says
+         what it is. -->
+    <div class="wbrand" id="wbrand">WiseWage</div>
     <div class="wstat"><span class="blip"></span><span id="wstatus">Clocked out</span></div>
     <div class="wmoney" id="wmoney">$0.00</div>
     <div class="wsub" id="wsub">Today · 0.00 h</div>
