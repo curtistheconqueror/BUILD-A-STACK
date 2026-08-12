@@ -49,6 +49,12 @@ It traces the real setup in four stops:
 
 A **turn-wheel** toggle spins the roller and plate so you can see the slip-ring contact hold while steering, and a **sound** toggle plays a two-note electric horn.
 
+### Fault scenarios & diagnosis
+
+A **scenario** selector turns the same diagram into a diagnostic bench. Beyond *healthy*, it injects the faults that actually strand a bus — a bad horn, a bad ground, one dead horn, an open in the trigger path, a dead short that blows the fuse, and a stuck-on horn — and animates exactly where the current stops, with a marker at the fault (open · short · dead).
+
+It's framed around the two sides of a relay circuit: the **control side** (the coil, and the button/slip-ring that trigger it) versus the **load side** (the contacts out to the horns). The relay is the *power router* on the boundary, so the **click** is the key clue — a click proves the whole control side works and sends you *downstream* to the load side; no click means the fault is *upstream*. The headline case, *relay clicks but no horn*, spotlights the relay as the only thing working and routes power right up to the dead horns. A live readout gives the symptom, what it rules out, the fault zone, and the likely fix, with a full symptom→cause table below the diagram.
+
 ## Roadmap
 
 - **Phase A — Learn (glossary)**
