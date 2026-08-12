@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Pay Clock" />
-<title>Pay Clock · live earnings tracker</title>
+<meta name="apple-mobile-web-app-title" content="WiseWage" />
+<title>WiseWage · live earnings tracker</title>
 <style>
   /* ---- widget mode ---- */
   body.widget{overflow:hidden}
@@ -62,6 +62,10 @@
   h1[data-solid]{background:none;-webkit-text-fill-color:var(--c-title);color:var(--c-title);animation:none}
   @keyframes sheen{to{background-position:300% 0}}
   .sub{color:var(--muted);font-size:14px;margin-top:5px}
+  /* The former name, kept in front of the tagline so anyone who installed this as Pay Clock
+     recognises it after the rename. Brighter than the tagline so it reads as a name rather
+     than the first three words of the sentence. */
+  .was{color:var(--ink);font-weight:700;letter-spacing:.3px}
 
   .card{background:var(--glass);backdrop-filter:blur(16px) saturate(1.3);border:1px solid var(--border);
     border-left:3px solid var(--ca,var(--acc));border-radius:16px;padding:18px 20px;margin-bottom:16px}
@@ -675,8 +679,8 @@
   </div>
 
   <header>
-    <h1>PAY CLOCK</h1>
-    <div class="sub">Clock in and watch it earn — second by second, straight time into overtime.</div>
+    <h1>WISEWAGE</h1>
+    <div class="sub"><span class="was">Pay Clock</span> · Clock in and watch it earn — second by second, straight time into overtime.</div>
   </header>
 
   <!-- ================= FIRST RUN ================= -->
@@ -3081,6 +3085,15 @@ function currentPayMonth(parts, cfg, nowMs){
 /* ==ENGINE-END== */
 
 /* ============================ state ============================ */
+
+/* The app was called Pay Clock until August 2026. The display name changed; the storage key
+   deliberately did not, because it is what a year of someone's shifts is filed under and
+   renaming it would strand every existing install. Backup files carry the new id going
+   forward and the old one is still accepted on the way in — see APP_IDS. */
+var APP_NAME = 'WiseWage';
+var APP_ID   = 'wisewage';
+var APP_IDS  = { wisewage: 1, 'pay-clock': 1 };
+
 var KEY = 'payclock.v1';
 
 /* Some contexts — an embedded frame, private browsing with storage disabled — block
@@ -6013,7 +6026,7 @@ function exportCsv(){
   try {
     var url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
     var a = document.createElement('a');
-    a.href = url; a.download = 'pay-clock.csv'; a.click();
+    a.href = url; a.download = APP_ID + '.csv'; a.click();
     setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
     toast('CSV exported.');
   } catch(e){
@@ -6040,13 +6053,13 @@ function download(name, text, type){
 
 function backup(){
   var payload = JSON.stringify({
-    app: 'pay-clock', version: 1, savedAt: new Date().toISOString(),
+    app: APP_ID, version: 1, savedAt: new Date().toISOString(),
     cfg: state.cfg, sessions: state.sessions, absences: state.absences,
     configured: state.configured, theme: state.theme, net: state.net, ui: state.ui,
     unit: state.unit, planOn: state.planOn, plannedHours: state.plannedHours, sound: state.sound, calc: state.calc, calCal: state.calCal, activeAdj: state.activeAdj,
     autoOn: state.autoOn, autoAt: state.autoAt, autoDays: state.autoDays
   }, null, 2);
-  var name = 'pay-clock-backup-' + dateInput(new Date()) + '.json';
+  var name = APP_ID + '-backup-' + dateInput(new Date()) + '.json';
   if (download(name, payload, 'application/json')) toast('Backup saved — ' + state.sessions.length + ' shifts.');
   else {
     var w = window.open('', '_blank');
@@ -6058,8 +6071,12 @@ function backup(){
 
 function restoreFrom(text){
   var d;
-  try { d = JSON.parse(text); } catch(e){ toast('That file is not a Pay Clock backup.'); return; }
-  if (!d || d.app !== 'pay-clock' || !Array.isArray(d.sessions)){ toast('That file is not a Pay Clock backup.'); return; }
+  try { d = JSON.parse(text); } catch(e){ toast('That file is not a ' + APP_NAME + ' backup.'); return; }
+  /* Backups written before the rename say 'pay-clock'. They are the same file in every other
+     respect, and someone restoring a year of shifts should not be told their own backup is
+     foreign because the app changed its name underneath them. */
+  if (!d || !APP_IDS[d.app] || !Array.isArray(d.sessions)){
+    toast('That file is not a ' + APP_NAME + ' backup.'); return; }
   var clean = d.sessions.filter(function(s){
     return s && typeof s.start === 'number' && typeof s.end === 'number' && s.end > s.start;
   });

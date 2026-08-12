@@ -1,6 +1,6 @@
 {
-  "name": "Pay Clock",
-  "short_name": "Pay Clock",
+  "name": "WiseWage",
+  "short_name": "WiseWage",
   "description": "Clock in and watch your pay accrue in real time.",
   "start_url": "./",
   "scope": "./",
