@@ -160,12 +160,23 @@ crosses the wage base and one that crosses a bracket.
 
 The `PROFESSIONS` table, the setup wizard (field → role → state), and profile-driven
 rendering. Ships with `transit_operator` and `nurse` — both `clock`, so the mechanism is
-proven without new pay maths.
+proven without a new earning model.
 
 Existing users are migrated to `transit_operator` silently and see no change.
 
+Two pieces of the nurse profile are **not** data and have to be built here:
+
+- **Stacking premiums.** Night *and* weekend *and* charge can apply to the same hour. The
+  engine currently has one differential window. This becomes a list of windows, each with its
+  own rate and day mask, summed for any hour they overlap.
+- **Callback minimums.** Being called in pays a guaranteed floor — commonly two to four hours
+  — however short the actual work. That is a floor, not a rate, and no existing structure has
+  that shape. It also interacts with overtime: the guaranteed hours count as hours worked.
+
 *Smoke test:* each profile renders only its own controls; switching profession does not
-destroy data; the Illinois and Indiana legal notes appear on the right profiles.
+destroy data; the Illinois and Indiana legal notes appear on the right profiles; three
+premiums stack correctly on one hour; a twenty-minute callback pays the full minimum and that
+minimum counts toward the overtime threshold.
 
 ### Stage 6 — The `units` model
 
@@ -190,6 +201,18 @@ handling.
 breakdown; stipends fall outside the base contract.
 
 ---
+
+### Where a given profession actually gets built
+
+The dividing line is simple: **if the profession is still a clock, it is mostly data. If it
+is not, it needs a new earning model.**
+
+| Profession | Lands in | Why there |
+|---|---|---|
+| Transit operator | Stage 5 | Already the shipped behaviour; becomes the default profile |
+| Nurse | Stage 1 + Stage 5 | 8/80 is engine work and a live defect; the profile, stacking premiums and callback minimums come with the profession layer |
+| Surgeon / physician | Stage 6 | No clock exists in this job at all — `units` is a genuinely different way money arrives |
+| Teacher | Stage 7 | `contract` plus a pension that replaces Social Security |
 
 ## Ordering, and why
 
