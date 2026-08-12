@@ -26,7 +26,8 @@ console.log(`engine source: ${widget}`);
 
 const E = new Function(m[1] + `
   return { DEFAULTS, periodInfo, weekInfo, splitSession, buildLedger,
-           sumRange, sumSession, bucketHoursAt, plannedStopAt, quantize, HOUR_MS };
+           sumRange, sumSession, bucketHoursAt, plannedStopAt, quantize,
+           qualifiedOT, HOUR_MS };
 `)();
 
 // The shipped defaults carry no wage or pay schedule — those come from first-run setup —
@@ -246,6 +247,53 @@ group('Robustness');
   // Marathon shift: must terminate and stay exact.
   const long = [shift('L', at(2026, 7, 27, 0), at(2026, 8, 3, 0))]; // 168 h
   near('7-day shift = 168 h', E.sumSession(E.buildLedger(long, cfg).parts, 'L').hours, 168);
+}
+
+/* ------------------------------------------------------------------ */
+group('FLSA qualified OT — the "No Tax on Overtime" deduction');
+{
+  const half = 38 * 0.5; // deductible half-time premium per qualified hour at $38
+
+  // 1. Weekly >40: Mon–Sat, 8 h each = 48 h in the Jul 26 workweek → 8 h qualify.
+  const wk = [1, 2, 3, 4, 5, 6].map(i => shift('d' + i, at(2026, 7, 26 + i, 9), at(2026, 7, 26 + i, 17)));
+  const q1 = E.qualifiedOT(wk, cfg);
+  near('48 h week → 8 h qualify', q1.hours, 8);
+  near('deductible = 8 × ½ × $38 = $152', q1.premium, 8 * half);
+
+  // 2. Independent of the payroll rule: period-80 mode pays 0 gross OT on 61 h,
+  //    but FLSA still qualifies the hours over 40 in the heavy week.
+  const pcfg = { ...cfg, otMode: 'period' };
+  const heavy = [0, 1, 2, 3, 4].map(i => shift('h' + i, at(2026, 7, 26 + i, 8), at(2026, 7, 26 + i, 17))); // 45 h wk1
+  const light = [shift('n1', at(2026, 8, 3, 9), at(2026, 8, 3, 17)),
+                 shift('n2', at(2026, 8, 4, 9), at(2026, 8, 4, 17))];                                       // 16 h wk2
+  const span = heavy.concat(light);
+  near('period-80 mode pays no gross OT under 80 h', E.buildLedger(span, pcfg).parts.reduce((s, p) => s + p.otHours, 0), 0);
+  near('FLSA still qualifies 5 h from the 45 h week', E.qualifiedOT(span, pcfg).hours, 5);
+
+  // 3. Double-time: employer pays 2×, but only the FLSA half-time is deductible.
+  const dcfg = { ...cfg, otMultiplier: 2 };
+  const q3 = E.qualifiedOT(wk, dcfg);
+  near('2× multiplier still qualifies 8 h', q3.hours, 8);
+  near('premium stays capped at ½× (not 2×) → $152', q3.premium, 8 * half);
+
+  // 4 & 5. Historical raises and shift differential are not in this app's model
+  //   (single flat rate, no differential), so the premium uses the flat rate — documented,
+  //   not silently wrong. These are the boundary of the estimate, by design.
+  near('single-rate model: premium uses the flat cfg.rate', E.qualifiedOT(wk, cfg).premium, 8 * half);
+  const rcfg = { ...cfg, rate: 40 };
+  near('a rate change re-prices all qualified hours at the new flat rate', E.qualifiedOT(wk, rcfg).premium, 8 * 20);
+
+  // 6. YTD across pay periods: qualify per week, summed over a multi-period window.
+  const wkC = [0, 1, 2, 3, 4, 5].map(i => shift('c' + i, at(2026, 8, 9 + i, 9), at(2026, 8, 9 + i, 17))); // 48 h, next period
+  const yr = [+new Date(2026, 0, 1), +new Date(2027, 0, 1)];
+  const ytd = E.qualifiedOT(wk.concat(wkC), cfg, yr[0], yr[1]);
+  near('YTD qualifies 8 + 8 = 16 h across two periods', ytd.hours, 16);
+  near('YTD deductible = 16 × ½ × $38 = $304', ytd.premium, 16 * half);
+  near('window ending Aug 9 excludes the Aug 9 week', E.qualifiedOT(wk.concat(wkC), cfg, yr[0], +new Date(2026, 7, 9)).hours, 8);
+
+  // Exactly 40 h never qualifies — the line itself is straight time.
+  const flat40 = [1, 2, 3, 4, 5].map(i => shift('f' + i, at(2026, 7, 26 + i, 9), at(2026, 7, 26 + i, 17)));
+  near('40 h flat → nothing qualifies', E.qualifiedOT(flat40, cfg).hours, 0);
 }
 
 /* ------------------------------------------------------------------ */

@@ -172,6 +172,14 @@
   .p80note.hot{color:var(--warn)}
   .p80note.hot b{color:var(--warn)}
 
+  /* ---- no tax on overtime ---- */
+  #notax{--ca:var(--acc)}
+  .badge.est{border-color:var(--muted);color:var(--muted);background:rgba(130,155,200,.10);letter-spacing:1.4px}
+  input.mrate{width:52px}
+  .notax-note{margin-top:15px;font-size:12.6px;line-height:1.65;color:var(--muted)}
+  .notax-note b{color:var(--ink)}
+  .notax-note .warnbit{color:var(--warn);font-weight:700}
+
   /* ---- log / settings ---- */
   #log,#cfg{--ca:var(--muted)}
   table{width:100%;border-collapse:collapse;font-size:13.2px;font-variant-numeric:tabular-nums}
@@ -316,6 +324,20 @@
     <div class="p80note" id="p80Note"></div>
   </section>
 
+  <!-- ================= NO TAX ON OVERTIME ================= -->
+  <section class="card" id="notax">
+    <h2>No Tax on Overtime <span class="badge est">estimate</span></h2>
+    <div class="tgrid">
+      <div class="tile"><div class="k">Deductible · this period</div><div class="big" id="qpPrem">$0.00</div>
+        <div class="det" id="qpDet">0.00 h qualify</div></div>
+      <div class="tile"><div class="k">Deductible · year to date</div><div class="big" id="qyPrem">$0.00</div>
+        <div class="det" id="qyDet">0.00 h qualify</div></div>
+      <div class="tile"><div class="k">Est. tax saved · YTD</div><div class="big" id="qSaved">—</div>
+        <div class="det">at <input type="number" id="cMarginal" min="0" max="60" step="1" inputmode="numeric" class="mrate"> % marginal rate</div></div>
+    </div>
+    <div class="notax-note" id="notaxNote"></div>
+  </section>
+
   <!-- ================= LOG ================= -->
   <section class="card" id="log">
     <h2>Shift log — this period</h2>
@@ -381,7 +403,7 @@
       </div>
       <div class="f" style="margin-top:14px">
         <div class="note">The anchor is any date a period started on — periods repeat from it forever, so this never needs touching again.
-        Figures are <b>gross</b> (before taxes and deductions). Everything is stored only in this browser.</div>
+        Figures are <b>gross</b> (before taxes and deductions); the No Tax on Overtime card is a separate estimate of one federal deduction. Everything is stored only in this browser.</div>
       </div>
       <div class="f" style="margin-top:16px">
         <label>Back up &amp; move your data</label>
@@ -417,7 +439,8 @@ var DEFAULTS = {
   weekStartDay: 0,           // 0 = Sunday
   periodAnchor: '2026-01-04',// any Sunday; setup replaces it with your real period start
   periodLengthDays: 14,
-  payDateOffsetDays: 13      // payday = last day of the period + this many days
+  payDateOffsetDays: 13,     // payday = last day of the period + this many days
+  marginalPct: 22            // only for the optional "tax saved" estimate on qualified OT
 };
 
 function ymd(s){ var p = String(s).split('-').map(Number); return new Date(p[0], p[1]-1, p[2]); }
@@ -532,6 +555,45 @@ function plannedStopAt(activeStart, plannedHours, completed, cfg){
 function quantize(ms, unit){
   var step = unit === 'hr' ? HOUR_MS : unit === 'min' ? 60000 : 1000;
   return Math.floor(ms / step) * step;
+}
+
+/* ---- FLSA qualified overtime — the federal "No Tax on Overtime" deduction ----
+   Deliberately computed INDEPENDENTLY of the app's payroll OT rule. Only hours
+   over 40 in an FLSA workweek qualify — never daily OT, never the period-80
+   timing — and only the FLSA-required half-time premium (0.5 x the regular rate)
+   is deductible, even when the employer pays 2x or any higher multiplier.
+   Estimate only: it assumes one flat regular rate (this app keeps no rate history)
+   and no shift differential, so it does not fold either into the regular rate. */
+function qualifiedOtParts(sessions, cfg){
+  var FLSA_WEEK = 40, HALF = 0.5, bucket = {}, out = [];
+  var sorted = sessions.filter(function(s){ return s.end > s.start; })
+                       .slice().sort(function(a, b){ return a.start - b.start; });
+  for (var i = 0; i < sorted.length; i++){
+    var chunks = splitSession(sorted[i].start, sorted[i].end, cfg);
+    for (var j = 0; j < chunks.length; j++){
+      var c = chunks[j], hours = (c.end - c.start) / HOUR_MS;
+      var before = bucket[c.weekKey] || 0;                       // hours already in this FLSA week
+      var straight = Math.max(0, Math.min(FLSA_WEEK - before, hours));
+      var qual = hours - straight;                               // the slice past 40 this week
+      bucket[c.weekKey] = before + hours;
+      out.push({ start: c.start, end: c.end, sessionId: sorted[i].id,
+                 qualHours: qual, premium: qual * cfg.rate * HALF });
+    }
+  }
+  return out;
+}
+/* Qualified OT summed over a window [fromMs, toMs] — the over-40 hours and the
+   deductible half-time dollars. Omit the bounds for all-time. Windows land on
+   midnights and parts never straddle one, so the whole-part test is exact. */
+function qualifiedOT(sessions, cfg, fromMs, toMs){
+  var parts = qualifiedOtParts(sessions, cfg), t = { hours: 0, premium: 0 };
+  for (var i = 0; i < parts.length; i++){
+    var p = parts[i];
+    if ((fromMs == null || p.start >= fromMs) && (toMs == null || p.end <= toMs)){
+      t.hours += p.qualHours; t.premium += p.premium;
+    }
+  }
+  return t;
 }
 /* ==ENGINE-END== */
 
@@ -748,6 +810,32 @@ function render(){
 
   renderProgress(ledger, period, now);
   renderLog(ledger, period, active, now);
+  renderNoTax(all, period, now);
+}
+
+/* No Tax on Overtime — the federal qualified-overtime deduction, estimated.
+   Uses the FLSA-independent qualifiedOT() so it stays right even when the
+   payroll OT rule above is period-80 or a multiplier other than 1.5×. */
+function renderNoTax(all, period, now){
+  var cfg = state.cfg;
+  var per = qualifiedOT(all, cfg, period.startMs, period.endMs);
+  var ytd = qualifiedOT(all, cfg, +new Date(new Date(now).getFullYear(), 0, 1), now);
+
+  document.getElementById('qpPrem').textContent = money(per.premium);
+  document.getElementById('qpDet').textContent = per.hours.toFixed(2) + ' h qualify';
+  document.getElementById('qyPrem').textContent = money(ytd.premium);
+  document.getElementById('qyDet').textContent = ytd.hours.toFixed(2) + ' h qualify';
+  var mp = cfg.marginalPct;
+  document.getElementById('qSaved').textContent = mp > 0 ? money(ytd.premium * mp / 100) : '—';
+
+  var mismatch = cfg.otMode !== 'weekly' || Math.abs(cfg.otMultiplier - 1.5) > 1e-9 || cfg.weeklyThreshold !== 40;
+  document.getElementById('notaxNote').innerHTML =
+    'Only hours over <b>40 in a workweek</b> qualify for the federal deduction — and only the required '
+    + '<b>½× premium</b> (half of your rate), even if you’re paid 2×. Figured per workweek, so it '
+    + 'stays independent of your OT rule above.'
+    + (mismatch ? ' <span class="warnbit">Your payroll OT rule differs from FLSA, so this won’t match your gross OT hours.</span>' : '')
+    + '<br><b>Estimate only:</b> assumes one flat rate and no shift differential (this app tracks neither), '
+    + 'and ignores the federal income caps and phase-outs. Not tax advice.';
 }
 
 /* Pay-period progress: what each week contributed, and the running period total that
@@ -894,7 +982,7 @@ function saveSetup(){
 function applyStage(){
   var first = !state.configured;
   show('setup', first);
-  ['hero', 'period', 'totals', 'progress', 'log', 'cfg'].forEach(function(id){ show(id, !first); });
+  ['hero', 'period', 'totals', 'progress', 'notax', 'log', 'cfg'].forEach(function(id){ show(id, !first); });
   if (first){
     document.getElementById('sAnchor').value = dateInput(mostRecentWeekStart());
     previewSetup();
@@ -1165,7 +1253,8 @@ var CFG_FIELDS = [
   ['cRate', 'rate', 'float'], ['cMult', 'otMultiplier', 'float'], ['cMode', 'otMode', 'str'],
   ['cWeekStart', 'weekStartDay', 'int'], ['cWeekThr', 'weeklyThreshold', 'float'],
   ['cPeriodThr', 'periodThreshold', 'float'], ['cAnchor', 'periodAnchor', 'str'],
-  ['cLen', 'periodLengthDays', 'int'], ['cPayOff', 'payDateOffsetDays', 'int']
+  ['cLen', 'periodLengthDays', 'int'], ['cPayOff', 'payDateOffsetDays', 'int'],
+  ['cMarginal', 'marginalPct', 'float']
 ];
 CFG_FIELDS.forEach(function(f){
   document.getElementById(f[0]).onchange = function(e){
