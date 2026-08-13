@@ -1,4 +1,4 @@
-# Pay Clock
+# WiseWage
 
 A live earnings clock. Clock in and watch your pay climb in real time — through straight time, into overtime, across pay periods.
 
@@ -57,8 +57,8 @@ This branch is an orphan: no shared history, no files from the parent project, a
 
 ```sh
 # create an empty repo on GitHub first (no README, no .gitignore, no licence), then:
-git clone --single-branch --branch pay-clock <this-repo-url> pay-clock
-cd pay-clock
+git clone --single-branch --branch pay-clock <this-repo-url> wisewage
+cd wisewage
 git remote set-url origin <new-repo-url>
 git branch -m pay-clock main
 git push -u origin main
@@ -77,13 +77,38 @@ off there, so there is no rush and nothing is lost if the two overlap for a whil
 
 ## Tests
 
+Two layers. The engine suite needs nothing installed:
+
 ```sh
 npm test
 ```
 
-548 assertions, no dependencies. They cover period and week boundaries, all four overtime rules, mid-shift threshold crossings, overnight and DST-spanning shifts, period rollover, auto-stop targets, the SEC/MIN/HR stepping, holidays and banked days off, absences and the make-up rule, vacation blocks, the shop-clock offset, the shift differential, and the federal tax table.
+620 assertions covering period and week boundaries, all five overtime rules, mid-shift
+threshold crossings, overnight and DST-spanning shifts, period rollover, auto-stop targets,
+the SEC/MIN/HR stepping, holidays and banked days off, absences and the make-up rule,
+vacation blocks, the shop-clock offset, the shift differential, the federal tax table, the
+Social Security wage base, and the FLSA qualified-overtime rule.
 
-The suite extracts the pay engine directly out of `index.html`, so what's tested is exactly what ships — there's no second copy to fall out of sync.
+It extracts the pay engine directly out of `index.html`, so what is tested is exactly what
+ships — there is no second copy to fall out of sync.
+
+The UI suites drive a real browser, so they need Playwright:
+
+```sh
+npm install
+npx playwright install chromium
+npm run test:ui                  # every suite
+npm run test:ui -- smoke drive   # only those
+npm run test:all                 # engine, then UI
+```
+
+Fifty-three suites, around 1,500 assertions. Each starts its own static server, seeds
+`localStorage`, installs a fixed clock and drives the real page — clocking in and out,
+editing shifts, changing settings, reloading, and checking what is actually on screen at
+phone and desktop sizes. They run one at a time on purpose: browser-driving tests that share
+a machine report contention as failure.
+
+Set `PW_CHROME` to use a particular browser build rather than Playwright's own.
 
 ## Files
 
@@ -91,7 +116,8 @@ The suite extracts the pay engine directly out of `index.html`, so what's tested
 |---|---|
 | `index.html` | The entire app — markup, styling, pay engine, UI |
 | `manifest.webmanifest`, `sw.js`, `icons/` | Home-screen install and offline cache |
-| `tests/` | The engine test suite |
+| `tests/pay-engine.test.mjs` | The engine suite — no dependencies |
+| `tests/ui/`, `tests/run-ui.mjs` | Browser suites and their runner |
 
 ## Worth knowing
 

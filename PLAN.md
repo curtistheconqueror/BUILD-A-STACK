@@ -1,12 +1,13 @@
 # Build plan: professions, and more than one job
 
-This is the roadmap for turning Pay Clock from one person's hourly clock into an app that
+This is the roadmap for turning WiseWage from one person's hourly clock into an app that
 knows what you do for a living and can hold more than one employer at once.
 
 **If you are a session picking this repo up: read this before adding a feature.** There is
 already one case in this repository's history — PR #6 — where a second lineage of this app
 grew a feature the main lineage already had, because neither knew about the other. The
-engine here is 548 assertions deep. Extend it; do not restart it.
+engine here is 620 assertions deep, with another ~1,500 driving the real page in
+`tests/ui/`. Extend them; do not restart them.
 
 ---
 
@@ -126,20 +127,23 @@ it. Done before the rest because Stages 3 and 5 both land *inside* Settings, and
 scattered fields is nine chances to miss one. The grouping is the seam the profession layer
 needs.
 
-### Stage 1 — Fix what is already wrong
+### Stage 1 — Fix what is already wrong *(done)*
 
-No new UI. These are live defects in the shipped app.
+No new UI. These were live defects in the shipped app.
 
-| Fix | Why |
+| Fix | What it was doing |
 |---|---|
-| **8/80 overtime mode** | FLSA §7(j) lets hospitals pay overtime over 8 in a day *or* 80 in 14 days, both at once with a credit rule. Not one of the four current modes. Worth ~$12,480/yr to a nurse on three 12s. |
-| **Cumulative Social Security** | The cap is applied per period (`wageBase / periodsPerYear`) instead of against year-to-date wages. Annual total is right; the per-check distribution is wrong for anyone crossing the base. |
-| **Additional Medicare 0.9%** | Not modeled at all. Owed on wages above $200,000. |
-| **FLSA qualified-overtime premium** | Only the half-time premium on hours over 40 in a workweek is deductible, regardless of the payroll multiplier or rule. Currently derived from the configured multiplier, which over-claims at 2× and on non-weekly rules. From PR #6. |
-| **Move the UI suite into the repo** | ~1,780 assertions across 49 suites currently live in an ephemeral scratchpad. This was the audit's number one finding, and it is now blocking: nothing below is safe to attempt without them under version control. |
+| **8/80 overtime mode** | FLSA §7(j) lets hospitals pay overtime over 8 in a day *or* 80 in 14 days, both at once with a credit rule. None of the four existing modes could express it. Worth $480 a period — about $12,500 a year — to a nurse on three twelves. |
+| **Cumulative Social Security** | The cap was applied per cheque rather than against year-to-date wages. Annual total right, every individual cheque wrong: $439.96 a period all year where payroll withholds $1,430.77 for eight cheques and nothing after. |
+| **Additional Medicare 0.9%** | Not modelled at all. $3,600 on a $600,000 year. |
+| **FLSA qualified overtime** | Derived from the configured rule and multiplier rather than from federal law. Three twelves a week under 8/80 is 24 hours of contractual overtime, 36 hours worked, and *zero* qualified — the app was claiming all 24. |
+| **UI suite into the repo** | 53 suites and ~1,500 assertions lived in an ephemeral scratchpad that died with the session. Now `tests/ui/` with a runner, portable paths, and `npm run test:ui`. |
 
-*Smoke test:* full engine suite plus new assertions for each fix; the whole UI harness green
-from its new home in `tests/`.
+Crossing the Social Security base and the surtax threshold together produces the opposite of
+what it sounds like: the cheque gets **bigger**, because losing 6.2% dwarfs picking up 0.9%.
+A per-period cap hid that entirely.
+
+Engine suite: 548 → 620 assertions.
 
 ### Stage 2 — The job layer, invisible
 
