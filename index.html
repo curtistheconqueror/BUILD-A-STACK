@@ -129,6 +129,15 @@
      still tell you it is counting. */
   .jobchip .dot{width:8px;height:8px;border-radius:50%;background:transparent;flex:none}
   .jobchip.live .dot{background:var(--ok);animation:pulse 1.4s ease-in-out infinite}
+  .jobtax{border:1px solid var(--border);border-radius:12px;padding:13px 15px;margin-bottom:14px;
+    background:rgba(10,16,32,.35);font-size:13.2px;line-height:1.6}
+  .jobtax h4{margin:0 0 6px;font-size:12px;letter-spacing:1.6px;text-transform:uppercase;
+    color:var(--c-sect,#51e08a);font-weight:800}
+  .jobtax .row{display:flex;justify-content:space-between;gap:12px;margin-top:3px}
+  .jobtax .row b{font-variant-numeric:tabular-nums}
+  .jobtax .good{color:var(--ok)}
+  .jobtax .owe{color:var(--warn)}
+  .jobtax + .jobtax{margin-top:-4px}
   .jobwarn{border:1px solid var(--warn);background:rgba(255,180,84,.10);border-radius:12px;
     padding:10px 13px;margin-bottom:12px;font-size:13px;line-height:1.5;color:var(--ink)}
 
@@ -1385,6 +1394,9 @@
   <section class="card col" id="ytd">
     <h2>Year to date <span id="ytdYear"></span><span class="colsum" id="sum_ytd"></span></h2>
     <div class="colbody">
+    <!-- Only ever on screen with a second job: with one employer neither of these can
+         happen, and a panel explaining a problem you cannot have is noise. -->
+    <div class="jobtax hide" id="jobTax"></div>
     <div class="tgrid">
       <div class="tile"><div class="k">Earned this year</div><div class="big" id="yGross">$0.00</div>
         <div class="det" id="yDet">0.00 h</div></div>
@@ -4549,6 +4561,7 @@ function render(){
     lastHeavySig = heavySig;
     renderProgress(ledger, period, now);
     renderYtd(ledger, now);
+    renderJobTax(now);
     renderLog(ledger, period, active, now);
     renderPayMonths(ledger, now);
     renderPast(ledger, now);
@@ -4566,6 +4579,55 @@ function render(){
 
 /* Year to date: live totals, the OT tax-free cap, and a projection built from the
    overtime the user commits to working each week. */
+/* The two things a second job does to your tax that neither employer can see. */
+function renderJobTax(now){
+  var box = el('jobTax'); if (!box) return;
+  if (jobList().length < 2){ box.className = 'jobtax hide'; box.innerHTML = ''; return; }
+
+  var ss = ssOverpaid(now), uw = underWithheld(now), out = '';
+
+  if (ss && ss.over > 0.5){
+    out += '<h4>Social Security overpaid</h4>'
+      + '<div class="sub">Each employer withholds up to the wage base on the wages it pays, '
+      + 'and neither can see the other. Between them they have passed the annual maximum.</div>'
+      + ss.each.map(function(r){
+          return '<div class="row"><span>' + esc(r.name) + '</span><b>' + money(r.withheld) + '</b></div>';
+        }).join('')
+      + '<div class="row"><span>Most anyone owes in a year</span><b>' + money(ss.max) + '</b></div>'
+      + '<div class="row"><span><b>Overpaid — claim it back at filing</b></span>'
+      + '<b class="good">' + money(ss.over) + '</b></div>';
+  }
+
+  if (uw && Math.abs(uw.gap) > 25){
+    var owe = uw.gap > 0;
+    out += (out ? '<div style="height:12px"></div>' : '')
+      + '<h4>' + (owe ? 'Under-withheld' : 'Over-withheld') + '</h4>'
+      + '<div class="sub">Every employer withholds as though its job is your only income, so '
+      + 'the second one is taxed from the bottom bracket up a second time. Your real bill is '
+      + 'worked out on the two together. At your current pace for ' + uw.year + ':</div>'
+      + uw.rows.map(function(r){
+          return '<div class="row"><span>' + esc(r.name) + ' withholds</span><b>'
+               + money(r.withheld) + '</b></div>';
+        }).join('')
+      + '<div class="row"><span>Federal tax actually owed on ' + money(uw.combined) + '</span><b>'
+      + money(uw.owed) + '</b></div>'
+      + '<div class="row"><span><b>' + (owe ? 'Short by' : 'Ahead by') + '</b></span>'
+      + '<b class="' + (owe ? 'owe' : 'good') + '">' + money(Math.abs(uw.gap)) + '</b></div>'
+      + (owe ? '<div class="sub" style="margin-top:7px">Roughly '
+               + money(Math.abs(uw.gap) / 12) + ' a month to set aside, or hand your employer a '
+               + 'new W-4 with Step 2 filled in and it comes out of your cheque instead.</div>'
+             : '');
+  }
+
+  if (!out){
+    out = '<h4>Two jobs, tax checked</h4>'
+        + '<div class="sub">Nothing to flag. Neither employer has overpaid Social Security '
+        + 'between them, and what the two withhold is close to what you actually owe.</div>';
+  }
+  box.className = 'jobtax';
+  box.innerHTML = out;
+}
+
 function renderYtd(ledger, now){
   var nc = netCfg();
   var on = nc.ytdShow !== false;
@@ -6030,6 +6092,91 @@ function ytdSums(ledger, now){
 }
 /* The deduction is a half-time premium on qualified hours, whatever the contract pays. */
 function otPremiumOf(t){ return (t.qualOt || 0) * state.cfg.rate * 0.5; }
+
+/* ---- what a second job does to your tax ----
+
+   Overtime never combines across employers, but tax does: it is charged to a person, not to
+   a payroll department. Two places where that gap costs real money, and neither shows up on
+   either employer's payslip because neither employer can see the other.
+
+   Each job's year to date, priced against its own rules and its own rate. */
+function jobYtd(jobId, nowMs){
+  var j = jobById(jobId);
+  if (!j) return { gross: 0, hours: 0, otHours: 0, qualOt: 0 };
+  var led = buildLedger(jobSessions(j.id), j.cfg, nowMs);
+  var y = new Date(nowMs == null ? Date.now() : nowMs).getFullYear();
+  var t = sumRange(led.parts, +new Date(y, 0, 1), +new Date(y + 1, 0, 1));
+  return { job: j, gross: t.gross, hours: t.hours, otHours: t.otHours, qualOt: t.qualOt };
+}
+
+/* Every job's year to date, plus the combined figure. The carry-in belongs to whichever job
+   it was entered against — it is one person's earlier earnings, not a shared pool. */
+function allJobsYtd(nowMs){
+  var out = jobList().map(function(j){ return jobYtd(j.id, nowMs); });
+  var base = ytdBase().gross || 0;
+  var total = out.reduce(function(a, r){ return a + r.gross; }, base);
+  return { jobs: out, carriedIn: base, gross: total };
+}
+
+/* Social Security overpaid between employers.
+
+   Each employer withholds 6.2% up to the wage base on the wages IT pays, and has no way to
+   know about the other. Two jobs can therefore withhold past the annual maximum between
+   them — and the excess is not lost: it is refundable as a credit on the return. Nobody
+   tells you, because no single employer did anything wrong.
+
+   Reported only when there is more than one job, because with one it cannot happen. */
+function ssOverpaid(nowMs){
+  var js = jobList();
+  if (js.length < 2) return null;
+  var rate = TAX2026.ssRate, cap = TAX2026.ssWageBase;
+  var each = allJobsYtd(nowMs).jobs.map(function(r){
+    return { name: r.job.name, gross: r.gross, withheld: Math.min(r.gross, cap) * rate };
+  });
+  var withheld = each.reduce(function(a, r){ return a + r.withheld; }, 0);
+  var max = cap * rate;
+  var over = Math.max(0, withheld - max);
+  return { each: each, withheld: withheld, max: max, over: Math.round(over * 100) / 100 };
+}
+
+/* What two employers withhold between them, against what one person actually owes.
+
+   Every employer withholds as though its job is your only income, so a second job is taxed
+   from the bottom bracket upward a second time — while your real liability is worked out on
+   the combined figure, further up the brackets. The gap is the single most common and most
+   expensive surprise of taking a second job, and it is knowable in August rather than April.
+
+   Both sides are annualised from the year to date, so the answer is "on this pace", not a
+   claim about a year that has not finished. */
+function underWithheld(nowMs){
+  var now = nowMs == null ? Date.now() : nowMs;
+  var js = jobList();
+  if (js.length < 2) return null;
+  var nc = netCfg();
+  if (nc.fedExempt) return null;                 // nothing is being withheld to compare
+  var y = new Date(now).getFullYear();
+  var elapsed = Math.max(1, dayOfYear(now));
+  var pace = 365.25 / elapsed;                   // year-end figures at the current run rate
+
+  var rows = allJobsYtd(now).jobs.map(function(r){
+    var annual = r.gross * pace;
+    var periods = Math.max(1, Math.round(365.25 / (r.job.cfg.periodLengthDays || 14)));
+    /* Each employer's own view: this job's wages, spread over this job's pay periods, with
+       the whole standard deduction applied — which is exactly the mistake, since only one
+       of them can have it. */
+    var perPeriod = annual / periods;
+    var withheld = fedWithholding(perPeriod, periods, nc.filing || 'single', nc.dependents || 0) * periods;
+    return { name: r.job.name, annual: annual, withheld: withheld };
+  });
+  var combined = rows.reduce(function(a, r){ return a + r.annual; }, (ytdBase().gross || 0) * pace);
+  var withheld = rows.reduce(function(a, r){ return a + r.withheld; }, 0);
+  var t = TAX2026.fed[nc.filing] || TAX2026.fed.single;
+  var owed = Math.max(0, bracketTax(Math.max(0, combined - t.std), t.brackets)
+                       - (nc.dependents || 0) * TAX2026.depCredit);
+  var gap = owed - withheld;
+  return { rows: rows, combined: combined, withheld: withheld, owed: owed,
+           gap: Math.round(gap * 100) / 100, year: y };
+}
 
 /* This year's wages before the period being priced — the year to date, carry-in included,
    less the period itself. Social Security and the Additional Medicare surtax are both annual

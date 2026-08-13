@@ -129,8 +129,15 @@ await expectPay('SEC reflects every elapsed second', 'sec');
 
 /* ---------------------------------------------------------------- */
 console.log('\nClock out banks the shift');
-const bankedPay = await money();          // what the hero read the instant before clocking out
-await page.click('#punch'); await page.waitForTimeout(200);
+/* Read and punched in the same evaluate. A live shift bills about a cent a second, so
+   reading the figure in one call and clocking out in the next compares two moments and
+   fails by exactly the time between them. */
+const bankedPay = await page.evaluate(() => {
+  const v = parseFloat(document.querySelector('#money').textContent.replace(/[$,]/g, ''));
+  document.querySelector('#punch').click();
+  return v;
+});
+await page.waitForTimeout(300);
 ok('back to Clocked out', (await T('#statusTxt')).includes('Clocked out'));
 ok('shift landed in the log', (await T('#logBody')).includes('Mon Jul 27'));
 ok('log shows 2.03 h', (await T('#logBody')).includes('2.03'));
