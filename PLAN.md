@@ -265,6 +265,37 @@ a W-2 — and below a minimum it refuses to show a probability rather than showi
 A score that lies is worse than no score, and this one exists specifically to be trusted by
 someone who is not the user.
 
+#### Attached paystubs
+
+History entries can carry photographs of the stubs behind them. **The app never reads
+them.** The photo is evidence for the person being asked to trust the number, not input for
+the app: the export shows each figure with its source beside it, and a human does the
+checking.
+
+OCR was considered and rejected. Tesseract.js is roughly 2 MB of code plus ~10 MB of
+language data against an app that is currently 400 KB, it normally fetches that data from a
+CDN — which breaks offline-first outright — and paystubs are dense multi-column tables,
+which is the format OCR handles worst. Enormous, frequently wrong, and wrong inside the one
+feature whose whole purpose is being believed. The cheap version of the same win is showing
+the photo *inside* the app next to the entry fields, so the number is read off the image
+without switching apps.
+
+Three consequences:
+
+- **Images go in IndexedDB, downscaled on import.** The entire shift history is about 50 KB
+  of JSON; one phone photo is 2–5 MB, and localStorage caps out around 5–10 MB. The first
+  stub would break it.
+- **Images stay out of the default backup.** Embedding them turns a 50 KB file into 40 MB
+  and something that cannot be emailed. Including them is an explicit choice, with a plain
+  warning: that file then carries a name, an address and partial account numbers.
+- **Redaction before storage.** Most of a stub is irrelevant to proving overtime — the
+  overtime line and the date are the point. Let people black out the rest first.
+
+And the wording matters: the app says **"3 stubs attached"**, never "verified". A
+user-attached photo proves nothing to the app, which cannot tell a real stub from something
+typed up in a text editor. Claiming otherwise would poison exactly the credibility this
+feature exists to build.
+
 Lands after Stage 4, which builds the cross-job income picture — expectancy over combined
 jobs is the useful version.
 
