@@ -98,9 +98,23 @@ ok('and it is worth $160 more than the weekly rule', Math.abs((cLong.g-wLong.g)-
 console.log('\n━━ The screen says which rule is running ━━');
 const otLbl = await p.textContent('#otLbl');
 ok('the bar names both legs', /8 h/.test(otLbl) && /40 h this week/.test(otLbl), otLbl);
+/* The cumulative bar has to measure the rule in force. An eighty-hour period bar left on
+   screen under this rule counts hours the rule does not count, and reading "45.47 / 80"
+   beside "or 40 h this week" is what makes someone think the app is broken. */
+const p80Lbl = await p.textContent('#p80Lbl');
+ok('the cumulative bar counts straight time toward the week',
+   /Straight-time hours toward 40 h this week/.test(p80Lbl), p80Lbl);
+const p80Num = await p.textContent('#p80Num');
+ok('and reads 32.00, not the 45.40 worked', /^32\.00 \/ 40 h$/.test(p80Num.trim()), p80Num);
 const p80 = (await p.textContent('#p80Note')).replace(/\s+/g,' ');
-ok('the 80 h bar names 8 and 40 as the rule in force', /8 and 40/.test(p80), p80.slice(0,120));
-ok('and says the week half out loud', /40 h in the week/.test(p80), p80.slice(0,150));
+ok('the note counts down the straight-time hours left', /8\.00 h.*straight time/.test(p80),
+   p80.slice(0,110));
+ok('it names the other leg too', /pass 8 h/.test(p80), p80.slice(0,160));
+/* The sentence the whole branch exists for. */
+ok('and explains why the bar is not 45.40',
+   /13\.40 h.*not counted again/.test(p80), p80.slice(0,320));
+ok('quoting both numbers', /reads 32\.00 and not 45\.40/.test(p80), p80.slice(-90));
+ok('and never tells you to switch to what you already have', !/switch/i.test(p80), p80.slice(0,90));
 await p.evaluate(() => document.querySelectorAll('#cfg details').forEach(d => d.open = true));
 await p.waitForTimeout(300);
 const sum = await p.textContent('#sumPay');

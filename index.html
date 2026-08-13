@@ -5296,12 +5296,13 @@ function renderProgress(ledger, period, now){
   }
 
   // One card per week inside the period. Each starts fresh; the total above does not.
-  var html = '', i = 0, cursor = period.startMs;
+  var html = '', i = 0, cursor = period.startMs, curWeek = null;
   while (cursor < period.endMs && i < 12){
     var w = weekInfo(cursor, cfg);
     var from = Math.max(w.startMs, period.startMs), to = Math.min(w.endMs, period.endMs);
     var t = sumRange(ledger.parts, from, to);
     var current = now >= from && now < to;
+    if (current) curWeek = t;
     i++;
     html += '<div class="wk' + (current ? ' now' : '') + '">'
       + '<div class="n"><b>Week ' + i + '</b>' + (current ? '<i>this week</i>' : '') + '</div>'
@@ -5313,17 +5314,25 @@ function renderProgress(ledger, period, now){
   }
   document.getElementById('weeks').innerHTML = html;
 
-  // Progress toward the period's 80-hour mark.
-  var thr = cfg.periodThreshold, h = cume.hours;
+  /* Progress toward the period's eighty-hour mark — or, under 8 and 40, toward the forty
+     STRAIGHT-TIME hours of the current week, which is the rule actually in force. Leaving
+     an eighty-hour period bar on screen under that rule is worse than useless: it invites
+     exactly the wrong conclusion, because the hours it counts are not the hours the rule
+     counts. */
+  var wkRule = cfg.otMode === 'eight40';
+  var thr = wkRule ? (cfg.weeklyThreshold || 40) : cfg.periodThreshold;
+  var h   = wkRule ? (curWeek ? curWeek.regHours : 0) : cume.hours;
   var over = Math.max(0, h - thr), pctReg = Math.min(h, thr) / thr * 100;
   var left = Math.max(0, thr - h);          // never render a negative countdown
   var past = h >= thr;                      // at the line counts as past
   var worthNaming = over >= 0.005;          // ...but don't claim "0.00 h so far"
   document.getElementById('p80Reg').style.width = pctReg + '%';
   document.getElementById('p80Ot').style.width = Math.min(100 - pctReg, over / thr * 100) + '%';
-  document.getElementById('p80Lbl').textContent = 'Cumulative hours toward ' + thr + ' h';
+  document.getElementById('p80Lbl').textContent = wkRule
+    ? 'Straight-time hours toward ' + thr + ' h this week'
+    : 'Cumulative hours toward ' + thr + ' h';
   document.getElementById('p80Num').textContent = h.toFixed(2) + ' / ' + thr + ' h';
-  document.getElementById('p80Badge').innerHTML = past && cfg.otMode === 'period'
+  document.getElementById('p80Badge').innerHTML = past && (cfg.otMode === 'period' || wkRule)
     ? '<span class="badge">past ' + thr + ' h</span>' : '';
 
   var note = document.getElementById('p80Note'), otRate = money(ledger.otRate);
@@ -5339,6 +5348,25 @@ function renderProgress(ledger, period, now){
       : '<b>' + left.toFixed(2) + ' h</b> of straight time until every remaining hour this period '
         + 'bills at <b>' + otRate + '</b> — or sooner on any day you pass '
         + otThresholdOf(cfg) + ' h.';
+  }
+  /* The sentence this whole branch exists for is the last one. Someone who has worked 45
+     hours this week, is told their rule is "8 or 40", and is then shown a bar reading 32
+     will conclude the app is broken — because nothing on screen says that the hours already
+     paid at time and a half were taken out of the count. Say it, with both numbers. */
+  else if (wkRule){
+    var wkOt = curWeek ? curWeek.otHours : 0;
+    note.className = 'p80note' + (past ? ' hot' : '');
+    note.innerHTML = (past
+      ? '⚡ Past ' + thr + ' h of straight time. <b>Every further hour bills at ' + otRate + '</b>, '
+        + 'whatever the shift says.'
+      : '<b>' + left.toFixed(2) + ' h</b> of straight time until every remaining hour this week '
+        + 'bills at <b>' + otRate + '</b> — or sooner on any shift you pass '
+        + otThresholdOf(cfg) + ' h.')
+      + (wkOt > 0.005
+          ? ' The <b>' + wkOt.toFixed(2) + ' h</b> already paid at overtime this week are not '
+            + 'counted again toward the ' + thr + ' — that is the no-pyramiding rule, and it is '
+            + 'why this reads ' + h.toFixed(2) + ' and not ' + (h + wkOt).toFixed(2) + '.'
+          : '');
   }
   else if (cfg.otMode === 'period'){
     note.className = 'p80note' + (past ? ' hot' : '');

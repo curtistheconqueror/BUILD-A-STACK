@@ -47,7 +47,16 @@ async function boot(ctx, st, atMs){
     localStorage.setItem(k,JSON.stringify(v));
   },[KEY,st]);
   await p.clock.install({time:new Date(atMs)});
-  await p.goto('http://localhost:8137/'); await p.waitForTimeout(650);
+  await p.goto('http://localhost:8137/');
+  /* Wait for the app to have actually loaded the seed rather than for a fixed number of
+     milliseconds. Under a full suite run the machine is busy enough that 650 ms is
+     sometimes short, and the failure that produces reads exactly like a broken skew:
+     every displayed time is the raw one, because the config carrying the offset had not
+     been read yet. */
+  await p.waitForFunction(([on, mins]) => typeof state !== 'undefined' && state.cfg
+    && !!state.cfg.skewOn === on && (!on || state.cfg.skewMins === mins),
+    [!!(st.cfg && st.cfg.skewOn), st.cfg && st.cfg.skewMins], { timeout: 15000 });
+  await p.waitForTimeout(250);
   await p.evaluate(()=>document.querySelectorAll('.col').forEach(c=>c.classList.add('open')));
   await p.evaluate(()=>{ document.querySelectorAll('#cfg details').forEach(d=>d.open=true); });
   await p.waitForTimeout(400);
