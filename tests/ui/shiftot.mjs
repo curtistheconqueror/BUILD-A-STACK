@@ -59,7 +59,12 @@ let p = await boot(ctx, {...base, sessions:NIGHT}, T(12,12));
 const opts = await p.evaluate(()=>[...document.querySelectorAll('#cMode option')]
   .map(o=>o.value+' = '+o.textContent.trim()));
 console.log(opts.map(o=>'       '+o).join('\n'));
-ok('five rules to choose from', opts.length===5, String(opts.length));
+/* Counted against itself rather than a number written here — a new rule must not quietly
+   fail a test whose only complaint is that there is one more of them than there used to be. */
+ok('every rule has a value and plain English behind it',
+   opts.every(o => /^[a-z0-9]+ = .+/.test(o)), opts.join(' | '));
+ok('and none of them is listed twice',
+   new Set(opts.map(o => o.split(' = ')[0])).size === opts.length, String(opts.length));
 ok('per shift is one of them', opts.some(o=>o.startsWith('shift')), opts.join(' | '));
 ok('and it says it counts from clock-in',
    opts.find(o=>o.startsWith('shift')).includes('from when you clock in'),
@@ -173,9 +178,13 @@ await fresh.clock.install({time:new Date(T(12,12))});
 await fresh.goto('http://localhost:8127/'); await fresh.waitForTimeout(700);
 const modes = await fresh.evaluate(()=>[...document.querySelectorAll('#sMode button')]
   .map(x=>x.dataset.m));
-ok('every rule is on the setup screen',
-   ['weekly','period','shift','daily','eighty80'].every(m=>modes.includes(m)) && modes.length===5,
-   JSON.stringify(modes));
+/* The invariant that matters is not how many rules there are, but that the two pickers
+   never drift apart: a rule offered in Settings and missing from setup is a rule someone
+   can only reach after they have already answered wrong. */
+const cfgModes = await fresh.$$eval('#cMode option', os => os.map(o => o.value));
+ok('the setup screen offers exactly what Settings does',
+   modes.slice().sort().join() === cfgModes.slice().sort().join(),
+   JSON.stringify(modes) + ' vs ' + JSON.stringify(cfgModes));
 ok('including per shift', modes.includes('shift'), JSON.stringify(modes));
 await fresh.fill('#sRate','38');
 await fresh.click('#sMode button[data-m="shift"]'); await fresh.waitForTimeout(300);

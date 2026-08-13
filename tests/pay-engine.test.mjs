@@ -153,6 +153,121 @@ const gross = (sessions, c = cfg) => {
   near('the headline threshold is the daily one', E.otThresholdOf(c), 8);
 }
 
+/* ---------------- the 8 and 40 rule — the ordinary union one ---------------- */
+{
+  const c = { ...E.DEFAULTS, rate: 40, otMultiplier: 1.5, otMode: 'eight40',
+              shiftThreshold: 8, weeklyThreshold: 40, lunchMins: 0, weekStartDay: 0,
+              holidays: [], banks: [], daysOff: [], vacations: [],
+              periodAnchor: '2026-08-09', periodLengthDays: 14 };
+  /* Sunday 9 August 2026 is a week start. Shifts run from 2 PM the way a late run does,
+     so the long ones cross midnight — which is the case the rule has to get right. */
+  const run = (d, len, h = 14) => ({ id: 'r' + d + '_' + h, start: +new Date(2026, 7, d, h),
+                                     end: +new Date(2026, 7, d, h) + len * E.HOUR_MS });
+  const week = (ss, cfg = c) => E.sumRange(E.buildLedger(ss, cfg, +new Date(2026, 7, 20)).parts,
+                                           +new Date(2026, 7, 9), +new Date(2026, 7, 16));
+  const under = (ss, mode) => week(ss, { ...c, otMode: mode });
+
+  /* A real week: four shifts of 11.35 h, Sunday to Wednesday, each running past midnight.
+     45.40 hours. The per-shift rule pays 13.40 h of overtime; a 40-hour week pays 5.40.
+     8 and 40 has to pay the larger without inventing anything. */
+  const longDays = [9, 10, 11, 12].map(d => run(d, 11.35));
+  const L = week(longDays);
+  near('four 11.35 h shifts is 45.40 hours', L.hours, 45.4);
+  near('and 13.40 of them are overtime',     L.otHours, 13.4);
+  near('per shift alone pays the same',      under(longDays, 'shift').otHours, 13.4);
+  near('a 40-hour week alone pays 5.40',     under(longDays, 'weekly').otHours, 5.4);
+  ok('so the combined rule takes the bigger of the two',
+     Math.abs(L.otHours - Math.max(under(longDays, 'shift').otHours,
+                                   under(longDays, 'weekly').otHours)) < 1e-9);
+
+  /* The week that catches the per-shift rule out: six seven-hour shifts. No shift ever
+     reaches eight, so a shift rule pays nothing — but the week is 42 hours. */
+  const shortDays = [9, 10, 11, 12, 13, 14].map(d => run(d, 7));
+  const S = week(shortDays);
+  near('six seven-hour shifts is 42 hours', S.hours, 42);
+  near('per shift alone pays nothing',      under(shortDays, 'shift').otHours, 0);
+  near('but two hours are past forty',      S.otHours, 2);
+  near('and they are paid for',             S.gross, 40 * 40 + 2 * 60);
+
+  /* Neither leg reached: 39 hours, no shift over eight. Nothing is overtime. */
+  const quiet = [9, 10, 11, 12, 13, 14].map(d => run(d, 6.5));
+  near('six six-and-a-half hour shifts is 39 hours', week(quiet).hours, 39);
+  near('and none of it is overtime',                 week(quiet).otHours, 0);
+
+  /* The credit rule, which is the no-pyramiding clause. Five nines is 45 hours: 5 hours past
+     eight in a shift, and 40 straight hours exactly. Five, not ten — an hour already paid at
+     time and a half is never counted toward the forty and then charged for again. */
+  const nines = [9, 10, 11, 12, 13].map(d => run(d, 9));
+  const N = week(nines);
+  near('five nine-hour shifts is 45 hours', N.hours, 45);
+  near('five hours of overtime, not ten',   N.otHours, 5);
+  near('so straight time is exactly forty', N.regHours, 40);
+
+  /* Past forty straight hours, a fresh short shift is overtime from its first minute — the
+     thing that cannot happen under a per-shift rule however long the week has been. */
+  const pastForty = [9, 10, 11, 12, 13].map(d => run(d, 8)).concat([run(14, 5)]);
+  const P = week(pastForty);
+  near('five eights then a five is 45 hours', P.hours, 45);
+  near('every hour of that last shift is overtime', P.otHours, 5);
+  near('and the per-shift rule would have paid none', under(pastForty, 'shift').otHours, 0);
+
+  /* Straight time can never pass either cap, whatever the schedule. */
+  [longDays, shortDays, quiet, nines, pastForty].forEach(function(ss, i){
+    const t = week(ss);
+    ok('schedule ' + (i + 1) + ': straight time never passes forty', t.regHours <= 40 + 1e-9,
+       t.regHours.toFixed(2));
+    near('schedule ' + (i + 1) + ': hours all accounted for', t.regHours + t.otHours, t.hours);
+  });
+
+  /* It is never worse than either rule on its own — the whole reason to be on it. Checked
+     across every shape of week rather than asserted: shift lengths from half an hour to
+     sixteen, start times around the clock, one to seven shifts. */
+  let seed = 12345;
+  const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  let worse = 0, better = 0, exact = 0, n = 0;
+  for (let t = 0; t < 1500; t++){
+    const ss = [];
+    for (let i = 0, k = 1 + Math.floor(rnd() * 7); i < k; i++)
+      ss.push(run(9 + i, 0.5 + rnd() * 15.5, Math.floor(rnd() * 22)));
+    const both = week(ss).otHours, sh = under(ss, 'shift').otHours, wk = under(ss, 'weekly').otHours;
+    n++;
+    if (both < Math.max(sh, wk) - 1e-9) worse++;
+    else if (both > Math.max(sh, wk) + 1e-9) better++;
+    else exact++;
+  }
+  ok('over ' + n + ' random weeks it is never worse than the better single rule', worse === 0,
+     worse + ' worse, ' + exact + ' equal, ' + better + ' better');
+  ok('and usually exactly the better one', exact > n * 0.9, exact + ' of ' + n);
+
+  /* Where it beats both totals it is because a shift crossed a week boundary: the eight-hour
+     allowance carries over with the shift while the forty resets, so each workweek is judged
+     on its own. Inside a single week it is exactly the better of the two, never more. */
+  let inWeek = 0, over = 0;
+  for (let t = 0; t < 1500; t++){
+    const ss = [];
+    for (let i = 0, k = 1 + Math.floor(rnd() * 6); i < k; i++){
+      const h = Math.floor(rnd() * 14);
+      ss.push(run(9 + i, Math.min(0.5 + rnd() * 9.5, 24 - h), h));   // never crosses a midnight
+    }
+    inWeek++;
+    if (Math.abs(week(ss).otHours
+                 - Math.max(under(ss, 'shift').otHours, under(ss, 'weekly').otHours)) > 1e-9) over++;
+  }
+  ok('inside one week it is exactly the better of the two, every time', over === 0,
+     over + ' of ' + inWeek + ' differed');
+
+  near('the headline threshold is the shift one', E.otThresholdOf(c), 8);
+
+  /* The progress bar counts the shift, then pins full once forty straight hours are gone —
+     a bar that reset on each punch would promise an allowance that is not there. */
+  const mid = E.buildLedger([run(9, 4)], c, +new Date(2026, 7, 9, 18));
+  near('four hours into a shift reads four',
+       E.bucketHoursAt(mid, +new Date(2026, 7, 9, 18), c, 'r9_14'), 4);
+  const spent = E.buildLedger(pastForty, c, +new Date(2026, 7, 20));
+  near('but past forty straight the bar reads full',
+       E.bucketHoursAt(spent, +new Date(2026, 7, 14, 16), c, 'r14_14'), 8);
+}
+
 /* ---------------- Social Security is an annual cap, not a per-cheque one ---------------- */
 {
   const T = E.TAX2026;
