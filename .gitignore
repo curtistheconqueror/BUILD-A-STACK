@@ -3,3 +3,6 @@ Thumbs.db
 node_modules
 /node_modules
 *.log
+tests/ui/*.png
+tests/ui/*.csv
+tests/ui/*.json

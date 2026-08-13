@@ -7,11 +7,16 @@ import { dirname, join } from 'node:path';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..') + '/';
 // Set PW_CHROME to point at a specific build; otherwise Playwright finds its own.
 const CHROME = process.env.PW_CHROME || undefined;
+// Screenshots and scratch files go to a temp dir, never the repo.
+const TMP = join(process.env.TMPDIR || '/tmp', 'wisewage-tests');
+try { (await import('node:fs')).mkdirSync(TMP, { recursive: true }); } catch {}
+
 
 
 
 // Screenshots land beside the suite unless told otherwise.
-const SHOT = process.env.PW_SHOTS || dirname(fileURLToPath(import.meta.url));
+// Beside the suite would mean a test run leaves five PNGs in version control.
+const SHOT = process.env.PW_SHOTS || TMP;
 const KEY = 'payclock.v1';
 
 const srv = http.createServer((req, res) => {
