@@ -96,7 +96,7 @@ const again=await p.evaluate(()=>{const l=buildLedger(state.sessions,state.cfg,D
   return sumRange(l.parts, +ymd('2026-08-09'), +ymd('2026-08-23')).otHours;});
 ok('and switching back returns it', Math.abs(again-24)<0.01, again);
 ok('the choice is remembered', await p.evaluate(()=>
-  JSON.parse(localStorage.getItem('payclock.v1')).cfg.otMode)==='eighty80');
+  JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].cfg.otMode)==='eighty80');
 
 console.log('\n━━ On a phone ━━');
 const m=await p.evaluate(()=>({w:document.documentElement.scrollWidth,win:innerWidth}));

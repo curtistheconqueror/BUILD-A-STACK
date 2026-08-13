@@ -103,26 +103,26 @@ await p.click('#sSave'); await p.waitForTimeout(600);
 ok('setup closes', !(await p.isVisible('#setup')));
 ok('the clock appears', await p.isVisible('#hero'));
 let s = await st(p);
-ok('the rate is theirs — $24.50', s.cfg.rate===24.5, String(s.cfg.rate));
-ok('the roster is Mon–Fri', JSON.stringify(s.cfg.workDays)==='[false,true,true,true,true,true,false]',
-   JSON.stringify(s.cfg.workDays));
-ok('the shift is 07:00–15:30', s.cfg.schedStart==='07:00' && s.cfg.schedEnd==='15:30',
-   s.cfg.schedStart+' '+s.cfg.schedEnd);
-ok('no lunch is deducted', s.cfg.lunchMins===0, String(s.cfg.lunchMins));
-ok('no holidays were assumed', s.cfg.holidays.length===0, String(s.cfg.holidays.length));
-ok('two allowances, theirs', s.cfg.banks.length===2, JSON.stringify(s.cfg.banks.map(x=>x.name+':'+x.count)));
-ok('2 floating days', s.cfg.banks[0].count===2, String(s.cfg.banks[0].count));
-ok('10 sick days',    s.cfg.banks[1].count===10, String(s.cfg.banks[1].count));
-ok('worth 8.5 h each', s.cfg.banks.every(x=>x.hours===8.5), JSON.stringify(s.cfg.banks.map(x=>x.hours)));
-ok('floating counts toward OT, sick does not', s.cfg.banks[0].ot===true && s.cfg.banks[1].ot===false);
-ok('nothing is booked yet', (s.cfg.daysOff||[]).length===0);
+ok('the rate is theirs — $24.50', s.jobs[0].cfg.rate===24.5, String(s.jobs[0].cfg.rate));
+ok('the roster is Mon–Fri', JSON.stringify(s.jobs[0].cfg.workDays)==='[false,true,true,true,true,true,false]',
+   JSON.stringify(s.jobs[0].cfg.workDays));
+ok('the shift is 07:00–15:30', s.jobs[0].cfg.schedStart==='07:00' && s.jobs[0].cfg.schedEnd==='15:30',
+   s.jobs[0].cfg.schedStart+' '+s.jobs[0].cfg.schedEnd);
+ok('no lunch is deducted', s.jobs[0].cfg.lunchMins===0, String(s.jobs[0].cfg.lunchMins));
+ok('no holidays were assumed', s.jobs[0].cfg.holidays.length===0, String(s.jobs[0].cfg.holidays.length));
+ok('two allowances, theirs', s.jobs[0].cfg.banks.length===2, JSON.stringify(s.jobs[0].cfg.banks.map(x=>x.name+':'+x.count)));
+ok('2 floating days', s.jobs[0].cfg.banks[0].count===2, String(s.jobs[0].cfg.banks[0].count));
+ok('10 sick days',    s.jobs[0].cfg.banks[1].count===10, String(s.jobs[0].cfg.banks[1].count));
+ok('worth 8.5 h each', s.jobs[0].cfg.banks.every(x=>x.hours===8.5), JSON.stringify(s.jobs[0].cfg.banks.map(x=>x.hours)));
+ok('floating counts toward OT, sick does not', s.jobs[0].cfg.banks[0].ot===true && s.jobs[0].cfg.banks[1].ot===false);
+ok('nothing is booked yet', (s.jobs[0].cfg.daysOff||[]).length===0);
 
 console.log('\n━━ None of my defaults leaked through ━━');
-ok('not $38/hr', s.cfg.rate!==38);
-ok('not Sun–Thu', JSON.stringify(s.cfg.workDays)!=='[true,true,true,true,true,false,false]');
-ok('not 14:00–22:30', s.cfg.schedStart!=='14:00');
+ok('not $38/hr', s.jobs[0].cfg.rate!==38);
+ok('not Sun–Thu', JSON.stringify(s.jobs[0].cfg.workDays)!=='[true,true,true,true,true,false,false]');
+ok('not 14:00–22:30', s.jobs[0].cfg.schedStart!=='14:00');
 ok('not four floaters and five sick days',
-   !(s.cfg.banks[0].count===4 && s.cfg.banks[1].count===5));
+   !(s.jobs[0].cfg.banks[0].count===4 && s.jobs[0].cfg.banks[1].count===5));
 /* Rendered elements, not textContent('body') — the <script> lives inside body, so that
    would match the source code rather than anything on screen. */
 await p.evaluate(()=>{ document.querySelectorAll('.col').forEach(c=>c.classList.add('open')); });
@@ -153,11 +153,11 @@ ok('and their hours', bankCfg.every(x=>x.hours==='8.5'), JSON.stringify(bankCfg)
 console.log('\n━━ Changing an allowance in Settings ━━');
 await p.fill('#cBankList input[data-bf="count"]','3');
 await p.locator('#cBankList input[data-bf="count"]').first().blur(); await p.waitForTimeout(450);
-ok('the count saves', (await st(p)).cfg.banks[0].count===3, String((await st(p)).cfg.banks[0].count));
+ok('the count saves', (await st(p)).jobs[0].cfg.banks[0].count===3, String((await st(p)).jobs[0].cfg.banks[0].count));
 ok('and the balance follows', (await p.textContent('#bankBody')).includes('3 of 3 left'),
    (await p.textContent('#bankBody')).slice(0,90));
 await p.locator('#cBankList select[data-bf="ot"]').first().selectOption('0'); await p.waitForTimeout(400);
-ok('the overtime answer saves', (await st(p)).cfg.banks[0].ot===false);
+ok('the overtime answer saves', (await st(p)).jobs[0].cfg.banks[0].ot===false);
 ok('and the note says so', (await p.textContent('#bankBody')).includes('does not count toward overtime'),
    (await p.textContent('#bankBody')).slice(0,220));
 await p.fill('#cBankList input[data-bf="name"]','Personal day');
@@ -191,13 +191,13 @@ console.log('\n━━ Removing one that has days booked ━━');
 await p.click('#offAdd'); await p.waitForTimeout(350);
 await p.fill('#oDate','2026-08-12'); await p.waitForTimeout(300);
 await p.click('#oSave'); await p.waitForTimeout(500);
-ok('a day is booked', (await st(p)).cfg.daysOff.length===1);
-const bookedBank = (await st(p)).cfg.daysOff[0].bank;
-const idx = await p.evaluate(bid=>(JSON.parse(localStorage.getItem('payclock.v1')).cfg.banks)
+ok('a day is booked', (await st(p)).jobs[0].cfg.daysOff.length===1);
+const bookedBank = (await st(p)).jobs[0].cfg.daysOff[0].bank;
+const idx = await p.evaluate(bid=>(JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].cfg.banks)
   .findIndex(x=>x.id===bid), bookedBank);
 await p.locator('#cBankList button[data-bdel]').nth(idx).click(); await p.waitForTimeout(550);
-ok('the booked day goes with it', (await st(p)).cfg.daysOff.length===0,
-   JSON.stringify((await st(p)).cfg.daysOff));
+ok('the booked day goes with it', (await st(p)).jobs[0].cfg.daysOff.length===0,
+   JSON.stringify((await st(p)).jobs[0].cfg.daysOff));
 ok('and it says how many', (await p.textContent('#toast')).includes('booked from it'),
    await p.textContent('#toast'));
 
@@ -209,7 +209,7 @@ console.log('\n━━ What the answer stores ━━');
   await q.click('#sMode button[data-m="daily"]'); await q.waitForTimeout(250);
   await q.click('#sMakeUp button[data-mu="0"]'); await q.waitForTimeout(250);
   await q.click('#sSave'); await q.waitForTimeout(600);
-  const c = (await st(q)).cfg;
+  const c = (await st(q)).jobs[0].cfg;
   ok('answering no leaves the rule off', c.makeUpOn === false, String(c.makeUpOn));
   ok('with the daily rule saved', c.otMode === 'daily', c.otMode);
   await q.close();
@@ -219,7 +219,7 @@ console.log('\n━━ What the answer stores ━━');
   await r.fill('#sRate','30'); await r.fill('#sSchedStart','08:00'); await r.fill('#sSchedEnd','16:30');
   await r.click('#sMode button[data-m="shift"]'); await r.waitForTimeout(250);
   await r.click('#sSave'); await r.waitForTimeout(600);
-  ok('leaving it as it comes turns it on', (await st(r)).cfg.makeUpOn === true);
+  ok('leaving it as it comes turns it on', (await st(r)).jobs[0].cfg.makeUpOn === true);
   ok('and Settings agrees', (await r.inputValue('#cMakeUp')) === '1', await r.inputValue('#cMakeUp'));
   await r.close();
 
@@ -227,7 +227,7 @@ console.log('\n━━ What the answer stores ━━');
     timezoneId:'America/New_York',locale:'en-US'}), NOW);
   await w.fill('#sRate','30'); await w.fill('#sSchedStart','08:00'); await w.fill('#sSchedEnd','16:30');
   await w.click('#sSave'); await w.waitForTimeout(600);
-  ok('the weekly rule never carries it', (await st(w)).cfg.makeUpOn === false);
+  ok('the weekly rule never carries it', (await st(w)).jobs[0].cfg.makeUpOn === false);
   await w.close();
 }
 
@@ -238,13 +238,13 @@ ok('three, five and five again', JSON.stringify(back)==='["3","5","5"]', JSON.st
 
 console.log('\n━━ The scheduled shift is one value in two places ━━');
 await p.fill('#cSchedStart2','06:30'); await p.locator('#cSchedStart2').blur(); await p.waitForTimeout(450);
-ok('Settings saves it', (await st(p)).cfg.schedStart==='06:30', (await st(p)).cfg.schedStart);
+ok('Settings saves it', (await st(p)).jobs[0].cfg.schedStart==='06:30', (await st(p)).jobs[0].cfg.schedStart);
 ok('and the decimal section shows the same', (await p.inputValue('#cSchedStart'))==='06:30',
    await p.inputValue('#cSchedStart'));
 await p.fill('#cSchedStart','07:15'); await p.locator('#cSchedStart').blur(); await p.waitForTimeout(450);
 ok('changing it there updates Settings', (await p.inputValue('#cSchedStart2'))==='07:15',
    await p.inputValue('#cSchedStart2'));
-ok('and only one value is stored', (await st(p)).cfg.schedStart==='07:15');
+ok('and only one value is stored', (await st(p)).jobs[0].cfg.schedStart==='07:15');
 
 console.log('\n━━ It all survives a reload ━━');
 await p.reload(); await p.waitForTimeout(800);

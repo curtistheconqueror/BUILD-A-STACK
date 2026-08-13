@@ -213,8 +213,8 @@ ok('booking a fifth is refused', await p.isVisible('#oErr'));
 const err = await p.textContent('#oErr');
 ok('with a reason you can act on', /already (used|booked)/.test(err), err);
 ok('naming the year it applies to', err.includes('2026'), err);
-ok('and nothing was added', (await st(p)).cfg.daysOff.length===3,
-   String((await st(p)).cfg.daysOff.length));
+ok('and nothing was added', (await st(p)).jobs[0].cfg.daysOff.length===3,
+   String((await st(p)).jobs[0].cfg.daysOff.length));
 await p.click('#oCancel'); await p.waitForTimeout(250);
 
 console.log('\n━━ Next year starts full ━━');

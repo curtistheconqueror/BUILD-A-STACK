@@ -173,10 +173,17 @@ ok('week detail breaks out the OT hours', (await T('#wDet')).includes('OT'), awa
 ok('week gross = 40×38 + 1×57 = $1,577', Math.abs(await num('#wGross') - (40 * 38 + 57)) < 0.02, await T('#wGross'));
 ok('OT bar reports 1.00 h in OT', (await T('#otNum')).includes('1.00 h in OT'), await T('#otNum'));
 ok('running shift is listed live in the log', (await T('#logBody')).includes('running'));
+/* Both read in one evaluate. A live shift bills $0.0158 a second, so reading the log and
+   the tile in separate awaits compares two different moments and fails on the gap. */
+const agree = await page.evaluate(() => {
+  const log = document.querySelector('#logBody').textContent;
+  const m = log.match(/Period total[\s\S]*?\$([\d,]+\.\d{2})/);
+  return { log: m && m[1], tile: document.querySelector('#pGross').textContent };
+});
 ok('log total now agrees with the period tile',
-   Math.abs(parseFloat((await T('#logBody')).match(/Period total[\s\S]*?\$([\d,]+\.\d{2})/)[1].replace(/,/g, ''))
-            - await num('#pGross')) < 0.01,
-   (await T('#logBody')).match(/Period total[\s\S]*?\$([\d,]+\.\d{2})/)[1] + ' vs ' + await T('#pGross'));
+   Math.abs(parseFloat(String(agree.log).replace(/,/g, ''))
+            - parseFloat(agree.tile.replace(/[^0-9.]/g, ''))) < 0.01,
+   agree.log + ' vs ' + agree.tile);
 await page.screenshot({ path: SHOT + '/03-overtime.png', fullPage: true });
 
 /* ---------------------------------------------------------------- */

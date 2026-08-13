@@ -3450,9 +3450,97 @@ var STORAGE_OK = (function(){
 })();
 
 var state = load();
+/* Write the migrated shape back once, so the job's id is stable from here on. */
+if (state.__migrated){ delete state.__migrated; try { save(); } catch(e){} }
+
+/* ============================ jobs ============================
+
+   A second employer is a whole separate set of terms: its own rate, schedule, overtime rule,
+   holidays and differentials. So a job owns a complete cfg rather than overriding parts of a
+   shared one, and every shift is stamped with the job it belongs to.
+
+   Overtime does not combine across unrelated employers — forty hours at one and ten at
+   another is fifty straight hours, not ten of overtime — so each job's ledger is built from
+   its own shifts against its own rules. What combines is tax, which is charged to a person
+   rather than to an employer.
+
+   `state.cfg` stays exactly where it was, as an accessor onto whichever job is active. That
+   is what makes this invisible: several hundred existing references to state.cfg.rate keep
+   working, unchanged, and a save with one job is indistinguishable from one written before
+   jobs existed apart from the wrapper. */
+function newJobId(){ return 'j' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function jobList(){ return Array.isArray(state.jobs) ? state.jobs : (state.jobs = []); }
+function jobById(id){
+  var js = jobList();
+  for (var i = 0; i < js.length; i++) if (js[i].id === id) return js[i];
+  return js[0];
+}
+function activeJob(){ return jobById(state.activeJob); }
+/* The shifts belonging to one job. With a single job this is every shift, which is why
+   nothing downstream has to know jobs exist yet. */
+function jobSessions(id){
+  var jid = id || state.activeJob;
+  var all = state.sessions || [];
+  var out = [], any = false;
+  for (var i = 0; i < all.length; i++){
+    if (all[i].jobId) any = true;
+    if (!all[i].jobId || all[i].jobId === jid) out.push(all[i]);
+  }
+  return any ? out : all;
+}
+/* The ledger for one job: its own shifts against its own rules. Extra sessions can be
+   handed in for a what-if (a running shift, a hypothetical stop time) without them having to
+   be stored anywhere. */
+function jobLedger(extra, cfg, nowMs, id){
+  var ss = jobSessions(id);
+  if (extra && extra.length) ss = ss.concat(extra);
+  return buildLedger(ss, cfg || state.cfg, nowMs);
+}
+
+function jobAbsences(id){
+  var jid = id || state.activeJob;
+  return (state.absences || []).filter(function(a){ return !a.jobId || a.jobId === jid; });
+}
+
+/* Fold an older save — one job, config at the top level — into the job shape. Runs once and
+   is a no-op every time after, so it is safe on every load. */
+function migrateJobs(base){
+  var was = Array.isArray(base.jobs) && base.jobs.length;
+  if (!Array.isArray(base.jobs) || !base.jobs.length){
+    base.jobs = [{ id: newJobId(), name: 'My job', profession: '', primary: true,
+                   cfg: Object.assign({}, DEFAULTS, base.cfg || {}) }];
+  }
+  base.jobs.forEach(function(j){ j.cfg = Object.assign({}, DEFAULTS, j.cfg || {}); });
+  var first = base.jobs[0].id;
+  if (!base.activeJob || !base.jobs.some(function(j){ return j.id === base.activeJob; })){
+    base.activeJob = first;
+  }
+  (base.sessions || []).forEach(function(s){ if (!s.jobId) s.jobId = first; });
+  (base.absences || []).forEach(function(a){ if (!a.jobId) a.jobId = first; });
+  delete base.cfg;                       // it lives on the job now
+  /* Flagged rather than saved here: `state` is not assigned until after load() returns, and
+     save() reads it. Persisting matters — until the migrated shape is written back, every
+     load mints a fresh job id, so the id a shift is stamped with depends on which load
+     happened to save first. */
+  if (!was) base.__migrated = true;
+  return base;
+}
+
+/* Non-enumerable on purpose: save() serialises `state`, and an enumerable accessor would
+   write the active job's config a second time at the top level — where the next load would
+   read it back as an older save and migrate it into a duplicate job. */
+function defineCfgAccessor(o){
+  Object.defineProperty(o, 'cfg', {
+    get: function(){ var j = activeJob(); return j && j.cfg; },
+    set: function(v){ var j = activeJob(); if (j) j.cfg = v; },
+    enumerable: false, configurable: true
+  });
+  return o;
+}
 
 function load(){
-  var base = { cfg: Object.assign({}, DEFAULTS), sessions: [], absences: [], activeStart: null,
+  var base = { cfg: Object.assign({}, DEFAULTS), jobs: null, activeJob: null,
+               sessions: [], absences: [], activeStart: null,
                activeAdj: null, unit: 'sec', planOn: false, plannedHours: 8, sound: true,
                configured: false, autoOn: false, autoAt: '', autoDays: null, autoLast: '' };
   try {
@@ -3467,7 +3555,7 @@ function load(){
       base.absences = (s.absences || []).filter(function(x){ return x && x.date && +x.hours > 0; });
     }
   } catch(e){ /* corrupt storage — fall back to defaults rather than dying */ }
-  return base;
+  return defineCfgAccessor(migrateJobs(base));
 }
 /* Bumped on every save, so the heavy renderers below can tell "nothing has changed" from
    "redraw everything". */
@@ -3559,7 +3647,7 @@ function clockOut(atMs, silent){
   // was actually worked instead.
   if (end <= state.activeStart) end = Date.now();
   if (end > state.activeStart){
-    state.sessions.push({ id: uid(), start: state.activeStart, end: end, note: '',
+    state.sessions.push({ id: uid(), jobId: state.activeJob, start: state.activeStart, end: end, note: '',
                           adj: state.activeAdj || undefined });
   }
   var began = state.activeStart;
@@ -3579,7 +3667,7 @@ function clockOutFmla(){
   var day = shiftDayMs(shopSession({ start: began, end: end }, state.cfg), state.cfg);
   clockOut(end, true);
   var sched = schedHoursOn(state.cfg, day);
-  var worked = workedPaidOn(state.sessions, state.cfg, day);
+  var worked = workedPaidOn(jobSessions(), state.cfg, day);
   var missed = Math.round(Math.max(0, sched - worked) * 100) / 100;
   if (missed >= 0.01){
     addAbsence(day, 'fmla', missed, '');
@@ -3592,7 +3680,7 @@ function clockOutFmla(){
 function addAbsence(dayMs, kind, hours, note){
   var d = new Date(dayMs);
   if (!state.absences) state.absences = [];
-  state.absences.push({ id: uid(), date: dkey(d.getFullYear(), d.getMonth(), d.getDate()),
+  state.absences.push({ id: uid(), jobId: state.activeJob, date: dkey(d.getFullYear(), d.getMonth(), d.getDate()),
                         kind: kind, hours: hours, note: note || '' });
   save();
 }
@@ -3619,9 +3707,9 @@ function resumeSpanLimit(){
 
 function resumableShift(){
   if (state.activeStart) return null;
-  var best = null;
-  for (var i = 0; i < state.sessions.length; i++){
-    if (!best || state.sessions[i].end > best.end) best = state.sessions[i];
+  var best = null, mine = jobSessions();
+  for (var i = 0; i < mine.length; i++){
+    if (!best || mine[i].end > best.end) best = mine[i];
   }
   if (!best) return null;
   var now = Date.now(), gap = now - best.end;
@@ -3649,7 +3737,7 @@ function resumeShift(){
      target gets switched off rather than fighting it. */
   var stoodDown = false;
   if (state.planOn){
-    var stop = plannedStopAt(state.activeStart, state.plannedHours, state.sessions, state.cfg);
+    var stop = plannedStopAt(state.activeStart, state.plannedHours, jobSessions(), state.cfg);
     if (stop && Date.now() >= stop){ state.planOn = false; stoodDown = true; }
   }
   save(); syncControls(); chime(true); render();
@@ -4056,8 +4144,9 @@ function checkAutoIn(now){
   if (state.autoLast === key) return false;           // today is already dealt with
   if (!autoDayOn(d.getDay())){ state.autoLast = key; save(); return false; }
   if (now - at > autoInCap()){ state.autoLast = key; save(); return false; }
-  for (var i = 0; i < state.sessions.length; i++){
-    var s = state.sessions[i];
+  var mine = jobSessions();
+  for (var i = 0; i < mine.length; i++){
+    var s = mine[i];
     if (s.end > at && s.start < now){ state.autoLast = key; save(); return false; }
   }
   state.activeStart = at;
@@ -4123,7 +4212,7 @@ function render(){
 
   // auto-stop fires before anything is drawn, so the frozen numbers are the honest ones
   if (active && state.planOn){
-    var stopAt = plannedStopAt(active, state.plannedHours, state.sessions, cfg);
+    var stopAt = plannedStopAt(active, state.plannedHours, jobSessions(), cfg);
     if (stopAt && now >= stopAt){
       /* Arming auto-stop, or lowering the target, mid-shift can put the calculated stop
          time in the past. Ending there would delete work already done, so never finish a
@@ -4152,8 +4241,8 @@ function render(){
   var period = periodInfo(now, cfg), week = weekInfo(now, cfg);
   /* By shift day, not between midnights — see sumShiftDay. The live shift is in the ledger
      under '__active', so it has to be in the list this reads ownership from too. */
-  var dayMs = todayShiftDay(state.sessions, active, cfg, now);
-  var dayOwners = active ? state.sessions.concat([liveSession('__active', now)]) : state.sessions;
+  var dayMs = todayShiftDay(jobSessions(), active, cfg, now);
+  var dayOwners = active ? jobSessions().concat([liveSession('__active', now)]) : jobSessions();
   var day = sumShiftDay(ledger.parts, dayOwners, cfg, dayMs);
   var wk = sumRange(ledger.parts, week.startMs, week.endMs);
   var per = sumRange(ledger.parts, period.startMs, period.endMs);
@@ -4182,7 +4271,7 @@ function render(){
   var shownGross = shift.gross, dp = 2, qEnd = active ? active + quantize(elapsed, state.unit) : now;
   if (active){
     var q = cachedLedger('q', dataVer + '|' + qEnd, function(){
-      return buildLedger(state.sessions.concat([{ id: '__q', start: active, end: Math.max(active, qEnd) }]), cfg);
+      return jobLedger([{ id: '__q', start: active, end: Math.max(active, qEnd) }], cfg);
     });
     shownGross = sumSession(q.parts, '__q').gross;
     dp = state.unit === 'sec' ? 4 : 2;
@@ -4230,7 +4319,7 @@ function render(){
   var perShown = per.gross;
   if (active){
     var perQ = cachedLedger('perQ', dataVer + '|' + qEnd, function(){
-      return buildLedger(state.sessions.concat([liveSession('__pq', Math.max(active, qEnd))]), cfg);
+      return jobLedger([liveSession('__pq', Math.max(active, qEnd))], cfg);
     });
     perShown = sumRange(perQ.parts, period.startMs, period.endMs).gross;
   }
@@ -4269,7 +4358,7 @@ function render(){
      pay-period threshold already accounts for a missed day by never reaching forty. */
   var mkGate = mkOn && (state.cfg.otMode === 'daily' || state.cfg.otMode === 'shift');
   var mkWin = mkGate ? makeUpWindowOf(now, state.cfg) : null;
-  var mkOwed = mkGate ? makeUpOwed(state.sessions, state.cfg, state.absences,
+  var mkOwed = mkGate ? makeUpOwed(jobSessions(), state.cfg, jobAbsences(),
                                    mkWin.startMs, mkWin.endMs, now) : 0;
   show('absAdd', mkOn);
   show('makeUpBar', mkOwed >= 0.01);
@@ -4320,7 +4409,7 @@ function render(){
 
   var eta = document.getElementById('planEta');
   if (active && state.planOn){
-    var s2 = plannedStopAt(active, state.plannedHours, state.sessions, cfg);
+    var s2 = plannedStopAt(active, state.plannedHours, jobSessions(), cfg);
     eta.textContent = s2 ? '→ stops ' + ptime(s2) + ' (' + countdown(s2 - now) + ')' : '';
   } else eta.textContent = '';
 
@@ -4475,7 +4564,7 @@ function renderYtd(ledger, now){
      the cost the caching elsewhere exists to avoid. Keyed on the data and the day, since
      nothing else about it can change between frames. */
   var closedLed = cachedLedger('closed', dataVer + '|' + (+midnight(now)), function(){
-    return buildLedger(state.sessions, cfg, now);
+    return jobLedger(null, cfg, now);
   });
   var closed = ytdSums(closedLed, now);
   var settled = closed.gross + (base.gross || 0) - extraLunchMoney();
@@ -4957,7 +5046,7 @@ function renderTimeCard(ledger, now){
             + 'so the whole paid day counts.'
           : 'Every day is a scheduled day.');
 
-  var rows = timeCardRows(state.sessions, cfg, per.startMs, per.endMs);
+  var rows = timeCardRows(jobSessions(), cfg, per.startMs, per.endMs);
   if (!rows.length){
     el('tcList').innerHTML = '<div class="note">No shifts clocked in that period.</div>';
     return;
@@ -4997,7 +5086,7 @@ function renderLog(ledger, period, active, now){
      a row of their own too — a total that includes eight hours nobody can point at is a
      total nobody trusts. Built from the same credits the ledger used, so the rows and the
      footer cannot disagree. */
-  holidayCredits(state.sessions, state.cfg).forEach(function(h){
+  holidayCredits(jobSessions(), state.cfg).forEach(function(h){
     if (h.end > period.startMs && h.start < period.endMs) rows.push(Object.assign({}, h, { hol: true }));
   });
   // Floaters and sick days the same way — booked, so already in the total; shown, so the
@@ -5012,7 +5101,7 @@ function renderLog(ledger, period, active, now){
   /* Time you were scheduled for and did not work. It pays nothing, so it is not in the
      footer — but a period where you missed two days should not look identical to one where
      you worked them. */
-  (state.absences || []).forEach(function(a){
+  jobAbsences().forEach(function(a){
     var d = +ymd(a.date);
     if (isNaN(d) || !(d >= period.startMs && d < period.endMs)) return;
     rows.push({ id: '__abs:' + a.id, absId: a.id, start: d, end: d, abs: true,
@@ -5023,7 +5112,7 @@ function renderLog(ledger, period, active, now){
      when you have asked the app to watch your schedule — otherwise every gap in a log
      nobody keeps perfectly turns into a row demanding an explanation. */
   if (state.cfg.makeUpOn){
-    scheduleGaps(state.sessions, state.cfg, state.absences, period.startMs, period.endMs, now)
+    scheduleGaps(jobSessions(), state.cfg, jobAbsences(), period.startMs, period.endMs, now)
       .forEach(function(g){
         if (g.unaccounted < 0.01) return;
         rows.push({ id: '__gap:' + g.dayMs, gapMs: g.dayMs, start: g.dayMs, end: g.dayMs,
@@ -5360,9 +5449,9 @@ function calcState(){
    carry through exactly as the rest of the app reports them. */
 function calcBanked(){
   var cfg = state.cfg, now = Date.now();
-  var sessions = state.sessions.slice(), through = now, planned = false;
+  var sessions = jobSessions().slice(), through = now, planned = false;
   if (state.activeStart){
-    var stop = state.planOn ? plannedStopAt(state.activeStart, state.plannedHours, state.sessions, cfg) : null;
+    var stop = state.planOn ? plannedStopAt(state.activeStart, state.plannedHours, jobSessions(), cfg) : null;
     if (stop && stop > now){ through = stop; planned = true; }
     sessions.push(liveSession('__live', through));
   }
@@ -5475,7 +5564,7 @@ function renderCalc(){
     // The overtime tax break shields the premium above straight time, capped for the
     // year — so take off whatever this year's real work has already used up. When
     // synced, this period's own premium is part of the figure, not already spent.
-    var ytdT = ytdSums(buildLedger(state.sessions, cfg), Date.now());
+    var ytdT = ytdSums(jobLedger(null, cfg), Date.now());
     var used = Math.max(0, otPremiumOf(ytdT) + ytdBasePremium() - (bank ? bank.premium : 0));
     var room = Math.max(0, (TAX2026.otCap[nc.filing] || TAX2026.otCap.single) - used);
     var n2 = Object.assign({}, nc, { fedDeduct: nc.otBreak === false ? 0 : Math.min(totPrem, room) });
@@ -6168,8 +6257,7 @@ var backMode = 'time';
 /* Pay for a shift of `hours` starting at `start`, priced through the real ledger so
    overtime is accounted for. */
 function payForSpan(start, hours){
-  var s = buildLedger(state.sessions.concat(
-    [{ id: '__q', start: start, end: start + hours * HOUR_MS }]), state.cfg);
+  var s = jobLedger([{ id: '__q', start: start, end: start + hours * HOUR_MS }]);
   return sumSession(s.parts, '__q').gross;
 }
 
@@ -6242,7 +6330,7 @@ function openAbsence(id, dayMs, kind){
      times in ten — and it is the number the make-up rule will work from. */
   el('aHours').value = a ? a.hours
     : (function(){
-        var g = scheduleGaps(state.sessions, state.cfg, state.absences,
+        var g = scheduleGaps(jobSessions(), state.cfg, jobAbsences(),
                              when, when + DAY_MS, Date.now())[0];
         var h = g ? g.unaccounted : schedHoursOn(state.cfg, +midnight(when));
         return h >= 0.01 ? h.toFixed(2) : (state.cfg.holidayHours || 8);
@@ -6278,7 +6366,7 @@ function saveAbsence(){
     save(); toast('Absence updated.');
   } else {
     if (!state.absences) state.absences = [];
-    state.absences.push({ id: uid(), date: d, kind: el('aKind').value, hours: h,
+    state.absences.push({ id: uid(), jobId: state.activeJob, date: d, kind: el('aKind').value, hours: h,
                           note: el('aNote').value.slice(0, 60) });
     save(); toast(absenceKindName(el('aKind').value) + ' recorded — ' + h.toFixed(2) + ' h.');
   }
@@ -6468,13 +6556,14 @@ function saveEditor(){
     if (s){ s.start = r.start; s.end = r.end; if (adj) s.adj = adj; else delete s.adj; }
     toast('Shift updated.');
   } else {
-    state.sessions.push({ id: uid(), start: r.start, end: r.end, note: '', adj: adj || undefined });
+    state.sessions.push({ id: uid(), jobId: state.activeJob, start: r.start, end: r.end,
+                          note: '', adj: adj || undefined });
     toast('Added ' + ((r.end - r.start) / HOUR_MS).toFixed(2) + ' h on ' + fdate(new Date(r.start)) + '.');
   }
   save(); closeEditor(); render();
 }
 function exportCsv(){
-  var cfg = state.cfg, ledger = buildLedger(state.sessions, cfg);
+  var cfg = state.cfg, ledger = jobLedger(null, cfg);
   var lines = ['period_start,period_end,pay_date,day,clock_in,clock_out,hours,regular_hours,ot_hours,gross'];
   state.sessions.slice().sort(function(a, b){ return a.start - b.start; }).forEach(function(s){
     var t = sumSession(ledger.parts, s.id), p = periodInfo(s.start, cfg);
@@ -6518,7 +6607,10 @@ function download(name, text, type){
 function backup(){
   var payload = JSON.stringify({
     app: APP_ID, version: 1, savedAt: new Date().toISOString(),
-    cfg: state.cfg, sessions: state.sessions, absences: state.absences,
+    /* cfg is written as well as jobs so a copy of the app from before jobs existed can still
+       read this file — it will find the config where it expects it and ignore the rest. */
+    cfg: state.cfg, jobs: state.jobs, activeJob: state.activeJob,
+    sessions: state.sessions, absences: state.absences,
     configured: state.configured, theme: state.theme, net: state.net, ui: state.ui,
     unit: state.unit, planOn: state.planOn, plannedHours: state.plannedHours, sound: state.sound, calc: state.calc, calCal: state.calCal, activeAdj: state.activeAdj,
     autoOn: state.autoOn, autoAt: state.autoAt, autoDays: state.autoDays
@@ -6544,13 +6636,29 @@ function restoreFrom(text){
   var clean = d.sessions.filter(function(s){
     return s && typeof s.start === 'number' && typeof s.end === 'number' && s.end > s.start;
   });
-  state.cfg = Object.assign({}, DEFAULTS, d.cfg || {});
+  if (Array.isArray(d.jobs) && d.jobs.length){
+    state.jobs = d.jobs.map(function(j){
+      return Object.assign({}, j, { cfg: Object.assign({}, DEFAULTS, j.cfg || {}) });
+    });
+    state.activeJob = d.activeJob && state.jobs.some(function(j){ return j.id === d.activeJob; })
+      ? d.activeJob : state.jobs[0].id;
+  } else {
+    // A file from before jobs existed: one job, built from the config it does carry.
+    state.jobs = [{ id: newJobId(), name: 'My job', profession: '', primary: true,
+                    cfg: Object.assign({}, DEFAULTS, d.cfg || {}) }];
+    state.activeJob = state.jobs[0].id;
+  }
   state.sessions = clean;
   /* Replaced, never merged. Restoring is "make this device look like that file", so leaving
      the absences already here would attach one person's call-offs to another person's
      shifts. A backup written before absences existed restores none, which is correct. */
   state.absences = (Array.isArray(d.absences) ? d.absences : [])
     .filter(function(a){ return a && a.date && +a.hours > 0; });
+  /* A file written before jobs existed carries unstamped shifts. They belong to the one job
+     it restored into — left unstamped they would show for every job once a second one
+     exists, which is the quiet kind of wrong that only appears months later. */
+  state.sessions.forEach(function(x){ if (!x.jobId) x.jobId = state.activeJob; });
+  state.absences.forEach(function(a){ if (!a.jobId) a.jobId = state.activeJob; });
   state.configured = d.configured !== false;
   state.unit = d.unit || 'sec';
   state.planOn = !!d.planOn;
@@ -7492,7 +7600,7 @@ function syncControls(){
     _mu.textContent = 'Off — a scheduled day with nothing logged is left alone.';
   } else {
     var _p = periodInfo(Date.now(), state.cfg);
-    var _owed = makeUpOwed(state.sessions, state.cfg, state.absences, _p.startMs, _p.endMs, Date.now());
+    var _owed = makeUpOwed(jobSessions(), state.cfg, jobAbsences(), _p.startMs, _p.endMs, Date.now());
     _mu.innerHTML = _owed >= 0.01
       ? 'You are <b>' + _owed.toFixed(2) + ' h</b> short of your schedule this pay period.'
       : 'You have worked every scheduled hour this pay period.';

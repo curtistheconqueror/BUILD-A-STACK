@@ -78,7 +78,7 @@ ok('it is listed', list.includes('Vacation'), list);
 ok('with its dates', list.includes('Sep 20, 2026') && list.includes('Oct 3, 2026'), list);
 ok('and marked flat', list.includes('flat, no OT credit'), list);
 ok('stored on the config', await p.evaluate(()=>{
-  const v=JSON.parse(localStorage.getItem('payclock.v1')).cfg.vacations;
+  const v=JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].cfg.vacations;
   return v.length===1 && v[0].from==='2026-09-20' && v[0].to==='2026-10-03'; }));
 
 console.log('\n━━ It pays, flat ━━');

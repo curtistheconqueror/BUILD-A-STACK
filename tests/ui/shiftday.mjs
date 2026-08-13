@@ -103,7 +103,7 @@ await p.evaluate(()=>{ document.querySelectorAll('#cfg details').forEach(d=>d.op
 await p.waitForTimeout(250);
 note = await p.textContent('#cShiftDayNote');
 ok('changing it changes the worked example', note.includes('crosses midnight'), note);
-ok('and it saves', (await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).cfg.shiftDayRule))==='start');
+ok('and it saves', (await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].cfg.shiftDayRule))==='start');
 
 console.log('\n━━ A day-shift worker is told it makes no difference ━━');
 await p.close();

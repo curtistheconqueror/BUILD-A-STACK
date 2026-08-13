@@ -116,7 +116,7 @@ ok('and noon is 12:00 PM', log.includes('12:00 PM'), log.replace(/\s+/g,' ').sli
 
 console.log('\n━━ The choice sticks ━━');
 await p.selectOption('#cClock24','1'); await p.waitForTimeout(350);
-ok('saved to settings', (await st(p)).cfg.clock24===true);
+ok('saved to settings', (await st(p)).jobs[0].cfg.clock24===true);
 await p.reload(); await p.waitForTimeout(500); await openAll(p);
 await p.evaluate(()=>{ document.querySelectorAll('#cfg details').forEach(d=>d.open=true); });
 await p.waitForTimeout(150);

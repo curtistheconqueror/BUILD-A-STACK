@@ -183,7 +183,7 @@ ok('picking it says 8 h in the preview',
    (await fresh.textContent('#sPreview')).includes('past 8 h'), await fresh.textContent('#sPreview'));
 await fresh.click('#sSave'); await fresh.waitForTimeout(600);
 ok('and it is what gets saved',
-   (await fresh.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).cfg.otMode))==='shift');
+   (await fresh.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].cfg.otMode))==='shift');
 await fresh.close(); await freshCtx.close();
 
 console.log('\n━━ The choice sticks ━━');

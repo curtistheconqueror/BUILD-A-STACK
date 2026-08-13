@@ -69,8 +69,8 @@ await p.click('#cWorkDays button[data-w="5"]'); await p.waitForTimeout(250);
 ok('and off again puts it back to five', (await p.locator('#cWorkDays button.on').count())===5);
 let note = await p.textContent('#cWorkNote');
 ok('and it says so in words', note.includes('5 days') && note.includes('Sunday') && !note.includes('Friday'), note);
-ok('saved to settings', JSON.stringify((await st(p)).cfg.workDays)==='[true,true,true,true,true,false,false]',
-   JSON.stringify((await st(p)).cfg.workDays));
+ok('saved to settings', JSON.stringify((await st(p)).jobs[0].cfg.workDays)==='[true,true,true,true,true,false,false]',
+   JSON.stringify((await st(p)).jobs[0].cfg.workDays));
 await p.reload(); await p.waitForTimeout(600);
 await p.evaluate(()=>{ document.querySelectorAll('#cfg details').forEach(d=>d.open=true); });
 await p.waitForTimeout(200);
@@ -196,9 +196,9 @@ ok('a holiday is worth 8 h by default', (await p.inputValue('#cHolHours'))==='8'
 ok('either side is required by default', (await p.inputValue('#cHolAdj'))==='1');
 ok('and a day off still pays by default', (await p.inputValue('#cHolOffDay'))==='1');
 await p.fill('#cHolHours','10'); await p.locator('#cHolHours').blur(); await p.waitForTimeout(300);
-ok('the hours can be changed', (await st(p)).cfg.holidayHours===10, String((await st(p)).cfg.holidayHours));
+ok('the hours can be changed', (await st(p)).jobs[0].cfg.holidayHours===10, String((await st(p)).jobs[0].cfg.holidayHours));
 await p.selectOption('#cHolAdj','0'); await p.waitForTimeout(250);
-ok('as can the either-side rule', (await st(p)).cfg.holidayNeedsAdjacent===false);
+ok('as can the either-side rule', (await st(p)).jobs[0].cfg.holidayNeedsAdjacent===false);
 
 console.log('\n━━ It all survives a reload and a backup ━━');
 await p.reload(); await p.waitForTimeout(700);

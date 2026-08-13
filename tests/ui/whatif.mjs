@@ -157,7 +157,7 @@ ok('no early figure', f.cells.includes('Early=—'), f.cells.join(' '));
 ok('no late figure',  f.cells.includes('Late=—'), f.cells.join(' '));
 await p.evaluate(()=>{
   const s=JSON.parse(localStorage.getItem('payclock.v1'));
-  s.cfg.workDays=[true,true,true,true,true,true,true];
+  s.jobs[0].cfg.workDays=[true,true,true,true,true,true,true];
   localStorage.setItem('payclock.v1',JSON.stringify(s));
 });
 await p.reload(); await p.waitForTimeout(700);

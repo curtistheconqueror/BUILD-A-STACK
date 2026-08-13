@@ -117,7 +117,7 @@ console.log('\nPay frequency + payday are the calculator\'s own, not your settin
 await p.selectOption('#qFreq','7');
 await p.waitForTimeout(150);
 ok('frequency changed to weekly', (await p.inputValue('#qFreq'))==='7');
-ok('your real period settings untouched', await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).cfg.periodLengthDays)===14);
+ok('your real period settings untouched', await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].cfg.periodLengthDays)===14);
 await p.fill('#qPayday','2026-09-11');
 await p.waitForTimeout(150);
 ok('payday note follows the chosen date', (await p.textContent('#qPaydayNote')).includes('Sep 11'), await p.textContent('#qPaydayNote'));

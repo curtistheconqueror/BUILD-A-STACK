@@ -120,7 +120,7 @@ console.log('\n━━ Nothing stored was rewritten ━━');
 const stored = await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).sessions.map(s=>s.start));
 ok('the stamps are still the phone\'s', stored[0]===T(9,12,15,40), String(stored[0])+' vs '+T(9,12,15,40));
 ok('and the setting saved',
-   await p.evaluate(()=>{const c=JSON.parse(localStorage.getItem('payclock.v1')).cfg; return c.skewOn===true&&c.skewMins===2;}));
+   await p.evaluate(()=>{const c=JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].cfg; return c.skewOn===true&&c.skewMins===2;}));
 
 console.log('\n━━ Turning it back off restores every figure ━━');
 await p.selectOption('#cSkewOn','0'); await p.waitForTimeout(500);

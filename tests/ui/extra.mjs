@@ -136,10 +136,10 @@ await p.evaluate(()=>{ document.querySelectorAll('#cfg details').forEach(d=>d.op
 ok('start prefilled from settings', (await p.inputValue('#cSchedStart'))==='14:00', await p.inputValue('#cSchedStart'));
 ok('end prefilled from settings', (await p.inputValue('#cSchedEnd'))==='22:30', await p.inputValue('#cSchedEnd'));
 await p.fill('#cSchedStart','07:00'); await p.locator('#cSchedStart').blur(); await p.waitForTimeout(350);
-ok('changing it is stored', (await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).cfg.schedStart))==='07:00');
+ok('changing it is stored', (await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].cfg.schedStart))==='07:00');
 ok('and the note follows', (await p.textContent('#xSched')).includes('7:00 AM'), await p.textContent('#xSched'));
 await p.reload(); await p.waitForTimeout(500); await openAll(p);
-ok('it survives a reload', (await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).cfg.schedStart))==='07:00');
+ok('it survives a reload', (await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].cfg.schedStart))==='07:00');
 
 console.log('\n━━ Reads in 24-hour too ━━');
 await p.close();

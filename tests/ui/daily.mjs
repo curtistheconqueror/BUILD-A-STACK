@@ -128,8 +128,8 @@ ok('the bar follows it', (await p.textContent('#otLbl')).includes('Today toward 
 
 console.log('\n━━ The choice sticks ━━');
 await p.reload(); await p.waitForTimeout(500); await openAll(p);
-ok('still on the daily rule', (await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).cfg.otMode))==='daily');
-ok('and still at 10 h', (await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).cfg.dailyThreshold))===10);
+ok('still on the daily rule', (await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].cfg.otMode))==='daily');
+ok('and still at 10 h', (await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].cfg.dailyThreshold))===10);
 
 console.log('\n━━ Switching back restores the weekly picture exactly ━━');
 await p.evaluate(()=>{ document.querySelectorAll('#cfg details').forEach(d=>d.open=true); });

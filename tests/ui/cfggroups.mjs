@@ -113,7 +113,7 @@ await p.selectOption('#cSkewOn','1'); await p.waitForTimeout(400);
 await p.fill('#cSkewMins','2'); await p.dispatchEvent('#cSkewMins','change'); await p.waitForTimeout(500);
 await p.selectOption('#cLunch','60'); await p.waitForTimeout(500);
 await p.selectOption('#cClock24','1'); await p.waitForTimeout(500);
-const cfg=await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).cfg);
+const cfg=await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].cfg);
 ok('a control in Your schedule saved', cfg.lunchMins===60, 'lunch '+cfg.lunchMins);
 ok('a control in Appearance saved', cfg.clock24===true, 'clock24 '+cfg.clock24);
 ok('the shop-clock offset saved', cfg.skewOn===true && cfg.skewMins===2,
