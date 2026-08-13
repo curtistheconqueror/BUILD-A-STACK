@@ -66,6 +66,39 @@
   h1[data-solid]{background:none;-webkit-text-fill-color:var(--c-title);color:var(--c-title);animation:none}
   @keyframes sheen{to{background-position:300% 0}}
   .sub{color:var(--muted);font-size:14px;margin-top:5px}
+
+  /* ---- settings groups ----
+     Settings is one long screen of about fifty controls. Grouping them into collapsible
+     sections only helps if a folded group still tells you what is inside it, so every
+     summary carries a live one-line reading of its own settings. */
+  .cfgsec{border:1px solid var(--border);border-radius:12px;margin-top:10px;
+    background:rgba(255,255,255,.02)}
+  .cfgsec>summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    padding:11px 14px;min-height:44px;cursor:pointer;list-style:none;
+    -webkit-user-select:none;user-select:none}
+  .cfgsec>summary::-webkit-details-marker{display:none}
+  .cfgsec>summary::marker{content:""}
+  .cfgt{font-size:12.5px;letter-spacing:1.8px;text-transform:uppercase;font-weight:800;
+    color:var(--c-sect,#51e08a)}
+  /* Pushed hard right on a wide row; on a phone it wraps to its own line rather than
+     being squeezed to an ellipsis, because the summary is the whole point of folding. */
+  /* The generic `details summary` rule upstream shouts in wide-tracked capitals, which is
+     right for a section heading and wrong for a line of running text. Reset it here. */
+  .cfgsum{color:var(--muted);font-size:12.6px;font-weight:600;margin-left:auto;
+    text-align:right;flex:1 1 auto;min-width:0;
+    text-transform:none;letter-spacing:0;line-height:1.35}
+  /* The upstream rule also puts its own ▸ before every summary. One arrow is enough, and it
+     belongs on the outside edge where the eye already looks for it. */
+  .cfgsec>summary::before{content:none}
+  .cfgsec>summary::after{content:"▸";color:var(--acc);font-size:12px;flex:none;
+    transition:transform .2s}
+  .cfgsec[open]>summary::after{transform:rotate(90deg)}
+  .cfgbody{padding:2px 14px 14px}
+  /* The first heading inside a group no longer needs to push away from the one above it. */
+  .cfgbody>.f:first-child{margin-top:0 !important}
+  @media (max-width:430px){
+    .cfgsum{flex-basis:100%;margin-left:0;text-align:left;order:3}
+  }
   /* The former name, kept in front of the tagline so anyone who installed this as Pay Clock
      recognises it after the rename. Brighter than the tagline so it reads as a name rather
      than the first three words of the sentence. */
@@ -1334,7 +1367,16 @@
   <section class="card" id="cfg">
     <details>
       <summary>Settings</summary>
-      <div class="cfgrid" style="margin-top:16px">
+      <!-- Outside every group: a change made in any of them can be taken back from here,
+           and hiding the undo inside the group you just left would be cruel. -->
+      <div class="confirm hide" id="cfgUndo" style="border-color:var(--warn);background:rgba(255,180,84,.10)">
+        <span id="cfgUndoTxt"></span>
+        <button class="mini" id="cfgUndoBtn">↩ Undo that change</button>
+      </div>
+      <details class="cfgsec" id="gPay">
+        <summary><span class="cfgt">Pay &amp; overtime</span><span class="cfgsum" id="sumPay"></span></summary>
+        <div class="cfgbody">
+      <div class="cfgrid">
         <div class="f"><label>Base rate ($/hr)</label><input type="number" id="cRate" min="0" step="0.01"></div>
         <div class="f"><label>OT multiplier</label><input type="number" id="cMult" min="1" step="0.05"></div>
         <div class="f"><label>Overtime rule</label>
@@ -1355,34 +1397,35 @@
         <div class="f"><label>Period OT threshold (h)</label><input type="number" id="cPeriodThr" min="0" step="0.5"></div>
         <div class="f"><label>Daily OT threshold (h)</label><input type="number" id="cDailyThr" min="0" step="0.5"></div>
         <div class="f"><label>Per-shift OT threshold (h)</label><input type="number" id="cShiftThr" min="0" step="0.5"></div>
-        <div class="f"><label>Period start anchor</label><input type="date" id="cAnchor"></div>
-        <div class="f"><label>Period length (days)</label><input type="number" id="cLen" min="1" step="1"></div>
-        <div class="f"><label>Payday = period end + (days)</label><input type="number" id="cPayOff" min="0" step="1"></div>
-        <div class="f"><label>Time format</label>
-          <select id="cClock24">
-            <option value="0">12-hour — 2:30 PM</option>
-            <option value="1">24-hour — 14:30</option>
-          </select></div>
-        <div class="f"><label>Sound</label>
-          <select id="cSound"><option value="1">On</option><option value="0">Off</option></select></div>
-        <div class="f"><label>Unpaid lunch per shift</label>
-          <select id="cLunch">
-            <option value="0">None — all time paid</option>
-            <option value="30">30 minutes</option>
-            <option value="60">1 hour</option>
-          </select></div>
-        <div class="f"><label>Extra unpaid lunches to deduct</label>
-          <input type="number" id="cLunchExtra" min="0" step="1" value="0"></div>
         <div class="f"><label>Apply a raise — new rate ($/hr)</label>
           <input type="number" id="rNew" min="0.01" step="0.01" placeholder="e.g. 40.00"></div>
         <div class="f"><label>Raise takes effect on</label>
           <input type="date" id="rDate"></div>
         <div class="f" style="justify-content:flex-end">
           <button class="mini" id="rApply">Apply raise — history keeps its old rate</button></div>
+      </div>
+      <div class="note hide" id="rHist" style="margin-top:10px"></div>
+        </div>
+      </details>
+      <details class="cfgsec" id="gPeriod">
+        <summary><span class="cfgt">Pay period &amp; payday</span><span class="cfgsum" id="sumPeriod"></span></summary>
+        <div class="cfgbody">
+      <div class="cfgrid">
+        <div class="f"><label>Period start anchor</label><input type="date" id="cAnchor"></div>
+        <div class="f"><label>Period length (days)</label><input type="number" id="cLen" min="1" step="1"></div>
+        <div class="f"><label>Payday = period end + (days)</label><input type="number" id="cPayOff" min="0" step="1"></div>
         <div class="f"><label>Year-to-date section</label>
           <select id="cYtd"><option value="1">Show</option><option value="0">Hide</option></select></div>
       </div>
-
+      <div class="f" style="margin-top:18px">
+        <div class="note">The anchor is any date a period started on — periods repeat from it forever, so this never needs touching again.
+        Figures are <b>gross</b> (before taxes and deductions). Everything is stored only in this browser.</div>
+      </div>
+        </div>
+      </details>
+      <details class="cfgsec" id="gSched">
+        <summary><span class="cfgt">Your schedule</span><span class="cfgsum" id="sumSched"></span></summary>
+        <div class="cfgbody">
       <div class="f" style="margin-top:18px"><label>Your scheduled shift</label>
         <div class="note">The hours you are rostered for. Everything that asks "how far outside
         your shift was this" — the decimal time card, the what-if at the clock — measures
@@ -1392,24 +1435,32 @@
         <div class="f"><label for="cSchedStart2">Scheduled start</label><input type="time" id="cSchedStart2"></div>
         <div class="f"><label for="cSchedEnd2">Scheduled end</label><input type="time" id="cSchedEnd2"></div>
       </div>
-
-      <div class="f" style="margin-top:18px"><label for="cNightOn">Shift differential</label>
-        <div class="note">Extra money per hour for the part of a shift inside a window — the
-        night or evening premium a lot of contracts pay. It is paid on the hours that fall
-        inside it, not on the whole shift, and it rides on your base rate, so overtime is
-        worked out on rate plus differential. Paid days off never earn it.</div>
+      <div class="f" style="margin-top:18px"><label>Days you are scheduled to work</label>
+        <div class="note">The roster the app judges everything else against. "The day before a
+        holiday" means the shift before it, not whatever date happens to sit there — so a
+        Monday holiday looks at Sunday and Tuesday, and one on a Friday reaches back to
+        Thursday and forward to Sunday.</div>
       </div>
+      <div class="autodays" id="cWorkDays" style="justify-content:flex-start">
+        <button data-w="0">Sun</button><button data-w="1">Mon</button><button data-w="2">Tue</button>
+        <button data-w="3">Wed</button><button data-w="4">Thu</button><button data-w="5">Fri</button>
+        <button data-w="6">Sat</button>
+      </div>
+      <div class="note" id="cWorkNote" style="margin-top:8px"></div>
       <div class="cfgrid">
-        <div class="f"><label for="cNightOn">Pay a differential</label>
-          <select id="cNightOn"><option value="0">No</option><option value="1">Yes</option></select></div>
-        <div class="f"><label for="cNightRate">Extra per hour</label>
-          <div class="prefixed"><span>$</span>
-            <input type="number" id="cNightRate" min="0" max="100" step="0.01" inputmode="decimal"></div></div>
-        <div class="f"><label for="cNightFrom">From</label><input type="time" id="cNightFrom"></div>
-        <div class="f"><label for="cNightTo">Until</label><input type="time" id="cNightTo"></div>
+        <div class="f"><label>Unpaid lunch per shift</label>
+          <select id="cLunch">
+            <option value="0">None — all time paid</option>
+            <option value="30">30 minutes</option>
+            <option value="60">1 hour</option>
+          </select></div>
+        <div class="f"><label>Extra unpaid lunches to deduct</label>
+          <input type="number" id="cLunchExtra" min="0" step="1" value="0"></div>
       </div>
-      <div class="note" id="cNightNote" style="margin-top:8px"></div>
-
+      <div class="note" id="lunchNote" style="margin-top:10px">Lunch starts after 5 worked hours — 
+      the clock pauses for it mid-shift, shifts already logged are corrected automatically, and lunch
+      time never counts toward overtime. 'Extra' is only for lunches hiding in hours the log cannot
+      see, like a year-so-far carry-in — logged shifts are already handled.</div>
       <div class="f" style="margin-top:18px"><label for="cShiftDay">Which day a shift belongs to</label>
         <div class="note">A shift that crosses midnight is still one shift, and it belongs to
         one day. By default that is whichever day holds most of it — so a 10 PM start is the
@@ -1424,22 +1475,6 @@
             <option value="end">The day it finished</option>
           </select></div>
       </div>
-
-      <div class="f" style="margin-top:18px"><label for="cSkewOn">If the shop clock is off</label>
-        <div class="note">Time clocks drift, and the machine at work is the one that prints
-        your card. If it reads a minute or two off your phone, turn this on and the app shows
-        the times the machine would stamp — so what you copy onto a slip matches what it
-        printed. Your hours and your pay do not change: both ends of a shift move together.
-        Leave it off until you have watched the difference hold for a few days.</div>
-      </div>
-      <div class="cfgrid">
-        <div class="f"><label for="cSkewOn">Match the shop clock</label>
-          <select id="cSkewOn"><option value="0">Off</option><option value="1">On</option></select></div>
-        <div class="f"><label for="cSkewMins">This phone runs ahead by (min)</label>
-          <input type="number" id="cSkewMins" min="-30" max="30" step="1"></div>
-      </div>
-      <div class="note" id="cSkewNote" style="margin-top:8px"></div>
-
       <div class="f" style="margin-top:18px"><label for="cMakeUp">Watch my schedule for missed days</label>
         <div class="note">Some contracts only pay overtime once you have actually worked your
         scheduled hours — miss a day and you work back out of it before overtime starts
@@ -1464,20 +1499,46 @@
       </div>
       <div class="note" id="cMakeUpNote" style="margin-top:8px"></div>
       <div class="note" id="cShiftDayNote" style="margin-top:8px"></div>
-
-      <div class="f" style="margin-top:18px"><label>Days you are scheduled to work</label>
-        <div class="note">The roster the app judges everything else against. "The day before a
-        holiday" means the shift before it, not whatever date happens to sit there — so a
-        Monday holiday looks at Sunday and Tuesday, and one on a Friday reaches back to
-        Thursday and forward to Sunday.</div>
+      <div class="f" style="margin-top:18px"><label for="cSkewOn">If the shop clock is off</label>
+        <div class="note">Time clocks drift, and the machine at work is the one that prints
+        your card. If it reads a minute or two off your phone, turn this on and the app shows
+        the times the machine would stamp — so what you copy onto a slip matches what it
+        printed. Your hours and your pay do not change: both ends of a shift move together.
+        Leave it off until you have watched the difference hold for a few days.</div>
       </div>
-      <div class="autodays" id="cWorkDays" style="justify-content:flex-start">
-        <button data-w="0">Sun</button><button data-w="1">Mon</button><button data-w="2">Tue</button>
-        <button data-w="3">Wed</button><button data-w="4">Thu</button><button data-w="5">Fri</button>
-        <button data-w="6">Sat</button>
+      <div class="cfgrid">
+        <div class="f"><label for="cSkewOn">Match the shop clock</label>
+          <select id="cSkewOn"><option value="0">Off</option><option value="1">On</option></select></div>
+        <div class="f"><label for="cSkewMins">This phone runs ahead by (min)</label>
+          <input type="number" id="cSkewMins" min="-30" max="30" step="1"></div>
       </div>
-      <div class="note" id="cWorkNote" style="margin-top:8px"></div>
-
+      <div class="note" id="cSkewNote" style="margin-top:8px"></div>
+        </div>
+      </details>
+      <details class="cfgsec" id="gPrem">
+        <summary><span class="cfgt">Premiums</span><span class="cfgsum" id="sumPrem"></span></summary>
+        <div class="cfgbody">
+      <div class="f" style="margin-top:18px"><label for="cNightOn">Shift differential</label>
+        <div class="note">Extra money per hour for the part of a shift inside a window — the
+        night or evening premium a lot of contracts pay. It is paid on the hours that fall
+        inside it, not on the whole shift, and it rides on your base rate, so overtime is
+        worked out on rate plus differential. Paid days off never earn it.</div>
+      </div>
+      <div class="cfgrid">
+        <div class="f"><label for="cNightOn">Pay a differential</label>
+          <select id="cNightOn"><option value="0">No</option><option value="1">Yes</option></select></div>
+        <div class="f"><label for="cNightRate">Extra per hour</label>
+          <div class="prefixed"><span>$</span>
+            <input type="number" id="cNightRate" min="0" max="100" step="0.01" inputmode="decimal"></div></div>
+        <div class="f"><label for="cNightFrom">From</label><input type="time" id="cNightFrom"></div>
+        <div class="f"><label for="cNightTo">Until</label><input type="time" id="cNightTo"></div>
+      </div>
+      <div class="note" id="cNightNote" style="margin-top:8px"></div>
+        </div>
+      </details>
+      <details class="cfgsec" id="gOff">
+        <summary><span class="cfgt">Time off</span><span class="cfgsum" id="sumOff"></span></summary>
+        <div class="cfgbody">
       <div class="f" style="margin-top:18px"><label>Paid holidays</label>
         <div class="note">Days off that still pay. Each one is a rule rather than a date, so
         the calendar is right every year without anyone editing it. Switch one off if your
@@ -1513,7 +1574,6 @@
         <button class="mini" id="cBankAdd">+ Add an allowance</button>
         <button class="mini" id="cBankReset">↺ Back to the defaults</button>
       </div>
-
       <div class="f" style="margin-top:18px"><label>Vacation</label>
         <div class="note">A block of dates rather than days you spend one at a time. Every day
         inside it that you were rostered for pays flat; days you were not rostered for pay
@@ -1544,7 +1604,6 @@
           <button class="btn ghost" id="vCancel">Cancel</button>
         </div>
       </div>
-
       <div class="editor hide" id="holEdit">
         <div class="etitle" id="holTitle">Add a holiday</div>
         <div class="egrid">
@@ -1575,6 +1634,11 @@
           <button class="btn ghost" id="hCancel">Cancel</button>
         </div>
       </div>
+        </div>
+      </details>
+      <details class="cfgsec" id="gLook">
+        <summary><span class="cfgt">Appearance</span><span class="cfgsum" id="sumLook"></span></summary>
+        <div class="cfgbody">
       <div class="f" style="margin-top:18px"><label>Look &amp; feel</label>
         <div class="note">Pick a preset, then change any individual colour. Applies everywhere, saved on this device.</div>
       </div>
@@ -1598,11 +1662,20 @@
       <div class="actions" style="justify-content:flex-start;margin-top:12px">
         <button class="mini" id="themeReset">↺ Back to the default look</button>
       </div>
-
-      <div class="f" style="margin-top:18px">
-        <div class="note">The anchor is any date a period started on — periods repeat from it forever, so this never needs touching again.
-        Figures are <b>gross</b> (before taxes and deductions). Everything is stored only in this browser.</div>
+      <div class="cfgrid">
+        <div class="f"><label>Time format</label>
+          <select id="cClock24">
+            <option value="0">12-hour — 2:30 PM</option>
+            <option value="1">24-hour — 14:30</option>
+          </select></div>
+        <div class="f"><label>Sound</label>
+          <select id="cSound"><option value="1">On</option><option value="0">Off</option></select></div>
       </div>
+        </div>
+      </details>
+      <details class="cfgsec" id="gData">
+        <summary><span class="cfgt">Your data</span><span class="cfgsum" id="sumData"></span></summary>
+        <div class="cfgbody">
       <div class="f" style="margin-top:16px">
         <label>Back up &amp; move your data</label>
         <div class="note">Your rate, schedule and every shift live in this browser only. Save a backup
@@ -1623,6 +1696,8 @@
         <input type="file" id="restoreFile" accept="application/json,.json" class="hide">
         <button class="mini danger" id="wipe">Erase all data</button>
       </div>
+        </div>
+      </details>
     </details>
   </section>
 
@@ -3183,7 +3258,15 @@ function load(){
 /* Bumped on every save, so the heavy renderers below can tell "nothing has changed" from
    "redraw everything". */
 var dataVer = 0;
-function save(){ dataVer++; try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
+/* Every settings change funnels through here, which makes it the one place the folded
+   group summaries can be refreshed without hunting down thirty individual handlers — several
+   of which render but never call syncControls, so hanging the summaries off those would leave
+   a group reading the old value until something unrelated happened to redraw it. */
+function save(){
+  dataVer++;
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){}
+  if (typeof renderCfgSummaries === 'function') renderCfgSummaries();
+}
 function uid(){ return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
 /* ============================ format ============================ */
@@ -6183,7 +6266,7 @@ function restoreFrom(text){
   if (d.calc) state.calc = d.calc;
   if (d.calCal) state.calCal = d.calCal;
   state.activeStart = null; state.activeAdj = null;   // never restore a running clock from a file
-  save(); applyTheme(); renderThemeControls(); applyCols(); applyChart(); syncControls(); applyStage(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+  save(); applyTheme(); renderThemeControls(); applyCols(); applyCfgGroups(); applyChart(); syncControls(); applyStage(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
   toast('Restored ' + clean.length + ' shifts at ' + money(state.cfg.rate) + '/hr.');
 }
 
@@ -7091,6 +7174,7 @@ function syncControls(){
   renderBankCfg();
   renderVacList();
   renderBanks();
+  renderCfgSummaries();
   document.getElementById('autoOn').checked = !!state.autoOn;
   var aA = document.getElementById('autoAt');
   if (document.activeElement !== aA) aA.value = state.autoAt || '';
@@ -7102,6 +7186,86 @@ function syncControls(){
     b.classList.toggle('on', b.dataset.u === state.unit);
   });
   syncCalc();
+}
+
+/* ---- the one-line reading on each settings group ----
+
+   A folded group is only useful if you can tell from the outside whether the thing you
+   came to check is already right. These say what the group is currently set to, in the
+   fewest words that are still specific — "$37.78/hr · 1.5× after 40 h" answers the
+   question without opening anything. Anything vague enough to need opening anyway
+   ("configured", "3 settings") would be worse than an empty summary. */
+var CFG_GROUPS = ['gPay', 'gPeriod', 'gSched', 'gPrem', 'gOff', 'gLook', 'gData'];
+
+function cfgSummaries(){
+  var c = state.cfg, s = {};
+  var thr = otThresholdOf(c);
+  var rule = c.otMode === 'weekly'   ? 'after ' + thr + ' h a week'
+           : c.otMode === 'period'   ? 'after ' + thr + ' h a period'
+           : c.otMode === 'daily'    ? 'after ' + thr + ' h a day'
+           : c.otMode === 'shift'    ? 'after ' + thr + ' h a shift'
+           : 'after ' + thr + ' h a day or ' + (c.periodThreshold || 80) + ' h a period';
+  s.sumPay = money(c.rate || 0) + '/hr · ' + (c.otMultiplier || 1.5) + '× ' + rule;
+
+  s.sumPeriod = (c.periodLengthDays || 14) + ' days · paid ' + (c.payDateOffsetDays || 0)
+              + ' days after it ends';
+
+  var on = [];
+  for (var d = 0; d < 7; d++) if (isWorkDay(c, d)) on.push(DOW[d]);
+  var roster = on.length === 7 ? 'every day' : on.length ? on.join(' ') : 'no days set';
+  var span = (c.schedStart && c.schedEnd) ? ftimeCfg(c.schedStart, c) + '–' + ftimeCfg(c.schedEnd, c) : 'no shift set';
+  s.sumSched = span + ' · ' + roster
+             + ((c.lunchMins || 0) ? ' · ' + c.lunchMins + ' min lunch' : ' · no lunch');
+
+  var nw = nightWindow(c);
+  s.sumPrem = nw ? '+' + money(nw.rate) + '/h from ' + ftimeCfg(c.nightFrom, c) + ' to ' + ftimeCfg(c.nightTo, c)
+                 : 'none';
+
+  var hols = (c.holidays || []).filter(function(h){ return h && h.on !== false; }).length;
+  var bankDays = (c.banks || []).reduce(function(a, b){ return a + (+b.days || 0); }, 0);
+  var vacs = (c.vacations || []).length;
+  s.sumOff = hols + (hols === 1 ? ' holiday' : ' holidays')
+           + ' · ' + bankDays + (bankDays === 1 ? ' day off' : ' days off')
+           + (vacs ? ' · ' + vacs + (vacs === 1 ? ' vacation' : ' vacations') : '');
+
+  var th = theme().preset || 'midnight';
+  s.sumLook = th + ' · ' + (c.clock24 ? '24-hour' : '12-hour')
+            + ' · sound ' + (state.sound ? 'on' : 'off');
+
+  var n = (state.sessions || []).length;
+  s.sumData = n + (n === 1 ? ' shift' : ' shifts') + ' stored on this device';
+  return s;
+}
+
+function renderCfgSummaries(){
+  var s = cfgSummaries();
+  for (var k in s) if (Object.prototype.hasOwnProperty.call(s, k)){
+    var e = document.getElementById(k);
+    if (e) e.textContent = s[k];
+  }
+}
+
+/* Which groups are open is remembered like every other fold in the app, so the one you
+   keep coming back to is open next time. Nothing is open on a first run: the point of the
+   grouping is that Settings opens to seven headings rather than fifty controls. */
+function applyCfgGroups(){
+  var o = uiOpen().cfg || {};
+  CFG_GROUPS.forEach(function(id){
+    var e = document.getElementById(id);
+    if (e) e.open = !!o[id];
+  });
+}
+function bindCfgGroups(){
+  CFG_GROUPS.forEach(function(id){
+    var e = document.getElementById(id);
+    if (!e) return;
+    e.addEventListener('toggle', function(){
+      var u = uiOpen(); u.cfg = u.cfg || {};
+      if (!!u.cfg[id] === e.open) return;        // nothing changed, do not churn storage
+      u.cfg[id] = e.open;
+      save();
+    });
+  });
 }
 
 /* Push the current settings into the calculator's controls. Called on load and after
@@ -7133,6 +7297,8 @@ function syncCalc(){
 applyTheme();
 renderThemeControls();
 applyCols();
+applyCfgGroups();
+bindCfgGroups();
 applyChart();
 (function(){
   var u = uiOpen();

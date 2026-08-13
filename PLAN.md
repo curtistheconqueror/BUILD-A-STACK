@@ -116,6 +116,16 @@ Tax is per person, not per employer, and that gap is where the value is:
 Every stage ends with the full harness green and its own new suite. **No stage begins before
 the previous one's smoke test is reported.**
 
+### Stage 0 — Settings, regrouped *(done)*
+
+Fifty controls in one flat list became seven collapsible groups — pay & overtime, pay
+period & payday, your schedule, premiums, time off, appearance, your data — each carrying a
+live one-line reading of its own settings so a folded group still tells you what is inside
+it. Done before the rest because Stages 3 and 5 both land *inside* Settings, and because
+"do not render the pay & overtime group for a surgeon" is one decision where hiding nine
+scattered fields is nine chances to miss one. The grouping is the seam the profession layer
+needs.
+
 ### Stage 1 — Fix what is already wrong
 
 No new UI. These are live defects in the shipped app.
@@ -213,6 +223,54 @@ is not, it needs a new earning model.**
 | Nurse | Stage 1 + Stage 5 | 8/80 is engine work and a live defect; the profile, stacking premiums and callback minimums come with the profession layer |
 | Surgeon / physician | Stage 6 | No clock exists in this job at all — `units` is a genuinely different way money arrives |
 | Teacher | Stage 7 | `contract` plus a pension that replaces Social Security |
+
+### Stage 8 — OT Expectancy
+
+Two numbers. **OT Expectancy**: expected overtime per period and per year, seasonally
+adjusted and trend-aware. **P(income ≥ target)**: the probability of clearing $90k, $100k,
+$120k this year. A projection states one confident number and is usually wrong; a
+probability is honest about a variable income and is what someone would actually want
+before signing a loan.
+
+The second number is the product. Overtime is *variable income*, and mortgage underwriting
+typically wants a two-year history before counting any of it, discounting or excluding it
+outright when it is declining. So three different true numbers matter, and only this app
+has the shift-level record to tell them apart: what you earned, what a lender would count,
+and what you can personally count on — your floor, the worst period in two years.
+
+Computed by **Monte Carlo resampling from the user's own history**, not a normal curve.
+Overtime is zero-inflated and right-skewed — many periods with none, occasional very large
+ones — and a bell curve smears both away into confident nonsense. For each remaining period
+of the year, draw a real observed outcome from the same month or season, sum the year,
+repeat ten thousand times, count what fraction cleared the target. It never assumes a
+shape because it never needs one, and 10,000 × 26 draws is milliseconds on a phone.
+
+The metrics underneath: level (rolling 3, 6 and 26-period averages), trend, consistency
+(the variance that becomes the confidence band), frequency (share of periods with any OT
+at all), floor, and dependence (OT as a share of total income).
+
+"A credit score for income" sets three requirements that are easy to miss:
+
+- **It moves slowly.** One monster week must not take a probability from 34% to 71%.
+  Updates per pay period, smoothed.
+- **It is improvable, and says how.** "Six more OT hours a period takes P($100k) from 34%
+  to 61%" turns a verdict into a lever.
+- **It is showable.** A score exists to be handed to someone else, so this needs an export:
+  the number, the history behind it, and the method stated.
+
+**The constraint that shapes the whole feature:** resampling needs real periods to draw
+from, and seasonality needs two winters to distinguish "December is busy" from "last
+December was busy." So it ships with manual history entry — OT by month off old paystubs or
+a W-2 — and below a minimum it refuses to show a probability rather than showing a bad one.
+A score that lies is worse than no score, and this one exists specifically to be trusted by
+someone who is not the user.
+
+Lands after Stage 4, which builds the cross-job income picture — expectancy over combined
+jobs is the useful version.
+
+*Smoke test:* the resampler reproduces a known distribution; probabilities move the right
+way with target, trend and variance; the seasonal index recovers a planted winter effect;
+and below the history minimum no probability is shown at all.
 
 ## Ordering, and why
 
