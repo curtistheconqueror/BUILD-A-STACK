@@ -303,6 +303,39 @@ jobs is the useful version.
 way with target, trend and variance; the seasonal index recovers a planted winter effect;
 and below the history minimum no probability is shown at all.
 
+### Stage 9 — WiseWage Lite
+
+Not a second file, and not a smaller app. **A performance profile.**
+
+The temptation is a stripped `lite.html`, and PR #6 in this repository is the worked example
+of why not: two lineages of this app, one of which grew a feature the other already had,
+neither aware of the other. A Lite build would need the whole engine, which is the part that
+must not be duplicated.
+
+It also aims at the wrong thing. Measured on 220 shifts with every section open:
+
+| | |
+|---|---|
+| render, median | 1.6–1.8 ms |
+| frame rate, glow background | 56 fps |
+| frame rate, flat | 60 fps |
+| frame rate, water as first written | 26 fps |
+
+**The JavaScript is nearly free; the battery goes to compositing.** A Lite that removes
+features while keeping the animated background and the per-second tick would save almost
+nothing. A Lite that keeps every feature and stops animating would save most of it. Fewer
+features is not the lever — less painting is.
+
+So: one switch that stops the background grid, the title sheen, the hero scan line and the
+caustics; steps money per minute rather than per second; and skips the heavy sub-renderers
+for folded sections. Same file, same engine, nothing to drift.
+
+**What this asks of every stage before it:** each visual effect must be switchable from one
+place. Build them that way and Lite is a flip; build them scattered and Lite is a rewrite.
+
+*Smoke test:* frame rate and render cost measured on and off against the numbers above;
+every feature still reachable in Lite; the switch surviving a reload.
+
 ## Ordering, and why
 
 Fixes first, because they are wrong today and every later stage inherits them.
