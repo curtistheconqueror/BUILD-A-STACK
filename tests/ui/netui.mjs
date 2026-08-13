@@ -97,7 +97,11 @@ await p.click('#punch'); await p.waitForTimeout(250);
 await p.clock.fastForward(2*3600_000); await p.waitForTimeout(300);
 const big=await N('#money');
 ok('session net is positive and below gross', big>30 && big<76, `$${big} for 2 h ($76 gross)`);
-ok('netline shows the shift gross', (await T('#netline')).includes('76.0'), await T('#netline'));
+/* Two hours at $38 is $76, but a fast-forwarded clock lands a few milliseconds short, so
+   the figure is $75.99 as often as $76.00. Compared as a number, not as text. */
+const nl = await T('#netline');
+const nlGross = parseFloat((nl.match(/\$([\d,]+\.\d\d)/) || [0,'0'])[1].replace(/,/g,''));
+ok('netline shows the shift gross', Math.abs(nlGross - 76) < 0.05, nl);
 await p.click('#punch'); await p.waitForTimeout(250);
 
 console.log('\n━━ Hole view: start negative, climb to green ━━');
