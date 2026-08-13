@@ -42,6 +42,7 @@ const E = new Function(m[1] + `
            nightWindow, inNightWindow, splitNight, sumNight, scheduledWeekHours,
            premiumList, premiumCovers, premiumsAt, splitPremiums,
            callbackMin, applyCallback,
+           unitCfg, unitsInRange, unitPay, unitPace,
            fedNotWithheld, netBreakdown, periodNetView,
            TAX_YEAR, TAX2026, bracketTax, fedWithholding };
 `)();
@@ -457,7 +458,70 @@ const gross = (sessions, c = cfg) => {
   near('the whole guaranteed block earns the night rate', sum([short], night).gross, 3 * 45);
 }
 
-/* ------------------------------------------------------------------ */
+/* ---------------- work counted rather than clocked ---------------- */
+{
+  /* An orthopedic contract at the market median: $703,000 total on 8,812 wRVU at $79.78 —
+     which implies a base covering roughly 8,812 - (703,000 - base)/79.78. Rounded to a
+     shape a real contract has: $400,000 base covering 5,000 wRVU, $79.78 each after. */
+  const cfg = { ...E.DEFAULTS, unitBase: 400000, unitThreshold: 5000, unitRate: 79.78,
+                unitName: 'wRVU' };
+
+  const u = E.unitCfg(cfg);
+  near('the base is read',      u.base, 400000);
+  near('and the threshold',     u.threshold, 5000);
+  near('and the rate',          u.rate, 79.78);
+
+  /* Below the threshold the salary is the whole of it. Productivity pay is for going past
+     what the base already covers, not a replacement for it. */
+  near('nothing past the threshold pays the base', E.unitPay(3000, cfg).total, 400000);
+  near('with no productivity at all',              E.unitPay(3000, cfg).productivity, 0);
+  near('exactly at the threshold, still the base', E.unitPay(5000, cfg).total, 400000);
+  near('one past it earns the rate',               E.unitPay(5001, cfg).total, 400000 + 79.78);
+  near('8,812 pays base plus 3,812 at the rate',
+       E.unitPay(8812, cfg).total, 400000 + 3812 * 79.78);
+  near('which is a market-median orthopedic year', E.unitPay(8812, cfg).total, 704121.36, 1);
+
+  // Entries are summed by date, and only inside the window asked for.
+  const list = [
+    { id:'a', date:'2026-01-15', count: 20.7 },      // a total knee
+    { id:'b', date:'2026-02-02', count: 9.5 },       // a lap appendectomy
+    { id:'c', date:'2025-12-30', count: 100 }        // last year, not this
+  ];
+  near('this year sums to 30.2',
+       E.unitsInRange(list, +new Date(2026, 0, 1), +new Date(2027, 0, 1)), 30.2);
+  near('last year is not counted',
+       E.unitsInRange(list, +new Date(2026, 0, 1), +new Date(2027, 0, 1)) < 100, true ? 1 : 0);
+
+  /* Pace: where the year lands if the rest runs like the part already done. Ninety days in
+     with 2,000 logged is a shade over 8,100 by December. */
+  const mar31 = +new Date(2026, 2, 31, 12);
+  const many = [{ id:'x', date:'2026-01-05', count: 2000 }];
+  const p = E.unitPace(many, cfg, mar31, 1);
+  near('two thousand so far', p.soFar, 2000);
+  near('ninety days elapsed',  p.elapsed, 90, 1);
+  ok('projecting past eight thousand', p.projected > 8000 && p.projected < 8300,
+     p.projected.toFixed(0));
+  near('and the year priced on that', p.year.total,
+       400000 + (p.projected - 5000) * 79.78, 1);
+
+  /* The what-if is a multiplier on that pace, which is what a "pick up ten per cent"
+     control adjusts. */
+  const faster = E.unitPace(many, cfg, mar31, 1.1);
+  near('ten per cent more is ten per cent more units', faster.projected, p.projected * 1.1, 1);
+  ok('and worth real money', faster.year.total - p.year.total > 60000,
+     '$' + (faster.year.total - p.year.total).toFixed(0));
+
+  /* Money already earned is measured on what has actually been done, not on the pace —
+     two thousand units is under the threshold, so it is the base and nothing more. */
+  near('earned so far is the base alone', p.now.total, 400000);
+
+  // A contract with nothing set prices nothing rather than dividing by zero.
+  const empty = { ...E.DEFAULTS };
+  near('an unset contract pays nothing', E.unitPay(500, empty).total, 0);
+  near('and has no threshold', E.unitCfg(empty).threshold, 0);
+}
+
+
 group('Pay period boundaries (anchor 2026-07-26, 14 days)');
 {
   const p = E.periodInfo(at(2026, 7, 30, 12), cfg);

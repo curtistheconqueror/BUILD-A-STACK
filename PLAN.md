@@ -201,7 +201,7 @@ destroy data; the Illinois and Indiana legal notes appear on the right profiles;
 premiums stack correctly on one hour; a twenty-minute callback pays the full minimum and that
 minimum counts toward the overtime threshold.
 
-### Stage 6 — The `units` model
+### Stage 6 — The `units` model *(done)*
 
 The surgeon profile. wRVU logging with a built-in procedure table, threshold and conversion
 factor with optional tiers, and the pace projection — year-to-date ÷ elapsed year, projected
@@ -213,6 +213,12 @@ specialties.
 
 *Smoke test:* pace projection against hand-computed run rates; threshold and tier boundaries;
 no clock or overtime controls render anywhere in this profile.
+
+Built without the procedure table: the contract is four fields — what the units are called,
+the base salary, the threshold that salary covers, and what one pays past it — because those
+four are what every wRVU contract actually turns on, and a built-in CMS table would go stale
+the moment the schedule was revised. Entries are logged by date and belong to their job, so a
+locum list is priced on the locum contract. `tests/ui/units.mjs` covers it in 80 assertions.
 
 ### Stage 7 — The `contract` model
 

@@ -118,7 +118,13 @@ ok('and "still" clears them all',
 console.log('\n━━ A colour per section ━━');
 await openCfg();
 const rows=await p.$$eval('#secCols input[data-sec]',es=>es.map(e=>e.dataset.sec));
-ok('every section and settings group has a row', rows.length===18, rows.length+': '+rows.join(','));
+/* Counted against the table itself rather than a number written here: a new card or a new
+   settings group must get a colour row with it, and a hard-coded count only goes stale. */
+const secKeys=await p.evaluate(()=>SECTION_KEYS.map(k=>k[0]));
+ok('every section and settings group has a row', rows.join()===secKeys.join(),
+   rows.length+' of '+secKeys.length+': '+rows.join(','));
+ok('the production card is one of them', rows.includes('units'), rows.join(','));
+ok('so is the contract group', rows.includes('gUnits'), rows.join(','));
 ok('Settings is one of them', rows.includes('cfg'));
 ok('and so are the settings groups', rows.includes('gPay')&&rows.includes('gData'));
 await p.evaluate(()=>{const i=document.querySelector('#secCols input[data-sec="totals"]');

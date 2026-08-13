@@ -998,6 +998,47 @@
   <div class="jobbar hide" id="jobBar"></div>
   <div class="jobwarn hide" id="jobWarn"></div>
 
+  <!-- Replaces the clock entirely for work that is counted rather than clocked. Never both:
+       a surgeon has no punch to make, and a bus operator has no wRVUs. -->
+  <section class="card col hide" id="units">
+    <h2>Production <span class="colsum" id="sum_units"></span></h2>
+    <div class="colbody">
+      <div class="tgrid">
+        <div class="tile"><div class="k" id="uSoFarK">This year</div>
+          <div class="big" id="uSoFar">0</div><div class="det" id="uSoFarDet"></div></div>
+        <div class="tile"><div class="k">On this pace</div>
+          <div class="big" id="uPace">0</div><div class="det" id="uPaceDet"></div></div>
+        <div class="tile"><div class="k">Earning</div>
+          <div class="big" id="uPay">$0.00</div><div class="det" id="uPayDet"></div></div>
+      </div>
+      <div class="bar"><div class="fill reg" id="uBarReg"></div><div class="fill ot" id="uBarOver"></div></div>
+      <div class="barrow"><span class="barlbl" id="uBarLbl"></span><span class="barnum" id="uBarNum"></span></div>
+      <div class="note" id="uNote" style="margin-top:10px"></div>
+
+      <div class="f" style="margin-top:16px"><label>What if the rest of the year ran differently?</label></div>
+      <div class="paymode" id="uWhat">
+        <button data-f="0.9">10% slower</button>
+        <button data-f="1" class="on">This pace</button>
+        <button data-f="1.1">10% more</button>
+        <button data-f="1.25">25% more</button>
+      </div>
+      <div class="note" id="uWhatNote" style="margin-top:8px"></div>
+
+      <div class="f" style="margin-top:18px"><label>Log what you did</label></div>
+      <div class="cfgrid">
+        <div class="f"><label for="uDate">Date</label><input type="date" id="uDate"></div>
+        <div class="f"><label for="uCount">How many <span id="uCountUnit">wRVU</span>?</label>
+          <input type="number" id="uCount" min="0" step="0.01" inputmode="decimal"></div>
+        <div class="f"><label for="uNoteIn">What was it? <span class="hsub">(optional)</span></label>
+          <input type="text" id="uNoteIn" maxlength="40" placeholder="e.g. total knee"></div>
+      </div>
+      <div class="actions" style="justify-content:flex-start;margin-top:10px">
+        <button class="btn go" id="uAdd">+ Log it</button>
+      </div>
+      <div id="uList" style="margin-top:12px"></div>
+    </div>
+  </section>
+
   <section class="card col" id="hero">
     <div class="hstrip" id="hstrip">
       <div class="status" id="status"><span class="blip"></span><span id="statusTxt">Clocked out</span></div>
@@ -1575,6 +1616,30 @@
       <div class="note" id="jobNote" style="margin-top:10px"></div>
         </div>
       </details>
+      <details class="cfgsec hide" id="gUnits">
+        <summary><span class="cfgt">Your contract</span><span class="cfgsum" id="sumUnits"></span></summary>
+        <div class="cfgbody">
+      <div class="f" style="margin-top:0"><label>Base and productivity</label>
+        <div class="note">A base salary the contract already assumes a certain volume for, and
+        a rate for everything past it. Below the threshold the salary is the whole of it —
+        productivity pay is for going beyond what the base covers, not a replacement for it.
+        Values are per year.</div>
+      </div>
+      <div class="cfgrid">
+        <div class="f"><label for="cUnitName">What are they called?</label>
+          <input type="text" id="cUnitName" maxlength="12" placeholder="wRVU"></div>
+        <div class="f"><label for="cUnitBase">Base salary</label>
+          <div class="prefixed"><span>$</span>
+            <input type="number" id="cUnitBase" min="0" step="1000" inputmode="decimal"></div></div>
+        <div class="f"><label for="cUnitThr">Threshold the base covers</label>
+          <input type="number" id="cUnitThr" min="0" step="1" inputmode="decimal"></div>
+        <div class="f"><label for="cUnitRate">Paid per unit past it</label>
+          <div class="prefixed"><span>$</span>
+            <input type="number" id="cUnitRate" min="0" step="0.01" inputmode="decimal"></div></div>
+      </div>
+      <div class="note" id="cUnitNote" style="margin-top:8px"></div>
+        </div>
+      </details>
       <details class="cfgsec" id="gPay">
         <summary><span class="cfgt">Pay &amp; overtime</span><span class="cfgsum" id="sumPay"></span></summary>
         <div class="cfgbody">
@@ -2043,6 +2108,9 @@ var DEFAULTS = {
   nightRate: 0,
   premiums: [],             // extra differentials that stack on top of the first
   callbackMin: 0,           // guaranteed hours when you are called in
+  /* Work counted rather than clocked — see unitCfg. Zero everywhere means the app behaves
+     exactly as it always has, which is what every clock job wants. */
+  unitBase: 0, unitThreshold: 0, unitRate: 0, unitName: 'wRVU',
   makeUpOn: false,
   makeUpWindow: 'period',    // the hole resets each pay period; 'week' resets each week
   vacations: [],             // blocks of approved leave: {id, name, from, to, hours, ot}
@@ -3633,6 +3701,56 @@ function currentPayMonth(parts, cfg, nowMs){
   return null;
 }
 
+
+/* ---- work measured in units rather than hours ----
+
+   Some pay has no clock in it at all. A surgeon is salaried, exempt from overtime, and paid
+   productivity above a threshold measured in wRVUs — CMS's own measure of the effort a
+   procedure takes. The shape is: a base salary, a threshold of units the salary already
+   covers, and a rate for every unit past it.
+
+   Units are logged as entries with a date and a count, so the same machinery serves anything
+   counted rather than clocked: commission, piecework, deliveries. */
+function unitCfg(cfg){
+  var c = cfg || {};
+  return { base: +c.unitBase || 0,
+           threshold: +c.unitThreshold || 0,
+           rate: +c.unitRate || 0,
+           name: c.unitName || 'unit' };
+}
+/* Units logged inside a window. */
+function unitsInRange(list, fromMs, toMs){
+  var n = 0;
+  (list || []).forEach(function(u){
+    var d = +ymd(u.date);
+    if (!isNaN(d) && d >= fromMs && d < toMs) n += +u.count || 0;
+  });
+  return Math.round(n * 100) / 100;
+}
+/* What a year's units are worth: the salary, plus a rate on everything past the threshold.
+   Below the threshold the salary is the whole of it — productivity pay is a bonus for going
+   past what the base already assumes, not a replacement for it. */
+function unitPay(units, cfg){
+  var u = unitCfg(cfg);
+  var over = Math.max(0, units - u.threshold);
+  return { base: u.base, over: over, productivity: over * u.rate,
+           total: u.base + over * u.rate };
+}
+/* Where the year lands if the rest of it runs at the pace of the part already worked.
+   `factor` scales that pace, which is what a "what if I picked up ten per cent" control
+   adjusts. */
+function unitPace(list, cfg, nowMs, factor){
+  var now = nowMs == null ? Date.now() : nowMs;
+  var y = new Date(now).getFullYear();
+  var soFar = unitsInRange(list, +new Date(y, 0, 1), +new Date(y + 1, 0, 1));
+  var d = new Date(now);
+  var elapsed = Math.max(1, Math.round((d - new Date(y, 0, 1)) / DAY_MS));
+  var projected = soFar * (365.25 / elapsed) * (factor == null ? 1 : factor);
+  return { soFar: soFar, elapsed: elapsed, projected: Math.round(projected * 100) / 100,
+           perDay: Math.round((soFar / elapsed) * 100) / 100,
+           now: unitPay(soFar, cfg), year: unitPay(projected, cfg) };
+}
+
 /* ==ENGINE-END== */
 
 /* ============================ state ============================ */
@@ -3702,9 +3820,23 @@ var PROFESSIONS = {
                       otDefault: 'eighty80', ask8080: true },
   trades:           { group: 'Trades',    role: 'Trades / plant',  model: 'clock',
                       otDefault: 'weekly' },
+  surgeon:          { group: 'Medical',   role: 'Surgeon / physician', model: 'units',
+                      unitName: 'wRVU',
+                      /* Exempt from overtime under 29 CFR 541.304, which uniquely exempts
+                         licensed physicians from the salary-basis test too — so there is no
+                         overtime rule to configure, and none is shown. */
+                      exempt: '29 CFR 541.304' },
   other_hourly:     { group: 'Other',     role: 'Paid by the hour',model: 'clock',
                       otDefault: 'weekly' }
 };
+
+/* This job's logged production. */
+function unitEntries(jobId){
+  var jid = jobId || state.activeJob;
+  return (state.units || []).filter(function(u){
+    return u && (!u.jobId || u.jobId === jid) && +u.count > 0;
+  });
+}
 function professionOf(job){
   var j = job || activeJob();
   return PROFESSIONS[(j && j.profession) || ''] || null;
@@ -3775,6 +3907,7 @@ function migrateJobs(base){
   }
   (base.sessions || []).forEach(function(s){ if (!s.jobId) s.jobId = first; });
   (base.absences || []).forEach(function(a){ if (!a.jobId) a.jobId = first; });
+  (base.units || []).forEach(function(u){ if (!u.jobId) u.jobId = first; });
   /* The running clock belongs to the job it was started on, not to the app. That is what
      lets someone work a late shift at one employer and an early one at another without the
      two interfering — and it is why these move onto the job rather than staying global. */
@@ -3825,7 +3958,7 @@ function overlapWarning(nowMs){
 
 function load(){
   var base = { cfg: Object.assign({}, DEFAULTS), jobs: null, activeJob: null,
-               sessions: [], absences: [], activeStart: null, activeAdj: null,
+               sessions: [], absences: [], units: [], activeStart: null, activeAdj: null,
                unit: 'sec', planOn: false, plannedHours: 8, sound: true,
                configured: false, autoOn: false, autoAt: '', autoDays: null, autoLast: '' };
   try {
@@ -3838,6 +3971,7 @@ function load(){
       // Absences arrived after the first backups were written, so a restore predating them
       // comes back with none rather than with undefined.
       base.absences = (s.absences || []).filter(function(x){ return x && x.date && +x.hours > 0; });
+      base.units = (s.units || []).filter(function(x){ return x && x.date && +x.count > 0; });
     }
   } catch(e){ /* corrupt storage — fall back to defaults rather than dying */ }
   return defineCfgAccessor(migrateJobs(base));
@@ -4771,6 +4905,7 @@ function render(){
     renderColSums(ledger, period, now, active, netOn);
     renderJobBar();
     renderJobWarn(now);
+    renderUnits(now);
     // Synced to the real clock, so the banked figure has to keep up with it. Safe here:
     // renderCalc only writes result text, never the fields you type into.
     if (calcState().sync) renderCalc();
@@ -5704,6 +5839,11 @@ function applyStage(){
   show('setup', first);
   ['hero', 'period', 'totals', 'progress', 'log', 'cfg'].forEach(function(id){ show(id, !first); });
   if (first) show('netsetup', false);
+  /* Those clock cards are not universal. Work that is counted rather than clocked has no
+     punch, no shift log and no progress bar, so hand the decision straight back to the
+     profession — otherwise switching jobs, restoring a backup or finishing setup would
+     quietly put a surgeon's clock back on screen. */
+  if (!first) applyProfession();
   if (first){
     document.getElementById('sAnchor').value = dateInput(mostRecentWeekStart());
     /* Nobody else's contract: the setup screen starts blank-ish rather than pre-loaded
@@ -5718,7 +5858,7 @@ function applyStage(){
 /* ============================ collapsible sections ============================
    Every section folds independently; nothing opens anything else. All collapsed by
    default — the header line carries a live summary so a folded section still reads. */
-var COLS = ['hero', 'totals', 'period', 'progress', 'log', 'banks', 'extra', 'ytd', 'calc'];
+var COLS = ['hero', 'units', 'totals', 'period', 'progress', 'log', 'banks', 'extra', 'ytd', 'calc'];
 function uiOpen(){ return state.ui || (state.ui = { open: {} }); }
 function applyCols(){
   var o = uiOpen().open || {};
@@ -5726,7 +5866,7 @@ function applyCols(){
     var v = o[id];
     // The clock opens by default so a first-time visitor sees what this is;
     // folding it is remembered like any other choice.
-    if (v === undefined && id === 'hero') v = true;
+    if (v === undefined && (id === 'hero' || id === 'units')) v = true;
     var el2 = document.getElementById(id);
     if (el2) el2.classList.toggle('open', !!v);
   });
@@ -5734,7 +5874,10 @@ function applyCols(){
 function toggleCol(id){
   var u = uiOpen(); u.open = u.open || {};
   var cur = u.open[id];
-  if (cur === undefined && id === 'hero') cur = true;   // flip from the effective state
+  // Flip from the effective state, not the stored one: the two cards that open by
+  // default have nothing stored yet, so !undefined would "open" an already-open card
+  // and the first tap would do nothing.
+  if (cur === undefined && (id === 'hero' || id === 'units')) cur = true;
   u.open[id] = !cur;
   save(); applyCols();
 }
@@ -6577,8 +6720,10 @@ var SECTION_KEYS = [
   ['hero',    'Clock'],       ['totals',   'Earnings'],     ['period',  'Pay period'],
   ['progress','Progress'],    ['log',      'Shift log'],    ['banks',   'Floaters & sick'],
   ['extra',   'Decimal time'],['ytd',      'Year to date'], ['calc',    'Calculator'],
+  ['units',   'Production'],
   ['cfg',     'Settings'],
   ['gJobs',   'Jobs'],
+  ['gUnits',  'Your contract'],
   ['gPay',    'Pay & overtime'], ['gPeriod', 'Pay period & payday'],
   ['gSched',  'Your schedule'],  ['gPrem',   'Premiums'],
   ['gOff',    'Time off'],       ['gLook',   'Appearance'],  ['gData', 'Your data']
@@ -7072,7 +7217,7 @@ function backup(){
     /* cfg is written as well as jobs so a copy of the app from before jobs existed can still
        read this file — it will find the config where it expects it and ignore the rest. */
     cfg: state.cfg, jobs: state.jobs, activeJob: state.activeJob,
-    sessions: state.sessions, absences: state.absences,
+    sessions: state.sessions, absences: state.absences, units: state.units,
     configured: state.configured, theme: state.theme, net: state.net, ui: state.ui,
     unit: state.unit, planOn: state.planOn, plannedHours: state.plannedHours, sound: state.sound, calc: state.calc, calCal: state.calCal, activeAdj: state.activeAdj,
     autoOn: state.autoOn, autoAt: state.autoAt, autoDays: state.autoDays
@@ -7119,6 +7264,9 @@ function restoreFrom(text){
   /* A file written before jobs existed carries unstamped shifts. They belong to the one job
      it restored into — left unstamped they would show for every job once a second one
      exists, which is the quiet kind of wrong that only appears months later. */
+  state.units = (Array.isArray(d.units) ? d.units : [])
+    .filter(function(u){ return u && u.date && +u.count > 0; });
+  state.units.forEach(function(u){ if (!u.jobId) u.jobId = state.activeJob; });
   state.sessions.forEach(function(x){ if (!x.jobId) x.jobId = state.activeJob; });
   state.absences.forEach(function(a){ if (!a.jobId) a.jobId = state.activeJob; });
   state.configured = d.configured !== false;
@@ -7786,6 +7934,42 @@ document.getElementById('jobBar').addEventListener('click', function(e){
   toast('Showing ' + (activeJob().name || 'that job') + '.');
 });
 
+/* ---- the unit contract, and logging production ---- */
+[['cUnitName','unitName','str'], ['cUnitBase','unitBase','num'],
+ ['cUnitThr','unitThreshold','num'], ['cUnitRate','unitRate','num']].forEach(function(f){
+  var e = document.getElementById(f[0]); if (!e) return;
+  e.onchange = function(ev){
+    var v = ev.target.value;
+    state.cfg[f[1]] = f[2] === 'num' ? Math.max(0, parseFloat(v) || 0) : (v || '').slice(0, 12);
+    save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+  };
+});
+document.getElementById('uAdd').onclick = function(){
+  var d = el('uDate').value, n = parseFloat(el('uCount').value);
+  var unit = unitCfg(state.cfg).name || 'units';
+  if (!d){ toast('Pick the date it was done.'); return; }
+  if (!isFinite(n) || n <= 0){ toast('How many ' + unit + '?'); return; }
+  state.units = state.units || [];
+  state.units.push({ id: uid(), jobId: state.activeJob, date: d,
+                     count: Math.round(n * 100) / 100, note: el('uNoteIn').value.slice(0, 40) });
+  el('uCount').value = ''; el('uNoteIn').value = '';
+  save(); lastHeavySig = ''; render();
+  toast(n + ' ' + unit + ' logged.');
+};
+document.getElementById('uList').addEventListener('click', function(e){
+  var b = e.target.closest('button[data-udel]'); if (!b) return;
+  state.units = (state.units || []).filter(function(u){ return u.id !== b.dataset.udel; });
+  save(); lastHeavySig = ''; render();
+});
+document.getElementById('uWhat').addEventListener('click', function(e){
+  var b = e.target.closest('button[data-f]'); if (!b) return;
+  unitWhatIf = parseFloat(b.dataset.f) || 1;
+  [].forEach.call(document.querySelectorAll('#uWhat button'), function(x){
+    x.classList.toggle('on', x === b);
+  });
+  lastHeavySig = ''; render();
+});
+
 document.getElementById('cCallback').onchange = function(e){
   var v = parseFloat(e.target.value);
   state.cfg.callbackMin = isFinite(v) && v > 0 ? Math.min(12, v) : 0;
@@ -7897,6 +8081,7 @@ document.getElementById('jobList').addEventListener('click', function(e){
   state.jobs = js.filter(function(j){ return j.id !== id; });
   state.sessions = (state.sessions || []).filter(function(x){ return x.jobId !== id; });
   state.absences = (state.absences || []).filter(function(a){ return a.jobId !== id; });
+  state.units = (state.units || []).filter(function(u){ return u.jobId !== id; });
   if (state.activeJob === id) state.activeJob = state.jobs[0].id;
   save(); syncControls(); applyStage();
   lastMoney = ''; lastHeavySig = ''; _ledCache = {};
@@ -8201,6 +8386,20 @@ function syncControls(){
       ? 'You are <b>' + _owed.toFixed(2) + ' h</b> short of your schedule this pay period.'
       : 'You have worked every scheduled hour this pay period.';
   }
+  ['cUnitName|unitName', 'cUnitBase|unitBase', 'cUnitThr|unitThreshold', 'cUnitRate|unitRate']
+    .forEach(function(pair){
+      var p = pair.split('|'), e = el(p[0]);
+      if (e && document.activeElement !== e) e.value = state.cfg[p[1]] == null ? '' : state.cfg[p[1]];
+    });
+  var _un = el('cUnitNote');
+  if (_un){
+    var _u = unitCfg(state.cfg);
+    _un.innerHTML = !_u.base && !_u.rate
+      ? 'Nothing set yet, so nothing is priced.'
+      : money(_u.base) + ' base covering <b>' + _u.threshold.toLocaleString('en-US') + ' '
+        + _u.name + '</b>, then <b>' + money(_u.rate) + '</b> each. Ten per cent past the '
+        + 'threshold pays ' + money(_u.base + _u.threshold * 0.1 * _u.rate) + '.';
+  }
   var _cb = el('cCallback');
   if (_cb && document.activeElement !== _cb) _cb.value = state.cfg.callbackMin || 0;
   renderPremiums();
@@ -8231,7 +8430,7 @@ function syncControls(){
    fewest words that are still specific — "$37.78/hr · 1.5× after 40 h" answers the
    question without opening anything. Anything vague enough to need opening anyway
    ("configured", "3 settings") would be worse than an empty summary. */
-var CFG_GROUPS = ['gJobs', 'gPay', 'gPeriod', 'gSched', 'gPrem', 'gOff', 'gLook', 'gData'];
+var CFG_GROUPS = ['gJobs', 'gUnits', 'gPay', 'gPeriod', 'gSched', 'gPrem', 'gOff', 'gLook', 'gData'];
 
 function cfgSummaries(){
   var c = state.cfg, s = {};
@@ -8271,6 +8470,12 @@ function cfgSummaries(){
   var n = (state.sessions || []).length;
   s.sumData = n + (n === 1 ? ' shift' : ' shifts') + ' stored on this device';
 
+  var um = unitCfg(c);
+  s.sumUnits = um.base || um.rate
+    ? money(um.base) + ' base · ' + um.threshold.toLocaleString('en-US') + ' ' + um.name
+      + ' · ' + money(um.rate) + ' each after'
+    : 'nothing set yet';
+
   var js = jobList();
   s.sumJobs = js.length < 2 ? (js[0] && js[0].name) || 'One job'
             : js.map(function(j){ return j.name || 'Job'; }).join(' · ');
@@ -8291,9 +8496,16 @@ function applyProfession(){
      hoping none was missed is nine chances to be wrong — which is why Settings was grouped
      before this was built. */
   var clocked = model === 'clock';
-  ['gPay', 'gSched', 'gPrem'].forEach(function(id){
+  /* Never both. A surgeon has no punch to make and a bus operator has no wRVUs, so the two
+     cards swap rather than stack — along with everything that only makes sense beside a
+     clock: the shift log, the pay-period progress bar, the decimal time card. */
+  ['gPay', 'gSched', 'gPrem', 'hero', 'progress', 'log', 'extra'].forEach(function(id){
     var e = document.getElementById(id);
     if (e) e.classList.toggle('hide', !clocked);
+  });
+  ['units', 'gUnits'].forEach(function(id){
+    var e = document.getElementById(id);
+    if (e) e.classList.toggle('hide', clocked);
   });
   document.body.classList.toggle('noclock', !clocked);
 }
@@ -8302,6 +8514,80 @@ function applyProfession(){
    days changed — doing it on every save would replace the input you are typing into and
    throw away the cursor. The note underneath is just text, so it can refresh whenever
    anything changes. */
+/* ---- the production card ---- */
+var unitWhatIf = 1;
+
+function renderUnits(now){
+  if (jobModel() !== 'units') return;
+  var cfg = state.cfg, u = unitCfg(cfg), list = unitEntries();
+  var pace = unitPace(list, cfg, now, 1), unit = u.name || 'unit';
+  var n = function(x, dp){ return (+x).toLocaleString('en-US', { maximumFractionDigits: dp == null ? 2 : dp }); };
+
+  el('uSoFarK').textContent = new Date(now).getFullYear() + ' so far';
+  el('uSoFar').textContent = n(pace.soFar);
+  el('uSoFarDet').textContent = unit + ' · ' + pace.perDay.toFixed(2) + ' a day over '
+    + pace.elapsed + ' days';
+  el('uPace').textContent = n(pace.projected, 0);
+  el('uPaceDet').textContent = unit + ' by 31 December';
+  el('uPay').textContent = money(pace.now.total);
+  el('uPayDet').innerHTML = u.base
+    ? money(u.base) + ' base' + (pace.now.productivity > 0
+        ? ' + <span class="pay">' + money(pace.now.productivity) + '</span> productivity'
+        : ' · nothing past the threshold yet')
+    : 'no base salary set';
+
+  /* The bar is progress toward the threshold and then past it — the only number that
+     changes what a further unit is worth. */
+  /* Once you are past the threshold the bar rescales to what has actually been booked. Held
+     at the threshold it would sit full from the moment you crossed it, and the part that is
+     paying per unit — the only part worth looking at by then — would never appear at all. */
+  var thr = u.threshold || 0, over = Math.max(0, pace.soFar - thr);
+  var scale = Math.max(thr, pace.soFar) || 1;
+  var pc = function(x){ return Math.round(1000 * x / scale) / 10 + '%'; };
+  el('uBarReg').style.width  = pc(Math.min(pace.soFar, thr || pace.soFar));
+  el('uBarOver').style.width = pc(over);
+  el('uBarLbl').textContent = thr > 0 ? 'Toward ' + n(thr, 0) + ' ' + unit : 'No threshold set';
+  el('uBarNum').textContent = thr > 0
+    ? (over > 0 ? n(pace.soFar) + ' · ' + n(over) + ' past it' : n(pace.soFar) + ' / ' + n(thr, 0))
+    : n(pace.soFar) + ' ' + unit;
+
+  el('uNote').innerHTML = !u.rate
+    ? 'Set what a ' + unit + ' pays past the threshold and this will price it.'
+    : over > 0
+      ? 'You are <b>' + n(over) + ' ' + unit + '</b> past the threshold, worth <span class="pay">'
+        + money(over * u.rate) + '</span> so far. Each further one adds <b>' + money(u.rate) + '</b>.'
+      : '<b>' + n(Math.max(0, thr - pace.soFar)) + ' ' + unit + '</b> to go before each one starts '
+        + 'paying <b>' + money(u.rate) + '</b> on top of your base.';
+
+  var what = unitPace(list, cfg, now, unitWhatIf), flat = pace;
+  el('uWhatNote').innerHTML = unitWhatIf === 1
+    ? 'At this pace the year ends at <b>' + n(what.projected, 0) + ' ' + unit
+      + '</b> — <span class="pay">' + money(what.year.total) + '</span>.'
+    : 'At that pace the year ends at <b>' + n(what.projected, 0) + ' ' + unit
+      + '</b> — <span class="pay">' + money(what.year.total) + '</span>, '
+      + (what.year.total >= flat.year.total ? 'up ' : 'down ') + '<b>'
+      + money(Math.abs(what.year.total - flat.year.total)) + '</b> on holding steady.';
+
+  el('uCountUnit').textContent = unit;
+  el('sum_units').textContent = ' — ' + n(pace.soFar) + ' ' + unit + ' · ' + money(pace.now.total);
+  renderUnitList();
+}
+
+function renderUnitList(){
+  var box = el('uList'); if (!box) return;
+  var list = unitEntries().slice().sort(function(a, b){ return a.date < b.date ? 1 : -1; }).slice(0, 12);
+  if (!list.length){ box.innerHTML = '<div class="note">Nothing logged yet.</div>'; return; }
+  var unit = unitCfg(state.cfg).name || 'unit';
+  box.innerHTML = list.map(function(u){
+    return '<div class="jobrow" data-u="' + u.id + '">'
+      + '<span style="flex:0 0 96px">' + fdate(ymd(u.date)) + '</span>'
+      + '<b style="flex:0 0 72px">' + (+u.count).toFixed(2) + '</b>'
+      + '<span class="sub" style="flex:1 1 auto;min-width:0">' + esc(u.note || unit) + '</span>'
+      + '<button class="mini danger" data-udel="' + u.id + '">Remove</button>'
+      + '</div>';
+  }).join('');
+}
+
 function renderPremiums(){
   var box = el('cPremList'); if (!box) return;
   var list = state.cfg.premiums || [];
