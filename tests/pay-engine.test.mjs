@@ -40,6 +40,8 @@ const E = new Function(m[1] + `
            bankOwes, vacationCredits, vacationOn, vacationDays,
            sumShiftDay, todayShiftDay,
            nightWindow, inNightWindow, splitNight, sumNight, scheduledWeekHours,
+           premiumList, premiumCovers, premiumsAt, splitPremiums,
+           callbackMin, applyCallback,
            fedNotWithheld, netBreakdown, periodNetView,
            TAX_YEAR, TAX2026, bracketTax, fedWithholding };
 `)();
@@ -327,6 +329,132 @@ const gross = (sessions, c = cfg) => {
 
   near('turning the break off deducts nothing',
        E.periodNetView(4000, 80, [], { ...nc, otBreak: false }, cfg15, 'hole', 5, 0).otDeducted, 0);
+}
+
+/* ---------------- premiums that stack ---------------- */
+{
+  const base = { ...E.DEFAULTS, rate: 40, otMultiplier: 1.5, otMode: 'weekly',
+                 weeklyThreshold: 999999, lunchMins: 0, weekStartDay: 0,
+                 holidays: [], banks: [], daysOff: [], vacations: [],
+                 periodAnchor: '2026-08-09', periodLengthDays: 14 };
+  // Sun Aug 9 2026 is a Sunday; Mon Aug 10 a Monday.
+  const shift = (d, from, len) => ({ id: 'x' + d + from,
+    start: +new Date(2026, 7, d, from), end: +new Date(2026, 7, d, from) + len * E.HOUR_MS });
+  const sum = (ss, cfg) => E.sumRange(E.buildLedger(ss, cfg, +new Date(2026, 8, 1)).parts,
+                                      +new Date(2026, 7, 9), +new Date(2026, 7, 23));
+
+  /* The original single differential still works untouched, and is simply the first premium
+     in the list — nothing existing had to be migrated. */
+  const oneOnly = { ...base, nightOn: true, nightFrom: '18:00', nightTo: '06:00', nightRate: 0.15 };
+  near('the old single differential is one premium', E.premiumList(oneOnly).length, 1);
+  const t1 = sum([shift(10, 14, 8)], oneOnly);      // 2 PM–10 PM, four hours after six
+  near('eight hours', t1.hours, 8);
+  near('four of them earn the differential', t1.gross, 8 * 40 + 4 * 0.15);
+
+  /* Three at once: nights, weekends and charge. A Sunday night charge hour carries all
+     three, and they add rather than replace. */
+  const cfg = { ...oneOnly, nightRate: 5,
+    premiums: [
+      { id: 'wknd',   name: 'Weekend', rate: 3, days: [true,false,false,false,false,false,true] },
+      { id: 'charge', name: 'Charge',  rate: 2 }                       // no window: all shift
+    ] };
+  near('three premiums', E.premiumList(cfg).length, 3);
+
+  const sunNight = +new Date(2026, 7, 9, 20);        // Sunday, 8 PM
+  const monDay   = +new Date(2026, 7, 10, 10);       // Monday, 10 AM
+  const monNight = +new Date(2026, 7, 10, 20);       // Monday, 8 PM
+  const list = E.premiumList(cfg);
+  near('a Sunday night hour stacks all three', E.premiumsAt(sunNight, list).rate, 10);
+  ok('and names them',
+     E.premiumsAt(sunNight, list).names.join(',') === 'Night,Weekend,Charge',
+     E.premiumsAt(sunNight, list).names.join(','));
+  near('a Monday daytime hour earns only charge', E.premiumsAt(monDay, list).rate, 2);
+  near('a Monday night hour earns night and charge', E.premiumsAt(monNight, list).rate, 7);
+
+  /* Paid across a real shift: Sunday 6 PM to midnight is six hours, all night, all weekend,
+     all charge. */
+  const sun = sum([shift(9, 18, 6)], cfg);
+  near('six hours', sun.hours, 6);
+  near('at base plus ten dollars', sun.gross, 6 * 50);
+
+  // A shift straddling the night edge is split at it, not averaged across it.
+  const straddle = sum([shift(10, 15, 6)], cfg);     // Mon 3 PM–9 PM: 3 h day, 3 h night
+  near('three hours at base plus charge, three at base plus night and charge',
+       straddle.gross, 3 * 42 + 3 * 47);
+
+  /* Premiums ride on the base rate, so overtime is worked out on rate plus premium. */
+  const ot = { ...cfg, weeklyThreshold: 4 };
+  const otT = E.sumRange(E.buildLedger([shift(9, 18, 6)], ot, +new Date(2026, 8, 1)).parts,
+                         +new Date(2026, 7, 9), +new Date(2026, 7, 23));
+  near('two hours of it are overtime', otT.otHours, 2);
+  near('paid at time and a half on base plus premium', otT.gross, 4 * 50 + 2 * 50 * 1.5);
+
+  // A premium switched off, or set to nothing, is not a premium.
+  near('an off premium is ignored',
+       E.premiumList({ ...cfg, premiums: [{ id:'x', name:'X', rate: 9, on: false }] }).length, 1);
+  near('and a zero one too',
+       E.premiumList({ ...cfg, premiums: [{ id:'x', name:'X', rate: 0 }] }).length, 1);
+
+  /* Paid leave never earns a premium: a vacation day is not a night shift, whatever hour
+     the credit happens to be stamped at. */
+  const vacCfg = { ...cfg, workDays: [true,true,true,true,true,true,true],
+    vacations: [{ id:'v', name:'Vacation', from:'2026-08-11', to:'2026-08-11', hours:8, ot:false }] };
+  const withVac = sum([shift(10, 18, 6)], vacCfg);
+  const noVac   = sum([shift(10, 18, 6)], { ...vacCfg, vacations: [] });
+  near('the vacation day pays flat, with no premium on it', withVac.gross - noVac.gross, 8 * 40);
+  const vacParts = E.buildLedger([shift(10, 18, 6)], vacCfg, +new Date(2026, 8, 1)).parts
+                    .filter(p => String(p.sessionId).indexOf('__vac') === 0);
+  ok('and its hours are not counted as premium hours',
+     vacParts.length > 0 && vacParts.every(p => (p.nightHours || 0) === 0),
+     vacParts.length + ' parts');
+}
+
+/* ---------------- callback minimums ---------------- */
+{
+  const cfg = { ...E.DEFAULTS, rate: 40, otMultiplier: 1.5, otMode: 'weekly',
+                weeklyThreshold: 999999, lunchMins: 0, weekStartDay: 0, callbackMin: 3,
+                holidays: [], banks: [], daysOff: [], vacations: [],
+                periodAnchor: '2026-08-09', periodLengthDays: 14 };
+  const at = (d, h, mi = 0) => +new Date(2026, 7, d, h, mi);
+  const sum = (ss, c) => E.sumRange(E.buildLedger(ss, c || cfg, +new Date(2026, 8, 1)).parts,
+                                    +new Date(2026, 7, 9), +new Date(2026, 7, 23));
+
+  // Twenty minutes at 3 AM, called in.
+  const short = { id: 'c1', callback: true, start: at(10, 3), end: at(10, 3, 20) };
+  near('twenty minutes pays the three-hour minimum', sum([short]).hours, 3);
+  near('at the ordinary rate',                       sum([short]).gross, 3 * 40);
+
+  /* Without the flag it is just a short shift — the guarantee is a contract term, not
+     something to assume from the length. */
+  near('an ordinary twenty-minute shift pays twenty minutes',
+       sum([{ id: 'c2', start: at(10, 3), end: at(10, 3, 20) }]).hours, 1 / 3);
+
+  // Longer than the minimum, so the minimum does nothing.
+  near('four hours called in pays four',
+       sum([{ id: 'c3', callback: true, start: at(10, 3), end: at(10, 7) }]).hours, 4);
+
+  // With no minimum configured, the flag changes nothing.
+  near('no minimum set, nothing guaranteed',
+       sum([short], { ...cfg, callbackMin: 0 }).hours, 1 / 3);
+  near('and callbackMin reports zero', E.callbackMin({ ...cfg, callbackMin: 0 }), 0);
+
+  /* The guaranteed hours are hours worked, so they push you toward overtime like any
+     others. Thirty-eight hours plus a twenty-minute callback is forty-one, not thirty-eight
+     and a third — which is three hours of overtime, not none. */
+  const week = [9, 10, 11, 12].map(d => ({ id: 'w' + d, start: at(d, 9), end: at(d, 18, 30) }));
+  const withCb = sum(week.concat([short]), { ...cfg, weeklyThreshold: 40 });
+  near('the week is 41 hours', withCb.hours, 41);
+  near('so one of them is overtime', withCb.otHours, 1);
+
+  // The record keeps both figures: what was worked, and what the guarantee paid.
+  const applied = E.applyCallback(short, cfg);
+  near('it remembers what was actually worked', applied.callbackWorked, 1 / 3);
+  near('and what it was brought up to',         applied.callbackPaid, 3);
+  ok('the original is left alone', short.end === at(10, 3, 20));
+
+  // Premiums still apply to the guaranteed hours — a 3 AM callback is a night callback.
+  const night = { ...cfg, nightOn: true, nightFrom: '18:00', nightTo: '06:00', nightRate: 5 };
+  near('the whole guaranteed block earns the night rate', sum([short], night).gross, 3 * 45);
 }
 
 /* ------------------------------------------------------------------ */

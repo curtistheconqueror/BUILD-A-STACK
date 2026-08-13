@@ -144,6 +144,16 @@
   /* ---- job rows in Settings ---- */
   .jobrow{display:flex;align-items:center;gap:9px;border:1px solid var(--border);
     border-radius:11px;padding:8px 10px;margin-top:8px;min-height:44px}
+  .premrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px solid var(--border);
+    border-radius:11px;padding:8px 10px;margin-top:8px}
+  .premrow input[type=text]{flex:1 1 110px;min-width:0}
+  .premrow input[type=number]{flex:0 0 82px}
+  .premrow input[type=time]{flex:0 0 116px}
+  .premrow .pdays{display:flex;gap:3px;flex:1 1 100%}
+  .premrow .pdays button{flex:1 1 0;min-width:0;min-height:34px;font-size:11.5px;padding:0;
+    border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);
+    font-weight:700;cursor:pointer}
+  .premrow .pdays button.on{color:var(--ink);border-color:var(--acc);background:rgba(53,208,224,.12)}
   .jobrow{flex-wrap:wrap}
   .jobrow input[type=text]{flex:1 1 140px;min-width:0}
   .jobrow .jprof{flex:1 1 150px;min-width:0}
@@ -1726,6 +1736,29 @@
         <div class="f"><label for="cNightTo">Until</label><input type="time" id="cNightTo"></div>
       </div>
       <div class="note" id="cNightNote" style="margin-top:8px"></div>
+
+      <div class="f" style="margin-top:18px"><label>Premiums that stack</label>
+        <div class="note">One differential is enough for most jobs. Some pay several at once
+        — nights, weekends, charge — and they add rather than replace, so an hour can carry
+        all of them. Leave the times blank for a premium that applies to the whole shift,
+        which is what charge pay usually is. Paid days off never earn any of them.</div>
+      </div>
+      <div id="cPremList"></div>
+      <div class="actions" style="justify-content:flex-start;margin-top:10px">
+        <button class="mini" id="cPremAdd">+ Add a premium</button>
+      </div>
+      <div class="note" id="cPremNote" style="margin-top:8px"></div>
+
+      <div class="f" style="margin-top:18px"><label for="cCallback">If you are called in</label>
+        <div class="note">Being called in usually pays a guaranteed minimum however short the
+        job is — twenty minutes at 3 AM bills the contract's minimum. Those hours count as
+        hours worked, so they push you toward overtime like any others. Tick a shift as a
+        call-in when you log it.</div>
+      </div>
+      <div class="cfgrid">
+        <div class="f"><label for="cCallback">Guaranteed hours</label>
+          <input type="number" id="cCallback" min="0" max="12" step="0.5"></div>
+      </div>
         </div>
       </details>
       <details class="cfgsec" id="gOff">
@@ -2008,6 +2041,8 @@ var DEFAULTS = {
   nightFrom: '18:00',
   nightTo: '06:00',
   nightRate: 0,
+  premiums: [],             // extra differentials that stack on top of the first
+  callbackMin: 0,           // guaranteed hours when you are called in
   makeUpOn: false,
   makeUpWindow: 'period',    // the hole resets each pay period; 'week' resets each week
   vacations: [],             // blocks of approved leave: {id, name, from, to, hours, ot}
@@ -2213,6 +2248,36 @@ function calendarPay(days, cfg, style, after){
   return { byDay: byDay, byPeriod: byPeriod };
 }
 
+/* ---- callback minimums ----
+
+   Being called in pays a guaranteed floor however short the work is: twenty minutes at 3 AM
+   bills the contract's minimum, commonly two to four hours. That is a floor, not a rate, and
+   nothing else in this engine has that shape.
+
+   The guaranteed hours count as hours worked — they accrue toward the overtime threshold
+   like any other, because that is what the contract is promising. So the cleanest way to
+   express it is to lengthen the shift to the minimum rather than to bolt a payment onto the
+   end: everything downstream then treats it as the hours it is being paid for.
+
+   Marked with `callback: true` on the session; the minimum comes from the job's config. */
+function callbackMin(cfg){
+  var h = cfg && +cfg.callbackMin;
+  return isFinite(h) && h > 0 ? h : 0;
+}
+function applyCallback(s, cfg){
+  if (!s || !s.callback) return s;
+  var min = callbackMin(cfg);
+  if (!min) return s;
+  var worked = (s.end - s.start) / HOUR_MS;
+  if (worked >= min) return s;
+  var o = {};
+  for (var k in s) if (Object.prototype.hasOwnProperty.call(s, k)) o[k] = s[k];
+  o.end = s.start + min * HOUR_MS;
+  o.callbackPaid = min;                 // what the guarantee brought it up to
+  o.callbackWorked = worked;            // what was actually worked, for the log to say so
+  return o;
+}
+
 function buildLedger(sessions, cfg, nowMs){
   var threshold = otThresholdOf(cfg), otRate = cfg.rate * cfg.otMultiplier;
   var bucket = {}, parts = [];
@@ -2234,10 +2299,11 @@ function buildLedger(sessions, cfg, nowMs){
      from the same shifts every caller already passed in. Eligibility is a fact about
      those shifts, so this stays pure and the tests stay honest. */
   var nw = nightWindow(cfg);
+  var prem = premiumList(cfg);
   /* Marked so the differential can skip them — see nightWindow. */
   var credits = holidayCredits(sessions, cfg).concat(bankCredits(cfg), vacationCredits(cfg));
   credits.forEach(function(c){ c.paidLeave = true; });
-  var withHols = sessions.concat(credits);
+  var withHols = sessions.map(function(s){ return applyCallback(s, cfg); }).concat(credits);
   var sorted = withHols.filter(function(s){ return s.end > s.start; })
                        .slice().sort(function(a,b){ return a.start - b.start; });
   for (var i = 0; i < sorted.length; i++){
@@ -2245,7 +2311,7 @@ function buildLedger(sessions, cfg, nowMs){
     var chunks = [];
     paidSpans(s, cfg).forEach(function(sp){
       splitSession(sp.start, sp.end, cfg).forEach(function(ch){
-        chunks = chunks.concat(s.paidLeave ? [ch] : splitNight(ch, nw));
+        chunks = chunks.concat(s.paidLeave ? [ch] : splitPremiums(ch, prem));
       });
     });
     /* Per-shift pay adjustments:
@@ -2255,8 +2321,12 @@ function buildLedger(sessions, cfg, nowMs){
     var adj = s.adj || {};
     for (var j = 0; j < chunks.length; j++){
       var c = chunks[j], hours = (c.end - c.start) / HOUR_MS;
-      var nightOn = !!(nw && c.night && !s.paidLeave);
-      var base = (rateAt(c.start, cfg) + (adj.diff || 0) + (nightOn ? nw.rate : 0)) * (adj.mult || 1);
+      /* Premiums ride on the base rate, so overtime is worked out on rate plus premium —
+         which is what the FLSA regular rate means and what a payslip shows. Paid leave never
+         earns them: a holiday is not a night shift. */
+      var pRate = s.paidLeave ? 0 : (c.premRate || 0);
+      var nightOn = !s.paidLeave && pRate > 0;
+      var base = (rateAt(c.start, cfg) + (adj.diff || 0) + pRate) * (adj.mult || 1);
       var key = otBucketKey(c, cfg, s.id);
       var before = bucket[key] || 0;
       var reg, ot;
@@ -2307,8 +2377,9 @@ function buildLedger(sessions, cfg, nowMs){
       parts.push({ start: c.start, end: c.end, dayMs: c.dayMs, weekKey: c.weekKey, periodKey: c.periodKey,
                    sessionId: s.id, hours: hours, regHours: reg, otHours: ot, qualOt: qual,
                    nightHours: nightOn ? hours : 0,
+                   premNames: c.premNames || null,
                    // What the differential alone added, so it can be shown the way a stub prints it.
-                   nightPay: nightOn ? (reg + ot * cfg.otMultiplier) * nw.rate * (adj.mult || 1) : 0,
+                   nightPay: nightOn ? (reg + ot * cfg.otMultiplier) * pRate * (adj.mult || 1) : 0,
                    gross: reg * base + ot * base * cfg.otMultiplier });
     }
   }
@@ -3234,6 +3305,81 @@ function nightWindow(cfg){
   if (f == null || t == null || !isFinite(r) || r <= 0) return null;
   return { from: f, to: t, rate: r };
 }
+
+/* ---- premiums that stack ----
+
+   One differential was enough for a bus operator paid fifteen cents after six. A nurse can
+   be on three at once — nights, weekends and charge — and they add rather than replace, so
+   an hour can carry all of them.
+
+   Each premium is a rate, a window, and which days it applies to. `days` is a seven-element
+   mask starting Sunday; leaving it out means every day. A window that ends before it starts
+   wraps midnight, so 18:00 to 06:00 is one night rather than a contradiction. A premium with
+   no window at all applies to the whole shift, which is what charge pay usually is. */
+function premiumList(cfg){
+  if (!cfg) return [];
+  var out = [];
+  /* The original single differential is still the first premium, so every existing setup
+     keeps working without being migrated into the new shape. */
+  var nw = nightWindow(cfg);
+  if (nw) out.push({ id: 'night', name: 'Night', rate: nw.rate, from: nw.from, to: nw.to, days: null });
+  (cfg.premiums || []).forEach(function(p){
+    if (!p || p.on === false) return;
+    var r = +p.rate;
+    if (!isFinite(r) || r <= 0) return;
+    var f = p.from ? hhmmToMin(p.from) : null, t = p.to ? hhmmToMin(p.to) : null;
+    out.push({ id: p.id, name: p.name || 'Premium', rate: r,
+               from: f, to: t,
+               days: Array.isArray(p.days) && p.days.length === 7 ? p.days : null });
+  });
+  return out;
+}
+/* Whether one premium covers this instant. */
+function premiumCovers(ms, p){
+  var d = new Date(ms);
+  if (p.days && !p.days[d.getDay()]) return false;
+  if (p.from == null || p.to == null) return true;         // no window: the whole shift
+  var m = d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+  return p.to <= p.from ? (m >= p.from || m < p.to) : (m >= p.from && m < p.to);
+}
+/* Everything a given instant earns on top of base, and which premiums make it up. */
+function premiumsAt(ms, list){
+  var rate = 0, names = [];
+  for (var i = 0; i < list.length; i++){
+    if (premiumCovers(ms, list[i])){ rate += list[i].rate; names.push(list[i].name); }
+  }
+  return { rate: rate, names: names };
+}
+/* Chop a chunk at every edge of every premium window, so each piece has one constant
+   premium rate for its whole length. */
+function splitPremiums(ch, list){
+  if (!list || !list.length) return [ch];
+  var day = +midnight(ch.start), pts = [ch.start], seen = {};
+  for (var d = 0; d <= 1; d++){
+    for (var i = 0; i < list.length; i++){
+      [list[i].from, list[i].to].forEach(function(m){
+        if (m == null) return;
+        var t = day + d * DAY_MS + m * 60000;
+        if (t > ch.start && t < ch.end && !seen[t]){ seen[t] = 1; pts.push(t); }
+      });
+    }
+    var mid = day + DAY_MS;                       // days change at midnight too
+    if (mid > ch.start && mid < ch.end && !seen[mid]){ seen[mid] = 1; pts.push(mid); }
+  }
+  pts.push(ch.end);
+  pts.sort(function(a, b){ return a - b; });
+  var out = [];
+  for (var k = 0; k < pts.length - 1; k++){
+    if (pts[k + 1] <= pts[k]) continue;
+    var seg = {};
+    for (var key in ch) if (Object.prototype.hasOwnProperty.call(ch, key)) seg[key] = ch[key];
+    seg.start = pts[k]; seg.end = pts[k + 1];
+    var pr = premiumsAt(seg.start, list);
+    seg.premRate = pr.rate; seg.premNames = pr.names;
+    out.push(seg);
+  }
+  return out;
+}
 /* A window that ends before it starts wraps midnight — 18:00 to 06:00 is one night, not a
    contradiction. */
 function inNightWindow(ms, w){
@@ -3707,6 +3853,7 @@ function save(){
   dataVer++;
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){}
   if (typeof renderCfgSummaries === 'function') renderCfgSummaries();
+  if (typeof renderPremiumNote === 'function') renderPremiumNote();
 }
 function uid(){ return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
@@ -7639,6 +7786,44 @@ document.getElementById('jobBar').addEventListener('click', function(e){
   toast('Showing ' + (activeJob().name || 'that job') + '.');
 });
 
+document.getElementById('cCallback').onchange = function(e){
+  var v = parseFloat(e.target.value);
+  state.cfg.callbackMin = isFinite(v) && v > 0 ? Math.min(12, v) : 0;
+  e.target.value = state.cfg.callbackMin;
+  save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+};
+document.getElementById('cPremAdd').onclick = function(){
+  var list = state.cfg.premiums || (state.cfg.premiums = []);
+  if (list.length >= 5){ toast('Five premiums is as many as this holds.'); return; }
+  list.push({ id: uid(), name: '', rate: 0, from: '', to: '', days: [1,1,1,1,1,1,1] });
+  save(); renderPremiums();
+};
+document.getElementById('cPremList').addEventListener('input', function(e){
+  var f = e.target.closest('[data-pf]'); if (!f) return;
+  var row = f.closest('.premrow'), p = (state.cfg.premiums || [])[+row.dataset.i];
+  if (!p) return;
+  var k = f.dataset.pf;
+  p[k] = k === 'rate' ? (parseFloat(f.value) || 0) : f.value;
+  save(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+});
+document.getElementById('cPremList').addEventListener('click', function(e){
+  var day = e.target.closest('button[data-pday]');
+  if (day){
+    var row = day.closest('.premrow'), p = (state.cfg.premiums || [])[+row.dataset.i];
+    if (!p) return;
+    if (!Array.isArray(p.days) || p.days.length !== 7) p.days = [1,1,1,1,1,1,1];
+    var n = +day.dataset.pday;
+    p.days[n] = p.days[n] ? 0 : 1;
+    /* A premium that applies to no day at all is not a premium; keep at least one. */
+    if (!p.days.some(Boolean)) p.days[n] = 1;
+    save(); renderPremiums(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+    return;
+  }
+  var del = e.target.closest('button[data-pdel]'); if (!del) return;
+  (state.cfg.premiums || []).splice(+del.dataset.pdel, 1);
+  save(); renderPremiums(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+});
+
 document.getElementById('jobAdd').onclick = function(){
   var js = jobList();
   if (js.length >= 6){ toast('Six jobs is as many as this holds.'); return; }
@@ -8016,6 +8201,9 @@ function syncControls(){
       ? 'You are <b>' + _owed.toFixed(2) + ' h</b> short of your schedule this pay period.'
       : 'You have worked every scheduled hour this pay period.';
   }
+  var _cb = el('cCallback');
+  if (_cb && document.activeElement !== _cb) _cb.value = state.cfg.callbackMin || 0;
+  renderPremiums();
   renderWorkDays();
   renderHolidayList();
   renderBankCfg();
@@ -8108,6 +8296,58 @@ function applyProfession(){
     if (e) e.classList.toggle('hide', !clocked);
   });
   document.body.classList.toggle('noclock', !clocked);
+}
+
+/* Split in two on purpose. The rows are rebuilt only when one is added, removed or has its
+   days changed — doing it on every save would replace the input you are typing into and
+   throw away the cursor. The note underneath is just text, so it can refresh whenever
+   anything changes. */
+function renderPremiums(){
+  var box = el('cPremList'); if (!box) return;
+  var list = state.cfg.premiums || [];
+  box.innerHTML = list.map(function(p, i){
+    var days = Array.isArray(p.days) && p.days.length === 7 ? p.days : [1,1,1,1,1,1,1];
+    return '<div class="premrow" data-i="' + i + '">'
+      + '<input type="text" data-pf="name" maxlength="18" placeholder="Weekend" value="'
+        + String(p.name || '').replace(/"/g, '&quot;') + '">'
+      + '<div class="prefixed" style="flex:0 0 96px"><span>$</span>'
+      + '<input type="number" data-pf="rate" min="0" max="100" step="0.01" inputmode="decimal" value="'
+        + (p.rate == null ? '' : p.rate) + '"></div>'
+      + '<input type="time" data-pf="from" value="' + (p.from || '') + '">'
+      + '<input type="time" data-pf="to" value="' + (p.to || '') + '">'
+      + '<button class="mini danger" data-pdel="' + i + '">Remove</button>'
+      + '<div class="pdays">' + DOW.map(function(d, n){
+          return '<button data-pday="' + n + '"' + (days[n] ? ' class="on"' : '') + '>' + d + '</button>';
+        }).join('') + '</div>'
+      + '</div>';
+  }).join('');
+  renderPremiumNote();
+}
+
+/* Worked through the user's own scheduled shift, because "what does an hour of mine actually
+   earn" is the only question anyone has here. */
+function renderPremiumNote(){
+  var note = el('cPremNote'); if (!note) return;
+  var all = premiumList(state.cfg);
+  if (!all.length){ note.textContent = 'No premiums — every hour pays your base rate.'; return; }
+  var ss = hhmmToMin(state.cfg.schedStart);
+  if (ss == null){
+    note.textContent = all.length + ' premium' + (all.length === 1 ? '' : 's')
+      + ' set. Add your scheduled shift and this will say what they are worth.';
+    return;
+  }
+  var d0 = +midnight(Date.now());
+  var best = premiumsAt(d0 + ss * 60000, all), most = { rate: 0, names: [] };
+  /* Every half hour of a whole week, so a premium that only lands on a Sunday night is
+     still found. */
+  for (var m = 0; m < 7 * 24 * 60; m += 30){
+    var r = premiumsAt(d0 + m * 60000, all);
+    if (r.rate > most.rate) most = r;
+  }
+  note.innerHTML = 'At the start of your shift an hour earns <b>+' + money(best.rate) + '</b>'
+    + (best.names.length ? ' (' + best.names.join(' + ') + ')' : '')
+    + '. The best hour of the week earns <b>+' + money(most.rate) + '</b>'
+    + (most.names.length ? ' (' + most.names.join(' + ') + ')' : '') + '.';
 }
 
 function renderJobBar(){

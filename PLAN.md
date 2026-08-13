@@ -170,7 +170,7 @@ The under-withholding estimate with what to do about it.
 *Smoke test:* engine assertions against hand-computed two-job scenarios, including one that
 crosses the wage base and one that crosses a bracket.
 
-### Stage 5 — The profession layer *(partly done)*
+### Stage 5 — The profession layer *(done)*
 
 The `PROFESSIONS` table, the setup wizard (field → role → state), and profile-driven
 rendering. Ships with `transit_operator` and `nurse` — both `clock`, so the mechanism is
@@ -187,7 +187,7 @@ nurse, tech, trades and a plain hourly option.
 A profession suggests; it never corrects. Change the overtime rule yourself and the job is
 marked as decided, so picking a profession later will not quietly put it back.
 
-**Still to build here** — two pieces of the nurse profile that are not data:
+**Also shipped:** the two pieces of the nurse profile that are not data —
 
 - **Stacking premiums.** Night *and* weekend *and* charge can apply to the same hour. The
   engine currently has one differential window. This becomes a list of windows, each with its
