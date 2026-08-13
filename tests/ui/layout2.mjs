@@ -118,14 +118,14 @@ ok('every day is on to start with',
 await p.fill('#autoAt','14:00'); await p.locator('#autoAt').blur(); await p.waitForTimeout(300);
 ok('it counts down to the start', (await p.textContent('#autoEta')).includes('starts in'),
    await p.textContent('#autoEta'));
-ok('nothing has started yet', !(await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).activeStart)));
+ok('nothing has started yet', !(await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].activeStart)));
 
 console.log('\n━━ It starts the shift when the time arrives ━━');
 await p.clock.fastForward('01:05:00'); await p.waitForTimeout(600);
 let st = await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')));
-ok('the clock is running', !!st.activeStart);
-ok('started at 2:00, not at 3:05', new Date(st.activeStart).getUTCHours()===18,
-   new Date(st.activeStart).toISOString());
+ok('the clock is running', !!st.jobs[0].activeStart);
+ok('started at 2:00, not at 3:05', new Date(st.jobs[0].activeStart).getUTCHours()===18,
+   new Date(st.jobs[0].activeStart).toISOString());
 ok('and it says it started itself', await p.isVisible('#autoConfirm'));
 ok('naming the time', (await p.textContent('#autoTxt')).includes('2:00 PM'), await p.textContent('#autoTxt'));
 
@@ -134,9 +134,9 @@ await p.close();
 // app opened at 3:47 PM with a 2:00 PM start it never saw
 p = await boot(ctx, {...base, autoOn:true, autoAt:'14:00'}, D(13,15,47));
 st = await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')));
-ok('the clock is already running on open', !!st.activeStart);
-ok('backdated to 2:00 PM', new Date(st.activeStart).getUTCHours()===18 && new Date(st.activeStart).getUTCMinutes()===0,
-   new Date(st.activeStart).toISOString());
+ok('the clock is already running on open', !!st.jobs[0].activeStart);
+ok('backdated to 2:00 PM', new Date(st.jobs[0].activeStart).getUTCHours()===18 && new Date(st.jobs[0].activeStart).getUTCMinutes()===0,
+   new Date(st.jobs[0].activeStart).toISOString());
 ok('the timer shows 1:47, not 0:00', (await p.textContent('#timer')).startsWith('01:47'),
    await p.textContent('#timer'));
 ok('the notice explains the gap', (await p.textContent('#autoTxt')).includes('1:47'),
@@ -145,17 +145,17 @@ ok('the notice explains the gap', (await p.textContent('#autoTxt')).includes('1:
 console.log('\n━━ Undo puts it back ━━');
 await p.click('#autoUndo'); await p.waitForTimeout(300);
 st = await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')));
-ok('clocked out again', !st.activeStart);
+ok('clocked out again', !st.jobs[0].activeStart);
 ok('and nothing was banked', st.sessions.length===base.sessions.length, String(st.sessions.length));
 ok('the notice is gone', !(await p.isVisible('#autoConfirm')));
 await p.waitForTimeout(600);
-ok('it does not immediately start again', !(await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).activeStart)));
+ok('it does not immediately start again', !(await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].activeStart)));
 
 console.log('\n━━ It will not resurrect a day that is already over ━━');
 await p.close();
 // 11 PM, nine hours past a 2 PM start — that shift is finished, not starting
 p = await boot(ctx, {...base, autoOn:true, autoAt:'14:00', sessions:[]}, D(13,23));
-ok('no shift is started', !(await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).activeStart)));
+ok('no shift is started', !(await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].activeStart)));
 ok('and no notice is shown', !(await p.isVisible('#autoConfirm')));
 
 console.log('\n━━ It stands down when the day is already logged ━━');
@@ -163,7 +163,7 @@ await p.close();
 p = await boot(ctx, {...base, autoOn:true, autoAt:'14:00',
   sessions:[{id:'done',start:D(13,13,50),end:D(13,17)}]}, D(13,17,30));
 ok('a shift already covering 2 PM means nothing is started',
-   !(await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).activeStart)));
+   !(await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].activeStart)));
 ok('and the logged shift is untouched',
    (await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).sessions.length))===1);
 
@@ -172,11 +172,11 @@ await p.close();
 // Aug 14 2026 is a Friday — turn Friday off
 p = await boot(ctx, {...base, autoOn:true, autoAt:'14:00', sessions:[],
   autoDays:[true,true,true,true,true,false,true]}, D(14,15));
-ok('Friday off means no shift', !(await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).activeStart)));
+ok('Friday off means no shift', !(await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].activeStart)));
 await p.close();
 p = await boot(ctx, {...base, autoOn:true, autoAt:'14:00', sessions:[],
   autoDays:[true,true,true,true,true,false,true]}, D(13,15));   // Thursday, still on
-ok('Thursday on means it starts', !!(await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).activeStart)));
+ok('Thursday on means it starts', !!(await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].activeStart)));
 
 console.log('\n━━ Switching it on mid-afternoon does not reach backwards ━━');
 await p.close();
@@ -184,7 +184,7 @@ p = await boot(ctx, {...base, sessions:[]}, D(12,20));       // 8 PM
 await p.check('#autoOn'); await p.waitForTimeout(200);
 await p.fill('#autoAt','14:00'); await p.locator('#autoAt').blur(); await p.waitForTimeout(600);
 ok('no shift is invented for six hours ago',
-   !(await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).activeStart)));
+   !(await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].activeStart)));
 ok('today is marked as handled',
    (await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).autoLast))==='2026-08-12',
    await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).autoLast));
@@ -194,10 +194,10 @@ await p.close();
 p = await boot(ctx, {...base, autoOn:true, autoAt:'14:00', sessions:[],
   planOn:true, plannedHours:8}, D(13,13,55));
 await p.clock.fastForward('00:10:00'); await p.waitForTimeout(500);
-ok('auto clock-in started the shift', !!(await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).activeStart)));
+ok('auto clock-in started the shift', !!(await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].activeStart)));
 await p.clock.fastForward('08:10:00'); await p.waitForTimeout(700);
 st = await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')));
-ok('auto-stop ended it at the 8 h target', !st.activeStart && st.sessions.length===1,
+ok('auto-stop ended it at the 8 h target', !st.jobs[0].activeStart && st.sessions.length===1,
    JSON.stringify(st.sessions));
 ok('and banked exactly 8 h', st.sessions.length===1 &&
    Math.abs((st.sessions[0].end-st.sessions[0].start)/3600000 - 8) < 0.01,

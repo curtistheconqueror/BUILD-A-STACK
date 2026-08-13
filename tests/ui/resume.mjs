@@ -68,8 +68,8 @@ await p.click('#resumeYes'); await p.waitForTimeout(400);
 ok('clock is running again', (await p.textContent('#punch')).includes('Clock Out'));
 let s = await st(p);
 ok('the ended shift is gone from the log', s.sessions.length===0, String(s.sessions.length));
-ok('and it is live from the ORIGINAL 6:00 AM start', s.activeStart===D(11,6),
-   `${new Date(s.activeStart).toISOString()} vs ${new Date(D(11,6)).toISOString()}`);
+ok('and it is live from the ORIGINAL 6:00 AM start', s.jobs[0].activeStart===D(11,6),
+   `${new Date(s.jobs[0].activeStart).toISOString()} vs ${new Date(D(11,6)).toISOString()}`);
 ok('timer shows 4 h on the clock, not 20 min', hm(await p.textContent('#timer'))==='04:00', await p.textContent('#timer'));
 let money1 = num(await p.textContent('#permoney'));
 ok('period total is now 4.00 h = $152.00 — the gap was paid', near(money1,152), `$${money1}`);
@@ -124,7 +124,7 @@ await p.click('#resumeYes'); await p.waitForTimeout(400);
 s = await st(p);
 ok('only the latest shift was reopened', s.sessions.length===1 && s.sessions[0].id==='early',
    JSON.stringify(s.sessions.map(x=>x.id)));
-ok('live from 6:00 AM', s.activeStart===D(11,6));
+ok('live from 6:00 AM', s.jobs[0].activeStart===D(11,6));
 
 console.log('\n━━ A holiday shift stays a holiday shift ━━');
 await p.close();
@@ -194,7 +194,7 @@ ok('and it names the 10:00 PM start', (await p.textContent('#resumeConfirm')).in
    await p.textContent('#resumeConfirm'));
 await p.click('#resumeYes'); await p.waitForTimeout(400);
 s = await st(p);
-ok('reopened straight across midnight', s.activeStart===D(10,22), new Date(s.activeStart).toISOString());
+ok('reopened straight across midnight', s.jobs[0].activeStart===D(10,22), new Date(s.jobs[0].activeStart).toISOString());
 ok('7 h 20 m on the clock', hm(await p.textContent('#timer'))==='07:20', await p.textContent('#timer'));
 
 console.log('\n━━ And it keeps running as long as you like, overtime included ━━');

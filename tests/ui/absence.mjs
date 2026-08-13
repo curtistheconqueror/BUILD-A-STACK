@@ -133,7 +133,7 @@ await p.click('#fmlaOut'); await p.waitForTimeout(600);
 const rec = await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')));
 console.log('       ' + JSON.stringify(rec.absences));
 ok('the shift is banked', rec.sessions.length===3);
-ok('the clock is stopped', rec.activeStart===null);
+ok('the clock is stopped', rec.jobs[0].activeStart===null);
 ok('and the rest of the scheduled day is recorded as FMLA',
    rec.absences.length===1 && rec.absences[0].kind==='fmla', JSON.stringify(rec.absences));
 ok('four hours of it, not eight', rec.absences[0].hours===4, String(rec.absences[0].hours));

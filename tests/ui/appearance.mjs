@@ -118,7 +118,7 @@ ok('and "still" clears them all',
 console.log('\n━━ A colour per section ━━');
 await openCfg();
 const rows=await p.$$eval('#secCols input[data-sec]',es=>es.map(e=>e.dataset.sec));
-ok('every section and settings group has a row', rows.length===17, rows.length+': '+rows.join(','));
+ok('every section and settings group has a row', rows.length===18, rows.length+': '+rows.join(','));
 ok('Settings is one of them', rows.includes('cfg'));
 ok('and so are the settings groups', rows.includes('gPay')&&rows.includes('gData'));
 await p.evaluate(()=>{const i=document.querySelector('#secCols input[data-sec="totals"]');

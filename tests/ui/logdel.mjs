@@ -157,7 +157,7 @@ ok('now it offers the real 7:00 AM shift', txt.includes('7:00 AM'), txt);
 ok('and knows it ended 2:00 PM', txt.includes('2:00 PM'), txt);
 await p.click('#resumeYes'); await p.waitForTimeout(400);
 s = await st(p);
-ok('reopened from 7:00 AM', s.activeStart===D(5,7), new Date(s.activeStart).toISOString());
+ok('reopened from 7:00 AM', s.jobs[0].activeStart===D(5,7), new Date(s.jobs[0].activeStart).toISOString());
 ok('log is now empty — it is the running shift', s.sessions.length===0, String(s.sessions.length));
 ok('8 h on the clock (7 worked + the hour since)', (await p.textContent('#timer')).slice(0,5)==='08:00',
    await p.textContent('#timer'));
