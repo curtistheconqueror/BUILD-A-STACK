@@ -1199,6 +1199,23 @@
       <label class="swrap"><input type="checkbox" id="nFica" checked> Withhold FICA — 6.2% + 1.45%</label>
     </div>
 
+    <div class="ngroup"><b>Public pension instead of Social Security</b>
+      <div class="note">Teachers in fifteen states, and a lot of police, fire and municipal work, are
+      outside Social Security altogether: nothing is withheld for it, a set percentage of pay goes to
+      the pension fund instead, and Medicare is still taken. Illinois TRS is 9%.</div>
+      <label class="swrap" style="margin-top:9px"><input type="checkbox" id="nPenOn">
+        My pension replaces Social Security</label>
+      <div class="cfgrid" id="nPenFields" style="margin-top:9px">
+        <div class="f"><label for="nPenName">What is it called?</label>
+          <input type="text" id="nPenName" maxlength="14" placeholder="TRS"></div>
+        <div class="f"><label for="nPenPct">Percentage of gross</label>
+          <input type="number" id="nPenPct" min="0" max="30" step="0.01" inputmode="decimal"></div>
+      </div>
+      <label class="swrap" id="nPenPreRow" style="margin-top:9px"><input type="checkbox" id="nPenPre" checked>
+        Taken before tax</label>
+      <div class="note" id="nPenNote" style="margin-top:8px"></div>
+    </div>
+
     <div class="ngroup"><b>Overtime tax break (federal law, 2025–2028)</b>
       <label class="swrap"><input type="checkbox" id="nOtBreak" checked> Deduct my overtime premium from federal tax</label>
       <div class="note">Only the premium half of overtime pay counts — the extra half-rate on each OT hour,
@@ -2772,7 +2789,18 @@ function fedWithholding(periodTaxable, periodsPerYear, filing, dependents){
 function netBreakdown(gross, fixedPre, fixedPost, n, periodsPerYear, scale){
   // The premium is owed in full even before it is earned back; only the tax shield
   // is limited by what has actually been earned.
-  var pre = fixedPre;
+  /* A public pension that stands in place of Social Security. Fifteen states keep most of
+     their teachers out of Social Security entirely, and the same arrangement covers a lot of
+     police, fire and municipal work: no OASDI is withheld, Medicare still is, and a fixed
+     percentage of gross goes to the pension fund instead. Illinois TRS is 9% of creditable
+     earnings, picked up pre-tax by the employer under IRC 414(h)(2).
+
+     Modelled as a rate on gross rather than a fixed dollar item because that is how it is
+     actually assessed — it moves with every stipend, every extra duty and every raise, and
+     a figure typed in once would be wrong by the next cheque. */
+  var pen = n.pension && n.pension.rate > 0 ? gross * (n.pension.rate / 100) : 0;
+  var penPre = !n.pension || n.pension.preTax !== false;
+  var pre = fixedPre + (penPre ? pen : 0);
   var taxable = Math.max(0, gross - pre);
   var sc = scale === undefined ? 1 : scale;
 
@@ -2788,7 +2816,14 @@ function netBreakdown(gross, fixedPre, fixedPost, n, periodsPerYear, scale){
   var before = Math.max(0, n.wagesBefore || 0);
   var ssRoom = n.wagesBefore == null ? TAX2026.ssWageBase / periodsPerYear
                                      : Math.max(0, TAX2026.ssWageBase - before);
-  var ss = n.ficaOn === false ? 0 : Math.min(taxable, ssRoom) * TAX2026.ssRate;
+  /* Two separate switches on purpose. `ficaOn: false` is nothing withheld at all, which is
+     a student or a foreign-visa case. `ssOn: false` is the pension case, and it is NOT the
+     same thing: Medicare has covered essentially all public employees hired since April 1986
+     whether or not Social Security does, so a teacher who pays no OASDI still pays 1.45% and
+     is still liable for the surtax above $200,000. Collapsing the two would quietly hand
+     them back money they genuinely owe. */
+  var ssOff = n.ficaOn === false || n.ssOn === false;
+  var ss = ssOff ? 0 : Math.min(taxable, ssRoom) * TAX2026.ssRate;
   var medicare = n.ficaOn === false ? 0 : taxable * TAX2026.medicareRate;
 
   /* Additional Medicare: another 0.9% on wages past $200,000, employee-only and with no
@@ -2808,11 +2843,15 @@ function netBreakdown(gross, fixedPre, fixedPost, n, periodsPerYear, scale){
        : taxable * ((n.statePct != null ? n.statePct : 4.95) / 100));
 
   var taxes = fed + st + ss + medicare + addMedicare;
+  var post = fixedPost + (penPre ? 0 : pen);
   return { gross: gross, pretax: pre, taxable: taxable,
            fed: fed, state: st, ss: ss, medicare: medicare, addMedicare: addMedicare,
-           taxes: taxes, posttax: fixedPost,
-           deductions: pre + taxes + fixedPost,
-           net: gross - pre - taxes - fixedPost };
+           /* Reported separately as well as folded into pre- or post-tax, because on a stub
+              it is its own line and it is the largest single deduction most members have. */
+           pension: pen, pensionPre: penPre,
+           taxes: taxes, posttax: post,
+           deductions: pre + taxes + post,
+           net: gross - pre - taxes - post };
 }
 
 /* The period's net so far, in either display mode.
@@ -5977,6 +6016,7 @@ function netCfg(){
     enabled: false, configured: false, view: 'net',
     filing: 'single', dependents: 0, fedExempt: false, fedOverride: null,
     state: 'IL', statePct: 4.95, stateExempt: false, stateOverride: null, ficaOn: true,
+    ssOn: true, pension: null,
     items: [ { id: 'health', name: 'Healthcare', amount: 0, pretax: true },
              { id: 'dues',   name: 'Union dues', amount: 0, pretax: false } ]
   };
@@ -6032,7 +6072,9 @@ function netBasisNote(nc){
                (nc.dependents || 0) + ' dependent' + ((nc.dependents || 0) === 1 ? '' : 's'),
                nc.stateOverride != null ? (st ? st[0] : 'state') + ' from your paystub'
                  : (st ? st[0] : 'state') + (pct > 0 ? ' at ' + pct + '%' : ' (no income tax)') ];
-  if (nc.ficaOn !== false) bits.push('FICA');
+  if (nc.ficaOn !== false) bits.push(nc.ssOn === false ? 'Medicare only, no Social Security' : 'FICA');
+  if (nc.pension && nc.pension.rate > 0)
+    bits.push(((nc.pension.name || 'pension')) + ' at ' + nc.pension.rate + '%');
   var fixed = (nc.items || []).reduce(function(s, it){ return s + (parseFloat(it.amount) || 0); }, 0);
   var base = nc.configured
       ? 'Using your saved deductions — ' + bits.join(', ')
@@ -6184,7 +6226,13 @@ function renderCalc(){
     var bd = periodNetView(totGross, totHours, nc.items, n2, pcfg, 'net', 0, 0);
     html += '<div class="qline"><span>Federal</span><b style="color:var(--bad)">−' + money(bd.fed) + '</b></div>'
           + '<div class="qline"><span>State</span><b style="color:var(--bad)">−' + money(bd.state) + '</b></div>'
-          + '<div class="qline"><span>Social Security &amp; Medicare</span><b style="color:var(--bad)">−' + money(bd.ss + bd.medicare + bd.addMedicare) + '</b></div>'
+          + '<div class="qline"><span>' + (bd.ss > 0.004 ? 'Social Security &amp; Medicare' : 'Medicare')
+            + '</span><b style="color:var(--bad)">−' + money(bd.ss + bd.medicare + bd.addMedicare) + '</b></div>'
+          /* Its own line, because on a real stub it is one — and because a member checking
+             these figures against a payslip is looking for it by name. */
+          + (bd.pension > 0.004
+              ? '<div class="qline"><span>' + esc((nc.pension && nc.pension.name) || 'Pension')
+                + '</span><b style="color:var(--bad)">−' + money(bd.pension) + '</b></div>' : '')
           + (bd.fixedApplied > 0.004
               ? '<div class="qline"><span>Your other deductions</span><b style="color:var(--bad)">−' + money(bd.fixedApplied) + '</b></div>' : '')
           + '<div class="qline tot"><span>Take-home</span><b>' + money(bd.net) + '</b></div>';
@@ -6685,9 +6733,40 @@ function previewNet(){
     'On a standard ' + bd.stdHours + ' h check of <b>' + money(stdGross) + '</b>:'
     + '<br>Federal ' + money(bd.fed) + ' · State ' + money(bd.state)
     + ' · SS ' + money(bd.ss) + ' · Medicare ' + money(bd.medicare + bd.addMedicare)
+    + (bd.pension > 0 ? ' · ' + ((nc.pension && nc.pension.name) || 'Pension')
+                        + ' ' + money(bd.pension) : '')
     + (bd.fixedTotal ? ' · Fixed ' + money(bd.fixedTotal) : '')
     + '<br>Take-home <span class="pay">' + money(bd.net) + '</span>'
     + '  (' + (stdGross ? (100*bd.net/stdGross).toFixed(1) : '0') + '% of gross)';
+}
+
+/* What the swap is actually worth, said in the only terms that matter: the pension is a
+   bigger bite than Social Security at most rates, but it is money going somewhere that is
+   still yours, and part of it comes back as tax not paid. Someone deciding whether the
+   figures on this screen look right needs both halves. */
+function renderPensionNote(){
+  var box = document.getElementById('nPenNote'); if (!box) return;
+  var nc = netCfg(), on = !!(nc.pension && nc.ssOn === false);
+  show('nPenFields', on); show('nPenPreRow', on);
+  if (!on){
+    box.innerHTML = 'Off — Social Security is withheld at 6.2% as usual.';
+    return;
+  }
+  var rate = (nc.pension && nc.pension.rate) || 0, name = (nc.pension && nc.pension.name) || 'the pension';
+  var stdHours = periodNetView(0, 0, [], nc, state.cfg, 'net').stdHours;
+  var per = (state.cfg.rate || 0) * stdHours, periods = Math.max(1, Math.round(365.25 / (state.cfg.periodLengthDays || 14)));
+  var year = per * periods;
+  var ssSaved = year * TAX2026.ssRate, penPaid = year * rate / 100;
+  box.innerHTML = !rate
+    ? 'Set the percentage and this will price it.'
+    : 'At ' + rate + '% on ' + money(year) + ' a year, ' + esc(name) + ' takes <b>'
+      + money(penPaid) + '</b> where Social Security would have taken <b>' + money(ssSaved)
+      + '</b>. Medicare is still withheld either way'
+      + ((nc.pension && nc.pension.preTax !== false)
+          ? ', and the pension comes out before tax, so part of the difference comes back as federal and state tax you do not pay.'
+          : ', and this is set to come out after tax — if your stub shows it reducing taxable wages, tick the box above.')
+    + '<br><span class="hsub">The app cannot check whether your job is really outside Social Security. '
+    + 'Your paystub can: if it has no line for Social Security or OASDI, it is.</span>';
 }
 
 function readNetForm(){
@@ -6705,6 +6784,16 @@ function readNetForm(){
   nc.stateOverride = isFinite(so) && document.getElementById('nStateOv').value !== '' ? so : null;
   nc.ficaOn = document.getElementById('nFica').checked;
   nc.otBreak = document.getElementById('nOtBreak').checked;
+  /* The pension and the Social Security switch are one decision to the user and two fields
+     underneath, so they are written together and never allowed to disagree. */
+  var penOn = document.getElementById('nPenOn').checked;
+  var pct = parseFloat(document.getElementById('nPenPct').value);
+  nc.ssOn = !penOn;
+  nc.pension = penOn
+    ? { name: (document.getElementById('nPenName').value || 'Pension').slice(0, 14),
+        rate: isFinite(pct) && pct > 0 ? Math.min(30, pct) : 0,
+        preTax: document.getElementById('nPenPre').checked }
+    : null;
 }
 
 /* Fill the state list once, and describe whatever is picked. */
@@ -6741,6 +6830,13 @@ function syncNetForm(){
   document.getElementById('nStateOv').value = nc.stateOverride == null ? '' : nc.stateOverride;
   document.getElementById('nFica').checked = nc.ficaOn !== false;
   document.getElementById('nOtBreak').checked = nc.otBreak !== false;
+  var pen = nc.pension || {};
+  var penOn = !!(nc.pension && nc.ssOn === false);
+  document.getElementById('nPenOn').checked = penOn;
+  document.getElementById('nPenName').value = pen.name || '';
+  document.getElementById('nPenPct').value = pen.rate == null ? '' : pen.rate;
+  document.getElementById('nPenPre').checked = pen.preTax !== false;
+  renderPensionNote();
   [].forEach.call(document.querySelectorAll('#nView button'), function(b){
     b.classList.toggle('on', b.dataset.v === nc.view);
   });
@@ -7977,10 +8073,17 @@ document.getElementById('yCommit').onchange = function(e){
 document.getElementById('cYtd').onchange = function(e){
   netCfg().ytdShow = e.target.value === '1'; save(); render();
 };
-['nFiling','nDeps','nFedEx','nFedOv','nStatePct','nStateEx','nStateOv','nFica','nOtBreak'].forEach(function(id){
+['nFiling','nDeps','nFedEx','nFedOv','nStatePct','nStateEx','nStateOv','nFica','nOtBreak',
+ 'nPenOn','nPenName','nPenPct','nPenPre'].forEach(function(id){
   var el2 = document.getElementById(id);
   el2.addEventListener('input', previewNet);
   el2.addEventListener('change', previewNet);
+});
+/* The note is priced off the form, so it has to be redrawn after the form is read —
+   previewNet does the reading, which is why this hangs off it rather than off each field. */
+['nPenOn','nPenName','nPenPct','nPenPre'].forEach(function(id){
+  document.getElementById(id).addEventListener('change', renderPensionNote);
+  document.getElementById(id).addEventListener('input', renderPensionNote);
 });
 
 document.getElementById('presets').addEventListener('click', function(e){

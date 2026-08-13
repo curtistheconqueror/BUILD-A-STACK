@@ -268,6 +268,82 @@ const gross = (sessions, c = cfg) => {
        E.bucketHoursAt(spent, +new Date(2026, 7, 14, 16), c, 'r14_14'), 8);
 }
 
+/* ---------------- a public pension in place of Social Security ---------------- */
+{
+  /* Fifteen states keep most of their teachers outside Social Security, and the same
+     arrangement covers a lot of police, fire and municipal work. Illinois TRS: 9% of
+     creditable earnings, picked up pre-tax under IRC 414(h)(2), no OASDI, Medicare still
+     withheld. Checked against $72,000 over 24 cheques. */
+  const P = 24, per = 72000 / P;
+  const base = { filing: 'single', dependents: 0, ficaOn: true, statePct: 4.95 };
+  const trs  = { ...base, ssOn: false, pension: { rate: 9, preTax: true, name: 'TRS' } };
+  const a = E.netBreakdown(per, 0, 0, base, P);
+  const b = E.netBreakdown(per, 0, 0, trs,  P);
+
+  near('nine per cent of the cheque goes to the pension', b.pension, per * 0.09);
+  near('which is $6,480 across the year',                 b.pension * P, 6480);
+  near('no Social Security is withheld',                  b.ss, 0);
+  ok('where a covered job would have paid it', a.ss > 0, '$' + a.ss.toFixed(2) + ' a cheque');
+  near('and $4,464 of it across the year',                a.ss * P, 4464);
+
+  /* The part that is easy to get wrong. Medicare covers essentially every public employee
+     hired since April 1986 whether Social Security does or not, so it is still withheld —
+     on the reduced wage, because the pension came out first. */
+  near('Medicare is still withheld', b.medicare, (per - b.pension) * E.TAX2026.medicareRate);
+  ok('on the wage after the pension, not before', b.medicare < a.medicare,
+     '$' + b.medicare.toFixed(2) + ' vs $' + a.medicare.toFixed(2));
+  near('which is $950 across the year', b.medicare * P, 950.04, 0.2);
+
+  /* Pre-tax means pre-tax: federal and state are both figured on the reduced wage. */
+  near('taxable wages drop by the contribution', b.taxable, per - b.pension);
+  ok('so federal withholding falls', b.fed < a.fed, '$' + (a.fed - b.fed).toFixed(2) + ' a cheque');
+  ok('and state with it',            b.state < a.state, '$' + (a.state - b.state).toFixed(2));
+  near('state is 4.95% of the reduced wage', b.state, (per - b.pension) * 0.0495);
+
+  /* The number someone actually wants: 9% out is more than 6.2% out, but the tax not paid
+     gives most of the difference back. */
+  const cost = (a.net - b.net) * P;
+  ok('take-home is only a little lower despite contributing $2,016 more',
+     cost > 250 && cost < 300, '$' + cost.toFixed(2) + ' a year');
+  near('the extra actually contributed is $2,016', (b.pension - a.ss) * P, 2016);
+
+  /* After-tax is a different cheque, and some funds are. */
+  const post = E.netBreakdown(per, 0, 0,
+                 { ...trs, pension: { rate: 9, preTax: false, name: 'TRS' } }, P);
+  near('after-tax leaves taxable wages alone', post.taxable, per);
+  ok('so it takes more home off you', post.net < b.net,
+     '$' + (b.net - post.net).toFixed(2) + ' a cheque');
+  near('but the contribution itself is the same', post.pension, b.pension);
+  ok('and it is reported as a post-tax deduction', post.pensionPre === false);
+  ok('where the pre-tax one is not', b.pensionPre === true);
+
+  /* Every dollar still adds up, whichever side of tax it comes out of. */
+  [a, b, post].forEach(function(x, i){
+    near('breakdown ' + (i + 1) + ': gross minus everything is net',
+         x.gross - x.deductions, x.net);
+  });
+
+  /* The two switches are not the same switch. Turning off FICA entirely is a student or a
+     visa case and takes Medicare with it; a pension takes only Social Security. */
+  const noFica = E.netBreakdown(per, 0, 0, { ...base, ficaOn: false }, P);
+  near('no FICA at all means no Medicare either', noFica.medicare, 0);
+  ok('a pension still pays Medicare', b.medicare > 0, '$' + b.medicare.toFixed(2));
+
+  /* The surtax above $200,000 is Medicare's, so it survives the swap too — a superintendent
+     on $260,000 owes it with no Social Security anywhere on the stub. */
+  const big = E.netBreakdown(260000 / P, 0, 0,
+                { ...trs, wagesBefore: 250000 }, P);
+  ok('the Additional Medicare surtax still applies', big.addMedicare > 0,
+     '$' + big.addMedicare.toFixed(2));
+  near('and Social Security is still nothing', big.ss, 0);
+
+  /* No pension configured changes nothing at all — the field is optional and absent by
+     default, and every existing figure has to be untouched by its arrival. */
+  const plain = E.netBreakdown(per, 0, 0, base, P);
+  near('an absent pension contributes nothing', plain.pension, 0);
+  near('and leaves net exactly where it was', plain.net, a.net);
+}
+
 /* ---------------- Social Security is an annual cap, not a per-cheque one ---------------- */
 {
   const T = E.TAX2026;
