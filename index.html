@@ -113,6 +113,32 @@
      the layout box and reflows properly (unlike `transform`, which would just make a bigger
      picture of the same overflow), and it is supported everywhere this app runs. */
   .wrap{zoom:var(--tzoom,1)}
+  /* ---- the job switcher ----
+     Absent entirely with one job. With two it is the first thing on the page, because which
+     employer you are looking at changes every number below it. */
+  .jobbar{display:flex;gap:8px;margin-bottom:12px;overflow-x:auto;padding-bottom:2px;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .jobbar::-webkit-scrollbar{display:none}
+  .jobchip{flex:0 0 auto;display:flex;align-items:center;gap:8px;min-height:44px;
+    padding:0 14px;border-radius:12px;border:1px solid var(--border);
+    background:rgba(10,16,32,.45);color:var(--muted);font-size:13.4px;font-weight:700;
+    cursor:pointer;-webkit-user-select:none;user-select:none}
+  .jobchip.on{color:var(--ink);border-color:var(--acc);
+    box-shadow:inset 0 0 0 1px var(--acc),0 0 18px -8px var(--acc)}
+  /* A dot only when that job's own clock is running, so a job you are not looking at can
+     still tell you it is counting. */
+  .jobchip .dot{width:8px;height:8px;border-radius:50%;background:transparent;flex:none}
+  .jobchip.live .dot{background:var(--ok);animation:pulse 1.4s ease-in-out infinite}
+  .jobwarn{border:1px solid var(--warn);background:rgba(255,180,84,.10);border-radius:12px;
+    padding:10px 13px;margin-bottom:12px;font-size:13px;line-height:1.5;color:var(--ink)}
+
+  /* ---- job rows in Settings ---- */
+  .jobrow{display:flex;align-items:center;gap:9px;border:1px solid var(--border);
+    border-radius:11px;padding:8px 10px;margin-top:8px;min-height:44px}
+  .jobrow input[type=text]{flex:1 1 auto;min-width:0}
+  .jobrow .tag{font-size:11.4px;letter-spacing:1.4px;text-transform:uppercase;font-weight:800;
+    color:var(--acc);flex:none}
+
   .seccols{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:10px}
   .seccol{display:flex;align-items:center;gap:9px;border:1px solid var(--border);border-radius:11px;
     padding:7px 10px;min-height:44px}
@@ -943,6 +969,10 @@
   </section>
 
   <!-- ================= HERO ================= -->
+  <!-- Only ever on screen with a second job. With one, the app looks exactly as it did. -->
+  <div class="jobbar hide" id="jobBar"></div>
+  <div class="jobwarn hide" id="jobWarn"></div>
+
   <section class="card col" id="hero">
     <div class="hstrip" id="hstrip">
       <div class="status" id="status"><span class="blip"></span><span id="statusTxt">Clocked out</span></div>
@@ -1500,6 +1530,23 @@
         <span id="cfgUndoTxt"></span>
         <button class="mini" id="cfgUndoBtn">↩ Undo that change</button>
       </div>
+      <details class="cfgsec" id="gJobs">
+        <summary><span class="cfgt">Jobs</span><span class="cfgsum" id="sumJobs"></span></summary>
+        <div class="cfgbody">
+      <div class="f" style="margin-top:0"><label>Where you work</label>
+        <div class="note">A second job is a whole separate set of terms — its own rate,
+        schedule, overtime rule, holidays and differentials — so each one keeps its own
+        settings and its own clock. Overtime is never combined across employers: forty hours
+        at one and ten at another is fifty straight hours, not ten of overtime. Tax is the
+        part that combines, because it is charged to you rather than to them.</div>
+      </div>
+      <div id="jobList"></div>
+      <div class="actions" style="justify-content:flex-start;margin-top:10px">
+        <button class="mini" id="jobAdd">+ Add another job</button>
+      </div>
+      <div class="note" id="jobNote" style="margin-top:10px"></div>
+        </div>
+      </details>
       <details class="cfgsec" id="gPay">
         <summary><span class="cfgt">Pay &amp; overtime</span><span class="cfgsum" id="sumPay"></span></summary>
         <div class="cfgbody">
@@ -3517,6 +3564,14 @@ function migrateJobs(base){
   }
   (base.sessions || []).forEach(function(s){ if (!s.jobId) s.jobId = first; });
   (base.absences || []).forEach(function(a){ if (!a.jobId) a.jobId = first; });
+  /* The running clock belongs to the job it was started on, not to the app. That is what
+     lets someone work a late shift at one employer and an early one at another without the
+     two interfering — and it is why these move onto the job rather than staying global. */
+  if (base.activeStart != null && base.jobs[0].activeStart == null){
+    base.jobs[0].activeStart = base.activeStart;
+    base.jobs[0].activeAdj = base.activeAdj || null;
+  }
+  delete base.activeStart; delete base.activeAdj;
   delete base.cfg;                       // it lives on the job now
   /* Flagged rather than saved here: `state` is not assigned until after load() returns, and
      save() reads it. Persisting matters — until the migrated shape is written back, every
@@ -3530,18 +3585,37 @@ function migrateJobs(base){
    write the active job's config a second time at the top level — where the next load would
    read it back as an older save and migrate it into a duplicate job. */
 function defineCfgAccessor(o){
-  Object.defineProperty(o, 'cfg', {
-    get: function(){ var j = activeJob(); return j && j.cfg; },
-    set: function(v){ var j = activeJob(); if (j) j.cfg = v; },
-    enumerable: false, configurable: true
+  [['cfg', function(){ return Object.assign({}, DEFAULTS); }],
+   ['activeStart', function(){ return null; }],
+   ['activeAdj', function(){ return null; }]].forEach(function(pair){
+    Object.defineProperty(o, pair[0], {
+      get: function(){ var j = activeJob(); return j ? j[pair[0]] : pair[1](); },
+      set: function(v){ var j = activeJob(); if (j) j[pair[0]] = v; },
+      enumerable: false, configurable: true
+    });
   });
   return o;
 }
 
+/* Any job with a clock running. Used to warn about overlap and to show the other job's
+   shift while you are looking at this one. */
+function runningJobs(){
+  return jobList().filter(function(j){ return j.activeStart != null; });
+}
+/* Two clocks running at once is allowed — people do work back-to-back shifts and split
+   days — but the overlap has to be visible rather than silently billed twice. */
+function overlapWarning(nowMs){
+  var run = runningJobs();
+  if (run.length < 2) return null;
+  var now = nowMs == null ? Date.now() : nowMs;
+  var since = Math.max.apply(null, run.map(function(j){ return j.activeStart; }));
+  return { jobs: run, hours: Math.max(0, (now - since) / HOUR_MS) };
+}
+
 function load(){
   var base = { cfg: Object.assign({}, DEFAULTS), jobs: null, activeJob: null,
-               sessions: [], absences: [], activeStart: null,
-               activeAdj: null, unit: 'sec', planOn: false, plannedHours: 8, sound: true,
+               sessions: [], absences: [], activeStart: null, activeAdj: null,
+               unit: 'sec', planOn: false, plannedHours: 8, sound: true,
                configured: false, autoOn: false, autoAt: '', autoDays: null, autoLast: '' };
   try {
     var raw = localStorage.getItem(KEY);
@@ -4232,9 +4306,13 @@ function render(){
   /* Nothing drawn from this ledger is finer than a second, so a second is the resolution
      it is cached at. The timer above reads the raw clock and is unaffected. */
   var liveSec = active ? Math.floor(now / 1000) * 1000 : 0;
-  var ledger = cachedLedger('main', dataVer + '|' + liveSec, function(){
-    var all = state.sessions.slice();
-    if (active) all.push(liveSession('__active', Math.max(active, liveSec)));
+  /* This job's shifts, not every shift on the device — the main ledger is what every tile
+     on the page reads from, so it is the one place a second employer's hours would leak in.
+     The key carries the job for the same reason: switching job must not serve the cached
+     ledger of the one you just left. */
+  var ledger = cachedLedger('main', dataVer + '|' + state.activeJob + '|' + liveSec, function(){
+    var all = jobSessions();
+    if (active) all = all.concat([liveSession('__active', Math.max(active, liveSec))]);
     return buildLedger(all, cfg);
   });
 
@@ -4270,7 +4348,7 @@ function render(){
   // the toggle: recompute the shift as of the last tick of the chosen unit
   var shownGross = shift.gross, dp = 2, qEnd = active ? active + quantize(elapsed, state.unit) : now;
   if (active){
-    var q = cachedLedger('q', dataVer + '|' + qEnd, function(){
+    var q = cachedLedger('q', dataVer + '|' + state.activeJob + '|' + qEnd, function(){
       return jobLedger([{ id: '__q', start: active, end: Math.max(active, qEnd) }], cfg);
     });
     shownGross = sumSession(q.parts, '__q').gross;
@@ -4318,7 +4396,7 @@ function render(){
      numbers always agree on what "now" means. */
   var perShown = per.gross;
   if (active){
-    var perQ = cachedLedger('perQ', dataVer + '|' + qEnd, function(){
+    var perQ = cachedLedger('perQ', dataVer + '|' + state.activeJob + '|' + qEnd, function(){
       return jobLedger([liveSession('__pq', Math.max(active, qEnd))], cfg);
     });
     perShown = sumRange(perQ.parts, period.startMs, period.endMs).gross;
@@ -4478,6 +4556,8 @@ function render(){
     renderWhatIf();
     renderExtra(period, active, now);
     renderColSums(ledger, period, now, active, netOn);
+    renderJobBar();
+    renderJobWarn(now);
     // Synced to the real clock, so the banked figure has to keep up with it. Safe here:
     // renderCalc only writes result text, never the fields you type into.
     if (calcState().sync) renderCalc();
@@ -4563,7 +4643,7 @@ function renderYtd(ledger, now){
      frame. Uncached it put a second full ledger build in the live loop, which is exactly
      the cost the caching elsewhere exists to avoid. Keyed on the data and the day, since
      nothing else about it can change between frames. */
-  var closedLed = cachedLedger('closed', dataVer + '|' + (+midnight(now)), function(){
+  var closedLed = cachedLedger('closed', dataVer + '|' + state.activeJob + '|' + (+midnight(now)), function(){
     return jobLedger(null, cfg, now);
   });
   var closed = ytdSums(closedLed, now);
@@ -4619,7 +4699,7 @@ function renderExempt(ledger, now){
      exactly the sort of work a phone in a pocket should not be doing. The practical effect
      is that it settles on clock-out rather than climbing through a shift. */
   var winFrom = Math.max(from, +new Date(y, 0, 1));
-  var exKey = dataVer + '|' + winFrom + '|' + to + '|' + periodInfo(now, cfg).index + '|'
+  var exKey = dataVer + '|' + state.activeJob + '|' + winFrom + '|' + to + '|' + periodInfo(now, cfg).index + '|'
             + [nc.filing, nc.dependents, nc.fedOverride, nc.otBreak, nc.ficaOn,
                JSON.stringify(nc.items || [])].join('~');
   var r = cachedLedger('exempt', exKey, function(){
@@ -5079,7 +5159,7 @@ function renderTimeCard(ledger, now){
 }
 
 function renderLog(ledger, period, active, now){
-  var rows = state.sessions.filter(function(s){ return s.end > period.startMs && s.start < period.endMs; });
+  var rows = jobSessions().filter(function(s){ return s.end > period.startMs && s.start < period.endMs; });
   // Show the shift in progress too, so the log's total always agrees with the period tile.
   if (active && active < period.endMs) rows.push(Object.assign(liveSession('__active', now), { live: true }));
   /* Earned holidays are in the ledger, so they are already in the period total. They get
@@ -5612,7 +5692,7 @@ function renderExtra(period, active, now){
     + (skOn ? ' Punch times below are the shop clock\'s, ' + Math.abs(skm) + ' min '
               + (skm > 0 ? 'behind' : 'ahead of') + ' this phone.' : '');
 
-  var rows = state.sessions.filter(function(s){
+  var rows = jobSessions().filter(function(s){
     return s.end > period.startMs && s.start < period.endMs;
   }).slice();
   if (active && active < period.endMs) rows.push({ id: '__active', start: active, end: now, live: true });
@@ -5848,7 +5928,7 @@ function paintCal(){
    contract rather than left implied by a dot on a cell. */
 function paintCalHols(){
   var cfg = state.cfg, now = Date.now(), y = new Date(now).getFullYear();
-  var list = holidayOutlook(state.sessions, cfg, now).filter(function(h){
+  var list = holidayOutlook(jobSessions(), cfg, now).filter(function(h){
     return h.date.getFullYear() === y;
   });
   show('qCalHols', list.length > 0);
@@ -6117,6 +6197,7 @@ var SECTION_KEYS = [
   ['progress','Progress'],    ['log',      'Shift log'],    ['banks',   'Floaters & sick'],
   ['extra',   'Decimal time'],['ytd',      'Year to date'], ['calc',    'Calculator'],
   ['cfg',     'Settings'],
+  ['gJobs',   'Jobs'],
   ['gPay',    'Pay & overtime'], ['gPeriod', 'Pay period & payday'],
   ['gSched',  'Your schedule'],  ['gPrem',   'Premiums'],
   ['gOff',    'Time off'],       ['gLook',   'Appearance'],  ['gData', 'Your data']
@@ -6534,7 +6615,7 @@ function previewShift(){
   var r = readEditor(), p = el('ePreview');
   if (r.error){ p.innerHTML = '<span style="opacity:.6">' + r.error + '</span>'; return; }
   // Price it exactly as saving would, so the preview is the real number.
-  var others = state.sessions.filter(function(s){ return s.id !== editing; });
+  var others = jobSessions().filter(function(s){ return s.id !== editing; });
   if (state.activeStart) others.push(liveSession('__a', Date.now()));
   var t = sumSession(buildLedger(others.concat([{ id: '__p', start: r.start, end: r.end, adj: adjFromForm() }]), state.cfg).parts, '__p');
   p.innerHTML = '<b>' + fdate(new Date(r.start)) + '</b> · ' + ptime(r.start) + ' → ' + ptime(r.end)
@@ -6565,7 +6646,7 @@ function saveEditor(){
 function exportCsv(){
   var cfg = state.cfg, ledger = jobLedger(null, cfg);
   var lines = ['period_start,period_end,pay_date,day,clock_in,clock_out,hours,regular_hours,ot_hours,gross'];
-  state.sessions.slice().sort(function(a, b){ return a.start - b.start; }).forEach(function(s){
+  jobSessions().slice().sort(function(a, b){ return a.start - b.start; }).forEach(function(s){
     var t = sumSession(ledger.parts, s.id), p = periodInfo(s.start, cfg);
     lines.push([p.start.toDateString(), p.lastDay.toDateString(), p.payDate.toDateString(),
                 // Clock times follow the 12/24-hour setting, so an exported sheet reads
@@ -7312,6 +7393,75 @@ document.getElementById('secCols').addEventListener('input', function(e){
   i.parentNode.classList.add('set');
   save(); applyTheme();
 });
+/* Switching job is a view change, not a punch: a clock already running keeps running on the
+   job it started on. That is what makes two jobs usable rather than a trap. */
+document.getElementById('jobBar').addEventListener('click', function(e){
+  var b = e.target.closest('button[data-job]'); if (!b) return;
+  if (b.dataset.job === state.activeJob) return;
+  state.activeJob = b.dataset.job;
+  save(); syncControls(); applyStage();
+  lastMoney = ''; lastHeavySig = ''; _ledCache = {};
+  render();
+  toast('Showing ' + (activeJob().name || 'that job') + '.');
+});
+
+document.getElementById('jobAdd').onclick = function(){
+  var js = jobList();
+  if (js.length >= 6){ toast('Six jobs is as many as this holds.'); return; }
+  /* Started from the current job's settings rather than from defaults: a second job usually
+     shares a pay calendar and a state with the first, and it is faster to change a rate than
+     to fill the whole setup in again. */
+  var src = activeJob();
+  var j = { id: newJobId(), name: 'Second job', profession: src.profession || '',
+            primary: false, activeStart: null, activeAdj: null,
+            cfg: Object.assign({}, src.cfg, { holidays: [], banks: [], daysOff: [], vacations: [] }) };
+  js.push(j);
+  state.activeJob = j.id;
+  save(); syncControls(); applyStage();
+  lastMoney = ''; lastHeavySig = ''; _ledCache = {};
+  render();
+  toast('Added a second job — its settings start from your first.');
+};
+
+document.getElementById('jobList').addEventListener('input', function(e){
+  var i = e.target.closest('input[data-jname]'); if (!i) return;
+  var j = jobById(i.dataset.jname); if (!j) return;
+  j.name = i.value.slice(0, 28);
+  save(); renderJobBar();
+});
+document.getElementById('jobList').addEventListener('click', function(e){
+  var show = e.target.closest('button[data-jshow]');
+  if (show){
+    state.activeJob = show.dataset.jshow;
+    save(); syncControls(); applyStage();
+    lastMoney = ''; lastHeavySig = ''; _ledCache = {};
+    render(); renderCfgSummaries();
+    toast('Showing ' + (activeJob().name || 'that job') + '.');
+    return;
+  }
+  var del = e.target.closest('button[data-jdel]');
+  if (!del) return;
+  var id = del.dataset.jdel, js = jobList();
+  if (js.length < 2) return;
+  var mine = (state.sessions || []).filter(function(x){ return x.jobId === id; }).length;
+  /* Two taps, because this takes shifts with it. */
+  if (del.dataset.armed !== '1'){
+    del.dataset.armed = '1';
+    del.textContent = mine ? 'Delete ' + mine + ' shift' + (mine === 1 ? '' : 's') + '?' : 'Sure?';
+    setTimeout(function(){ if (del.dataset.armed === '1'){ del.dataset.armed = ''; renderJobList(); } }, 4000);
+    return;
+  }
+  var name = (jobById(id) || {}).name || 'that job';
+  state.jobs = js.filter(function(j){ return j.id !== id; });
+  state.sessions = (state.sessions || []).filter(function(x){ return x.jobId !== id; });
+  state.absences = (state.absences || []).filter(function(a){ return a.jobId !== id; });
+  if (state.activeJob === id) state.activeJob = state.jobs[0].id;
+  save(); syncControls(); applyStage();
+  lastMoney = ''; lastHeavySig = ''; _ledCache = {};
+  render(); renderCfgSummaries();
+  toast('Removed ' + name + ' and its shifts.');
+});
+
 document.getElementById('secColsReset').onclick = function(){
   theme().sections = {}; save(); applyTheme(); renderThemeControls();
   toast('Every section is back to the shared heading colour.');
@@ -7461,7 +7611,7 @@ CFG_FIELDS.forEach(function(f){
 function offerUndo(was, key){
   var structural = key === 'periodAnchor' || key === 'periodLengthDays' || key === 'weekStartDay';
   var period = periodInfo(Date.now(), state.cfg);
-  var outside = state.sessions.filter(function(s){
+  var outside = jobSessions().filter(function(s){
     return !(s.end > period.startMs && s.start < period.endMs);
   }).length;
   if (!structural && !(key === 'rate' && was.rate !== state.cfg.rate)) return;
@@ -7611,6 +7761,7 @@ function syncControls(){
   renderVacList();
   renderBanks();
   renderCfgSummaries();
+  renderJobBar();
   document.getElementById('autoOn').checked = !!state.autoOn;
   var aA = document.getElementById('autoAt');
   if (document.activeElement !== aA) aA.value = state.autoAt || '';
@@ -7631,7 +7782,7 @@ function syncControls(){
    fewest words that are still specific — "$37.78/hr · 1.5× after 40 h" answers the
    question without opening anything. Anything vague enough to need opening anyway
    ("configured", "3 settings") would be worse than an empty summary. */
-var CFG_GROUPS = ['gPay', 'gPeriod', 'gSched', 'gPrem', 'gOff', 'gLook', 'gData'];
+var CFG_GROUPS = ['gJobs', 'gPay', 'gPeriod', 'gSched', 'gPrem', 'gOff', 'gLook', 'gData'];
 
 function cfgSummaries(){
   var c = state.cfg, s = {};
@@ -7670,10 +7821,64 @@ function cfgSummaries(){
 
   var n = (state.sessions || []).length;
   s.sumData = n + (n === 1 ? ' shift' : ' shifts') + ' stored on this device';
+
+  var js = jobList();
+  s.sumJobs = js.length < 2 ? (js[0] && js[0].name) || 'One job'
+            : js.map(function(j){ return j.name || 'Job'; }).join(' · ');
   return s;
 }
 
+/* ---- jobs on screen ---- */
+
+/* The bar is absent with one job and present with two, which is the whole seamlessness
+   promise: nobody who never adds a second job ever learns this exists. */
+function renderJobBar(){
+  var js = jobList(), bar = el('jobBar');
+  if (!bar) return;
+  if (js.length < 2){ bar.className = 'jobbar hide'; bar.innerHTML = ''; return; }
+  bar.className = 'jobbar';
+  bar.innerHTML = js.map(function(j){
+    return '<button class="jobchip' + (j.id === state.activeJob ? ' on' : '')
+      + (j.activeStart != null ? ' live' : '') + '" data-job="' + j.id + '">'
+      + '<span class="dot"></span>' + esc(j.name || 'Job') + '</button>';
+  }).join('');
+}
+
+/* Two clocks at once is allowed, but it has to be said out loud — the same wall-clock hour
+   billed to two employers is either a genuine split shift or a punch somebody forgot. */
+function renderJobWarn(nowMs){
+  var w = overlapWarning(nowMs), box = el('jobWarn');
+  if (!box) return;
+  if (!w){ box.className = 'jobwarn hide'; box.innerHTML = ''; return; }
+  box.className = 'jobwarn';
+  box.innerHTML = '⚠ <b>' + w.jobs.length + ' clocks are running</b> — '
+    + w.jobs.map(function(j){ return esc(j.name || 'Job'); }).join(' and ')
+    + '. They have overlapped for <b>' + w.hours.toFixed(2) + ' h</b>. That is fine if you '
+    + 'genuinely worked both; if not, clock one out.';
+}
+
+function renderJobList(){
+  var box = el('jobList'); if (!box) return;
+  var js = jobList();
+  box.innerHTML = js.map(function(j){
+    return '<div class="jobrow" data-job="' + j.id + '">'
+      + '<input type="text" data-jname="' + j.id + '" maxlength="28" value="'
+        + String(j.name || '').replace(/"/g, '&quot;') + '" placeholder="What is this job called?">'
+      + (j.id === state.activeJob ? '<span class="tag">showing</span>'
+                                  : '<button class="mini" data-jshow="' + j.id + '">Show</button>')
+      + (js.length > 1 ? '<button class="mini danger" data-jdel="' + j.id + '">Remove</button>' : '')
+      + '</div>';
+  }).join('');
+  var n = js.length;
+  el('jobNote').innerHTML = n < 2
+    ? 'One job, so nothing extra is shown anywhere. Add a second and a switcher appears above '
+      + 'the clock; remove it again and everything goes back exactly as it is now.'
+    : 'Each job keeps its own shifts, settings and clock. Removing one deletes its shifts '
+      + 'with it, so export a backup first if you might want them.';
+}
+
 function renderCfgSummaries(){
+  renderJobList();
   var s = cfgSummaries();
   for (var k in s) if (Object.prototype.hasOwnProperty.call(s, k)){
     var e = document.getElementById(k);
@@ -7799,8 +8004,8 @@ try {
     var now = Date.now();
     var active = state.activeStart;
     var cfg = state.cfg;
-    var dayMs = todayShiftDay(state.sessions, active, cfg, now);
-    var owners = state.sessions.slice();
+    var dayMs = todayShiftDay(jobSessions(), active, cfg, now);
+    var owners = jobSessions().slice();
     if (active) owners.push({ id: '__active', start: active, end: now });
     var led = buildLedger(owners, cfg, now);
     var tot = sumShiftDay(led.parts, owners, cfg, dayMs);
@@ -7808,7 +8013,7 @@ try {
     var wnc = netCfg();
     if (wnc.enabled && wnc.configured){
       var wp = periodInfo(now, cfg);
-      var wAll = state.sessions.slice();
+      var wAll = jobSessions().slice();
       if (active) wAll.push({ id: '__wa', start: active, end: now });
       var wLed = buildLedger(wAll, cfg);
       var wTot = sumRange(wLed.parts, wp.startMs, wp.endMs);
