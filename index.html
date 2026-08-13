@@ -717,6 +717,7 @@
         <button data-m="period"><b>After 80 hours a pay period</b><span>One running total across the whole period.</span></button>
         <button data-m="shift"><b>After 8 hours in a shift</b><span>Counted from when you clock in — a shift running past midnight keeps counting.</span></button>
         <button data-m="daily"><b>After 8 hours in a day</b><span>Resets at midnight, so a shift crossing it starts again.</span></button>
+        <button data-m="eighty80"><b>After 8 in a day <i>or</i> 80 in the period</b><span>The hospital rule — both count at once, and no hour is counted twice. Only lawful for hospitals and residential care, by agreement made in advance.</span></button>
       </div>
     </div>
 
@@ -1342,6 +1343,7 @@
             <option value="period">Pay period — 80 h cumulative</option>
             <option value="daily">Daily — 8 h, resets at midnight</option>
             <option value="shift">Per shift — 8 h from when you clock in</option>
+            <option value="eighty80">8 and 80 — over 8 in a day OR over 80 in the period</option>
           </select></div>
         <div class="f"><label>Week starts on</label>
           <select id="cWeekStart">
@@ -1782,6 +1784,10 @@ function splitSession(startMs, endMs, cfg){
 function otThresholdOf(cfg){
   return cfg.otMode === 'shift'  ? (cfg.shiftThreshold || 8)
        : cfg.otMode === 'daily'  ? (cfg.dailyThreshold || 8)
+       /* Two thresholds are live at once under 8 and 80. The daily one is what a twelve-hour
+          shift trips every single day, so it is the one a progress bar should count against;
+          the eighty is reported alongside it rather than instead of it. */
+       : cfg.otMode === 'eighty80' ? (cfg.dailyThreshold || 8)
        : cfg.otMode === 'weekly' ? cfg.weeklyThreshold
        : cfg.periodThreshold;
 }
@@ -1803,6 +1809,7 @@ function otBucketKey(part, cfg, sessionId){
      cannot tell the difference. */
   return cfg.otMode === 'shift'  ? 's' + (sessionId != null ? sessionId : part.sessionId)
        : cfg.otMode === 'daily'  ? 'd' + part.dayMs
+       : cfg.otMode === 'eighty80' ? 'd' + part.dayMs      // the day bucket; the period one is read directly
        : cfg.otMode === 'weekly' ? part.weekKey
        : part.periodKey;
 }
@@ -1942,6 +1949,34 @@ function buildLedger(sessions, cfg, nowMs){
       var before = bucket[key] || 0;
       var reg, ot;
       if (adj.noOt){ reg = hours; ot = 0; }            // never accrues toward the threshold
+      /* "8 and 80" — FLSA 7(j), open only to hospitals and residential care facilities and
+         only by agreement made before the work is performed. Two rules run at once: an hour
+         is overtime if it is past the eighth of the DAY, or past the eightieth of the 14-day
+         PERIOD.
+
+         The statute's credit rule — that overtime already paid on the daily rule is not owed
+         again on the period rule — falls out of the shape here rather than needing arithmetic
+         of its own: the period bucket is fed ONLY the hours that survived the daily rule, so
+         an hour can never be counted against both.
+
+         The whole point of the mode is that it is not the same as either rule alone. Three
+         twelves a week is 72 hours: no overtime at all under a 40-hour week, and 24 hours of
+         it here. Five eights plus an extra day is 48 and 32: eight hours of overtime under a
+         40-hour week, and none here. */
+      else if (cfg.otMode === 'eighty80'){
+        var dk = 'd' + c.dayMs, pk = c.periodKey;
+        var dThr = cfg.dailyThreshold || 8, pThr = cfg.periodThreshold || 80;
+        var dBefore = bucket[dk] || 0, pBefore = bucket[pk] || 0;
+        if (adj.straight){
+          reg = hours; ot = 0;
+          bucket[dk] = dBefore + hours; bucket[pk] = pBefore + hours;
+        } else {
+          var dReg = Math.max(0, Math.min(dThr - dBefore, hours));   // survives the day rule
+          reg      = Math.max(0, Math.min(pThr - pBefore, dReg));    // and the period rule
+          ot = hours - reg;
+          bucket[dk] = dBefore + hours; bucket[pk] = pBefore + reg;
+        }
+      }
       /* Accrues toward the threshold but is never itself paid at the overtime rate —
          holiday pay, which pushes the hours you actually worked into overtime sooner
          while staying straight time itself. */
@@ -2020,6 +2055,14 @@ function bucketHoursAt(ledger, t, cfg, sessionId){
       if (t >= p.start && t <= p.end) return ledger.bucket['s' + p.sessionId] || 0;
     }
     return 0;                                  // between shifts, nothing is banked toward one
+  }
+  /* Under 8 and 80 the day bucket is the one to show — but once eighty straight hours are
+     gone every further hour is overtime whatever the day says, and a bar that reset to zero
+     each morning would claim there was allowance left when there is none. */
+  if (cfg.otMode === 'eighty80'){
+    var straight = ledger.bucket['p' + periodInfo(t, cfg).index] || 0;
+    if (straight >= (cfg.periodThreshold || 80)) return otThresholdOf(cfg);
+    return ledger.bucket['d' + (+midnight(t))] || 0;
   }
   var key = otBucketKey({ dayMs: +midnight(t), weekKey: 'w' + weekInfo(t, cfg).index,
                           periodKey: 'p' + periodInfo(t, cfg).index }, cfg);
@@ -4018,6 +4061,9 @@ function render(){
   document.getElementById('otLbl').textContent =
     cfg.otMode === 'shift'  ? 'This shift toward ' + thr + ' h'
   : cfg.otMode === 'daily'  ? 'Today toward ' + thr + ' h'
+  /* Named for the day, because that is the threshold this bar counts against — but the
+     period cap is live too and the label should not pretend otherwise. */
+  : cfg.otMode === 'eighty80' ? 'Today toward ' + thr + ' h · or ' + (cfg.periodThreshold || 80) + ' h this period'
   : cfg.otMode === 'weekly' ? 'This week toward ' + thr + ' h'
   : 'This period toward ' + thr + ' h';
   document.getElementById('otNum').textContent = over > 0
@@ -4348,7 +4394,20 @@ function renderProgress(ledger, period, now){
     ? '<span class="badge">past ' + thr + ' h</span>' : '';
 
   var note = document.getElementById('p80Note'), otRate = money(ledger.otRate);
-  if (cfg.otMode === 'period'){
+  /* Under 8 and 80 this bar is not a milestone belonging to some other rule — the eighty is
+     half of the rule in force, and hours past it bill at overtime exactly as the period rule
+     would. Telling someone to "switch in Settings" to get what they already have is worse
+     than saying nothing. */
+  if (cfg.otMode === 'eighty80'){
+    note.className = 'p80note' + (past ? ' hot' : '');
+    note.innerHTML = past
+      ? '⚡ Past ' + thr + ' h of straight time. <b>Every further hour bills at ' + otRate + '</b>, '
+        + 'whatever the day says.'
+      : '<b>' + left.toFixed(2) + ' h</b> of straight time until every remaining hour this period '
+        + 'bills at <b>' + otRate + '</b> — or sooner on any day you pass '
+        + otThresholdOf(cfg) + ' h.';
+  }
+  else if (cfg.otMode === 'period'){
     note.className = 'p80note' + (past ? ' hot' : '');
     note.innerHTML = past
       ? '⚡ You are past ' + thr + ' h. <b>Every hour for the rest of this period bills at ' + otRate + '.</b>'
@@ -4361,6 +4420,8 @@ function renderProgress(ledger, period, now){
       ? '<b>' + otThresholdOf(cfg) + ' h per shift</b> rule, counted from when you clock in'
       : cfg.otMode === 'daily'
       ? '<b>' + otThresholdOf(cfg) + ' h daily</b> rule, so it resets at midnight'
+      : cfg.otMode === 'eighty80'
+      ? '<b>8 and 80</b> rule, so a day past ' + otThresholdOf(cfg) + ' h pays overtime on its own'
       : '<b>' + cfg.weeklyThreshold + ' h weekly</b> rule, so it resets each week';
     note.className = 'p80note';
     note.innerHTML = past
@@ -5070,8 +5131,15 @@ function renderCalc(){
       + (bank.toOt > 0.004
           ? bank.toOt.toFixed(2) + ' h left before overtime starts (' + bank.threshold + ' h '
             + (cfg.otMode === 'shift' ? 'a shift' : cfg.otMode === 'daily' ? 'a day'
+               : cfg.otMode === 'eighty80' ? 'a day, or ' + (cfg.periodThreshold || 80) + ' h a period'
                : cfg.otMode === 'weekly' ? 'a week' : 'a period') + ').'
-          : 'You are past ' + bank.threshold + ' h — everything further bills at overtime.')
+          /* Under 8 and 80 the day is only half the rule, and being past the day is the state
+             a twelve-hour shift spends most of its time in — so this is exactly where the
+             other half needs saying, not only on the way up to it. */
+          : 'You are past ' + bank.threshold + ' h — everything further bills at overtime.'
+            + (cfg.otMode === 'eighty80'
+                ? ' Hours also bill at overtime past ' + (cfg.periodThreshold || 80)
+                  + ' h a period, whichever comes first.' : ''))
       + '</span>';
   }
   show('qBanked', !!bank);
@@ -5427,6 +5495,8 @@ function paintCalRule(){
     ? 'Anything past ' + (cc.dailyAfter || 8) + ' h in a day counts as overtime right away.'
     : 'Overtime builds the way it really does — after ' + otThresholdOf(state.cfg) + ' h '
       + (state.cfg.otMode === 'shift' ? 'in a shift' : state.cfg.otMode === 'daily' ? 'in a day'
+         : state.cfg.otMode === 'eighty80'
+           ? 'in a day, or ' + (state.cfg.periodThreshold || 80) + ' h in a pay period'
          : state.cfg.otMode === 'weekly' ? 'in a week' : 'in a pay period') + '.';
 }
 

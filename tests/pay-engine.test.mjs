@@ -66,6 +66,90 @@ const gross = (sessions, c = cfg) => {
   return l.parts.reduce((s, p) => s + p.gross, 0);
 };
 
+/* ---------------- the 8 and 80 rule (FLSA 7(j)) ---------------- */
+{
+  const c = { ...E.DEFAULTS, rate: 40, otMultiplier: 1.5, otMode: 'eighty80',
+              dailyThreshold: 8, periodThreshold: 80, lunchMins: 0,
+              holidays: [], banks: [], daysOff: [], vacations: [],
+              periodAnchor: '2026-08-09', periodLengthDays: 14 };
+  const day = (d, len) => ({ id: 'd' + d, start: +new Date(2026, 7, d, 7),
+                             end: +new Date(2026, 7, d, 7) + len * E.HOUR_MS });
+  const tot = ss => { const l = E.buildLedger(ss, c, +new Date(2026, 8, 1));
+                      return E.sumRange(l.parts, +new Date(2026, 7, 9), +new Date(2026, 7, 23)); };
+
+  /* Three twelves a week — 72 hours across the period. A 40-hour week gives none of it as
+     overtime; every twelve-hour day gives four. This gap is the whole reason the mode exists. */
+  const twelves = [9,10,11,16,17,18].map(d => day(d, 12));
+  const t1 = tot(twelves);
+  near('six twelve-hour days is 72 hours', t1.hours, 72);
+  near('and 24 of them are overtime',      t1.otHours, 24);
+  near('paid accordingly', t1.gross, 48 * 40 + 24 * 60);
+
+  const weekly = E.sumRange(E.buildLedger(twelves, { ...c, otMode: 'weekly', weeklyThreshold: 40 },
+                            +new Date(2026, 8, 1)).parts,
+                            +new Date(2026, 7, 9), +new Date(2026, 7, 23));
+  near('the same schedule under a 40-hour week has no overtime at all', weekly.otHours, 0);
+  ok('which is worth real money', t1.gross - weekly.gross > 0,
+     '$' + (t1.gross - weekly.gross).toFixed(2) + ' a period');
+
+  /* And it cuts the other way. Six eights then four eights is 80 hours: no day passes eight
+     and the period never passes eighty, so nothing is overtime — where a 40-hour week would
+     have paid eight hours of it. */
+  const uneven = [9,10,11,12,13,14].map(d => day(d, 8)).concat([16,17,18,19].map(d => day(d, 8)));
+  const t2 = tot(uneven);
+  near('48 then 32 is 80 hours', t2.hours, 80);
+  near('and none of it is overtime here', t2.otHours, 0);
+  const w2 = E.sumRange(E.buildLedger(uneven, { ...c, otMode: 'weekly', weeklyThreshold: 40 },
+                        +new Date(2026, 8, 1)).parts,
+                        +new Date(2026, 7, 9), +new Date(2026, 7, 23));
+  near('where a 40-hour week would pay eight', w2.otHours, 8);
+
+  /* The period rule on its own: ten eights then two more days of eight is 96 hours, no day
+     over eight, so the only overtime comes from passing eighty. */
+  const long = [9,10,11,12,13,16,17,18,19,20,21,22].map(d => day(d, 8));
+  const t3 = tot(long);
+  near('twelve eight-hour days is 96 hours', t3.hours, 96);
+  near('sixteen hours past eighty are overtime', t3.otHours, 16);
+
+  /* Both rules at once, with the credit rule doing its job. Ten ten-hour days is 100 hours:
+     20 hours of daily overtime, and 80 straight hours — so exactly 20, not 40. */
+  const tens = [9,10,11,12,13,16,17,18,19,20].map(d => day(d, 10));
+  const t4 = tot(tens);
+  near('ten ten-hour days is 100 hours', t4.hours, 100);
+  near('and 20 hours of overtime, not 40 — the credit rule', t4.otHours, 20);
+  near('so straight time is capped at eighty', t4.regHours, 80);
+
+  /* Once eighty straight hours are gone, a fresh short day is overtime from its first minute. */
+  const past = [9,10,11,12,13,16,17,18,19,20].map(d => day(d, 8)).concat([day(21, 6)]);
+  const t5 = tot(past);
+  near('80 straight then a six-hour day', t5.hours, 86);
+  near('every hour of that day is overtime', t5.otHours, 6);
+
+  /* Straight-time hours can never exceed either cap, whatever the schedule. */
+  [twelves, uneven, long, tens, past].forEach(function(ss, i){
+    const t = tot(ss);
+    ok('schedule ' + (i + 1) + ': straight time never passes eighty', t.regHours <= 80 + 1e-9,
+       t.regHours.toFixed(2));
+    near('schedule ' + (i + 1) + ': hours all accounted for', t.regHours + t.otHours, t.hours);
+  });
+
+  /* The progress bar: the day bucket while there is period allowance left, pinned full once
+     there is not. */
+  /* The ledger holds what has been worked so far, so a shift four hours old is four hours
+     in the bucket. */
+  const led = E.buildLedger([day(9, 4)], c, +new Date(2026, 7, 9, 11));
+  near('four hours into a day reads four',
+       E.bucketHoursAt(led, +new Date(2026, 7, 9, 11), c), 4);
+  near('and a second day starts from nothing again',
+       E.bucketHoursAt(E.buildLedger([day(9, 8), day(10, 3)], c, +new Date(2026, 7, 10, 10)),
+                       +new Date(2026, 7, 10, 10), c), 3);
+  const ledPast = E.buildLedger(past, c, +new Date(2026, 8, 1));
+  near('but past eighty straight the bar reads full',
+       E.bucketHoursAt(ledPast, +new Date(2026, 7, 21, 9), c), 8);
+
+  near('the headline threshold is the daily one', E.otThresholdOf(c), 8);
+}
+
 /* ------------------------------------------------------------------ */
 group('Pay period boundaries (anchor 2026-07-26, 14 days)');
 {
