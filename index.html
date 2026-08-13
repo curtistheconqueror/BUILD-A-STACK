@@ -2151,6 +2151,18 @@ function calendarPay(days, cfg, style, after){
 function buildLedger(sessions, cfg, nowMs){
   var threshold = otThresholdOf(cfg), otRate = cfg.rate * cfg.otMultiplier;
   var bucket = {}, parts = [];
+  /* A second, separate tally that has nothing to do with the configured overtime rule.
+
+     The 2025-2028 overtime deduction is defined by the FLSA, not by your contract: only
+     hours past 40 in a workweek qualify, and only the half-time premium the FLSA itself
+     requires is deductible. So an employer paying double time on a daily rule generates
+     plenty of contractual overtime and possibly no qualified overtime at all — and deriving
+     the deduction from the configured rule, as this used to, over-claimed on every mode
+     except the weekly one and over-claimed again at any multiplier above 1.5.
+
+     Paid leave and hours marked straight never enter it: a holiday is not time worked, and
+     the FLSA counts hours worked. */
+  var flsa = {};
   /* Earned holidays join the walk as ordinary sessions. Doing it here rather than at each
      call site means the shift log, the period totals, the year to date and the earnings
      bar cannot disagree about whether a holiday counted — there is one answer, computed
@@ -2221,8 +2233,14 @@ function buildLedger(sessions, cfg, nowMs){
         ot = hours - reg;
         bucket[key] = before + hours;
       }
+      var qual = 0;
+      if (!s.paidLeave && !adj.noOt && !adj.straight){
+        var fk = c.weekKey, fBefore = flsa[fk] || 0, fThr = 40;
+        qual = Math.max(0, hours - Math.max(0, Math.min(fThr - fBefore, hours)));
+        flsa[fk] = fBefore + hours;
+      }
       parts.push({ start: c.start, end: c.end, dayMs: c.dayMs, weekKey: c.weekKey, periodKey: c.periodKey,
-                   sessionId: s.id, hours: hours, regHours: reg, otHours: ot,
+                   sessionId: s.id, hours: hours, regHours: reg, otHours: ot, qualOt: qual,
                    nightHours: nightOn ? hours : 0,
                    // What the differential alone added, so it can be shown the way a stub prints it.
                    nightPay: nightOn ? (reg + ot * cfg.otMultiplier) * nw.rate * (adj.mult || 1) : 0,
@@ -2239,21 +2257,23 @@ function buildLedger(sessions, cfg, nowMs){
 /* Sum the ledger over a time window. Parts never straddle a day, and every window we ask
    about starts and ends on a midnight, so a whole-part test is exact. */
 function sumRange(parts, fromMs, toMs){
-  var t = { hours: 0, regHours: 0, otHours: 0, gross: 0 };
+  var t = { hours: 0, regHours: 0, otHours: 0, qualOt: 0, gross: 0 };
   for (var i = 0; i < parts.length; i++){
     var p = parts[i];
     if (p.start >= fromMs && p.end <= toMs){
-      t.hours += p.hours; t.regHours += p.regHours; t.otHours += p.otHours; t.gross += p.gross;
+      t.hours += p.hours; t.regHours += p.regHours; t.otHours += p.otHours;
+      t.qualOt += (p.qualOt || 0); t.gross += p.gross;
     }
   }
   return t;
 }
 
 function sumSession(parts, id){
-  var t = { hours: 0, regHours: 0, otHours: 0, gross: 0 };
+  var t = { hours: 0, regHours: 0, otHours: 0, qualOt: 0, gross: 0 };
   for (var i = 0; i < parts.length; i++){
     var p = parts[i];
-    if (p.sessionId === id){ t.hours += p.hours; t.regHours += p.regHours; t.otHours += p.otHours; t.gross += p.gross; }
+    if (p.sessionId === id){ t.hours += p.hours; t.regHours += p.regHours; t.otHours += p.otHours;
+      t.qualOt += (p.qualOt || 0); t.gross += p.gross; }
   }
   return t;
 }
@@ -2263,12 +2283,13 @@ function sumSession(parts, id){
    footer says one thing while the period tile beside it says another, which is what it did
    before this existed. Parts never straddle a boundary, so a whole-part test is exact. */
 function sumSessionRange(parts, id, fromMs, toMs){
-  var t = { hours: 0, regHours: 0, otHours: 0, gross: 0, clipped: false };
+  var t = { hours: 0, regHours: 0, otHours: 0, qualOt: 0, gross: 0, clipped: false };
   for (var i = 0; i < parts.length; i++){
     var p = parts[i];
     if (p.sessionId !== id) continue;
     if (p.start >= fromMs && p.end <= toMs){
-      t.hours += p.hours; t.regHours += p.regHours; t.otHours += p.otHours; t.gross += p.gross;
+      t.hours += p.hours; t.regHours += p.regHours; t.otHours += p.otHours;
+      t.qualOt += (p.qualOt || 0); t.gross += p.gross;
     } else t.clipped = true;                    // some of this shift belongs to another period
   }
   return t;
@@ -2558,8 +2579,12 @@ function periodNetView(gross, hours, items, n, cfg, mode, otHours, otPremYtdBefo
   // limited to whatever is left of the annual cap.
   var n2 = n;
   if (wagesBefore != null) n2 = Object.assign({}, n2, { wagesBefore: wagesBefore });
+  /* `otHours` here means QUALIFIED overtime — hours past 40 in an FLSA workweek — and the
+     deductible amount is the half-time premium the FLSA requires, not whatever multiplier
+     the contract pays. Double time still deducts 0.5x; a daily rule deducts nothing for
+     hours that never passed 40 in the week. */
   if (n.otBreak !== false && (otHours || 0) > 0){
-    var prem = otHours * (cfg.rate || 0) * ((cfg.otMultiplier || 1.5) - 1);
+    var prem = otHours * (cfg.rate || 0) * 0.5;
     var cap = (TAX2026.otCap[n.filing] || TAX2026.otCap.single);
     var room = Math.max(0, cap - (otPremYtdBefore || 0));
     n2 = Object.assign({}, n2, { fedDeduct: Math.min(prem, room) });
@@ -2599,14 +2624,14 @@ function fedNotWithheld(parts, cfg, nc, fromMs, toMs){
       var inWin = sumRange(parts, a, b);
       if (inWin.gross > 0){
         var bd = periodNetView(whole.gross, whole.hours, nc.items || [], notExempt, cfg,
-                               'hole', whole.otHours, premBefore);
+                               'hole', whole.qualOt, premBefore);
         out.fed += bd.fed * (inWin.gross / whole.gross);
         out.pay += inWin.gross;
         out.otHours += inWin.otHours;
         out.periods++;
       }
     }
-    if (whole.gross > 0) premBefore += whole.otHours * (cfg.rate || 0) * ((cfg.otMultiplier || 1.5) - 1);
+    if (whole.gross > 0) premBefore += (whole.qualOt || 0) * (cfg.rate || 0) * 0.5;
     p = periodInfo(p.endMs, cfg);
   }
   out.fed = Math.round(out.fed * 100) / 100;
@@ -3200,13 +3225,14 @@ function sumShiftDay(parts, sessions, cfg, dayMs){
   (sessions || []).forEach(function(s){
     if (s && s.end > s.start) owner[s.id] = shiftDayMs(shopSession(s, cfg), cfg);
   });
-  var t = { hours: 0, regHours: 0, otHours: 0, gross: 0 };
+  var t = { hours: 0, regHours: 0, otHours: 0, qualOt: 0, gross: 0 };
   for (var i = 0; i < parts.length; i++){
     var p = parts[i];
     var d = owner[p.sessionId];
     if (d == null) d = +midnight(p.start);
     if (d !== dayMs) continue;
-    t.hours += p.hours; t.regHours += p.regHours; t.otHours += p.otHours; t.gross += p.gross;
+    t.hours += p.hours; t.regHours += p.regHours; t.otHours += p.otHours;
+      t.qualOt += (p.qualOt || 0); t.gross += p.gross;
   }
   return t;
 }
@@ -3253,8 +3279,9 @@ function periodHistory(parts, cfg, nowMs, limit){
     var before = sumRange(parts, yearStart, p.startMs);
     out.push({ index: k, start: p.start, lastDay: p.lastDay, payDate: p.payDate,
                startMs: p.startMs, endMs: p.endMs,
-               hours: t.hours, regHours: t.regHours, otHours: t.otHours, gross: t.gross,
-               otHoursBefore: before.otHours,
+               hours: t.hours, regHours: t.regHours, otHours: t.otHours, qualOt: t.qualOt,
+               gross: t.gross,
+               otHoursBefore: before.otHours, qualOtBefore: before.qualOt,
                paid: +midnight(nowMs) >= +midnight(+p.payDate) });
   }
   return out;
@@ -4173,7 +4200,7 @@ function render(){
   var premBefore = Math.max(0, otPremiumOf(ytdT) + ytdBasePremium() - otPremiumOf(per));
   var wagesBefore = wagesYtdBefore(ledger, now, per);
   if (netOn){
-    var perView = currentNetView(per.gross, per.hours, null, per.otHours, premBefore, wagesBefore);
+    var perView = currentNetView(per.gross, per.hours, null, per.qualOt, premBefore, wagesBefore);
     if (holeMode){
       txt = money(perView.net, 2);
       if (perView.net < 0) mEl.classList.add('inhole');
@@ -4183,7 +4210,7 @@ function render(){
         : 'in the green &nbsp;·&nbsp; gross <b>' + money(per.gross) + '</b> · deductions ' + money(perView.deductions);
     } else {
       var without = currentNetView(per.gross - shift.gross, Math.max(0, per.hours - shift.hours),
-                                   null, Math.max(0, per.otHours - shift.otHours), premBefore,
+                                   null, Math.max(0, per.qualOt - (shift.qualOt || 0)), premBefore,
                                    wagesBefore);
       var sessionNet = perView.net - without.net;
       txt = money(active ? sessionNet : 0, active && state.unit === 'sec' ? 4 : 2);
@@ -4381,6 +4408,12 @@ function renderYtd(ledger, now){
   var base = ytdBase();
   var gross = t.gross + (base.gross || 0) - extraLunchMoney();
   var otH = t.otHours + (base.ot || 0);
+  /* Two different overtimes on this screen, deliberately. `otH` is what the contract pays
+     you for; `qualH` is what the FLSA counts toward the tax deduction — hours past 40 in a
+     workweek. For anyone on a plain weekly rule they are the same number. For anyone on a
+     daily, per-shift or 8-and-80 rule they are not, and the difference is the whole reason
+     the deduction was over-claimed before. */
+  var qualH = t.qualOt + (base.ot || 0);
   var prem = otPremiumOf(t) + ytdBasePremium();
   document.getElementById('ytdYear').textContent = y;
   document.getElementById('yGross').textContent = money(gross);
@@ -4395,7 +4428,11 @@ function renderYtd(ledger, now){
     + '<br>' + t.regHours.toFixed(2) + ' h straight · ' + t.otHours.toFixed(2) + ' h OT tracked';
   document.getElementById('yOt').textContent = otH.toFixed(2) + ' h';
   document.getElementById('yOtDet').innerHTML = money(otH * cfg.rate * (cfg.otMultiplier || 1.5)) + ' of OT pay'
-    + '<br>' + money(prem) + ' of it is premium'
+    + (Math.abs(qualH - otH) > 0.004
+        ? '<br>' + qualH.toFixed(2) + ' h of it counts for the tax break'
+          + ' <span class="sub">(over 40 h in a week)</span>'
+        : '')
+    + '<br>' + money(prem) + ' of premium qualifies'
     + (base.ot ? '<br>incl. ' + base.ot.toFixed(2) + ' h carried in' : '');
   document.getElementById('yBaseSummary').textContent =
     base.gross ? 'carrying in ' + money(base.gross) : '';
@@ -4535,7 +4572,7 @@ function renderColSums(ledger, period, now, active, netOn){
   var pr = document.getElementById('sum_progress');
   if (pr){
     if (netOn){
-      var pv = currentNetView(per.gross, per.hours, null, per.otHours, 0);
+      var pv = currentNetView(per.gross, per.hours, null, per.qualOt, 0);
       pr.textContent = (pv.net < 0 ? '−' : '') + money(Math.abs(pv.net)) + ' kept · ' + per.hours.toFixed(1) + ' h';
     } else pr.textContent = money(per.gross) + ' · ' + per.hours.toFixed(1) + ' h';
   }
@@ -4571,7 +4608,7 @@ function extraLunchMoney(){
 function ytdBase(){ return netCfg().ytdBase || { gross: 0, hours: null, ot: null, through: '' }; }
 function ytdBasePremium(){
   var b = ytdBase();
-  return (b.ot || 0) * state.cfg.rate * ((state.cfg.otMultiplier || 1.5) - 1);
+  return (b.ot || 0) * state.cfg.rate * 0.5;
 }
 
 function openYtdBase(){
@@ -4614,7 +4651,7 @@ function renderProgress(ledger, period, now){
   var lbl = document.querySelector('#progress .cumelbl');
   var xLunch = extraLunchMoney();
   if (pNetOn){
-    var pv = currentNetView(Math.max(0, cume.gross - xLunch), cume.hours, null, cume.otHours, 0);
+    var pv = currentNetView(Math.max(0, cume.gross - xLunch), cume.hours, null, cume.qualOt, 0);
     document.getElementById('cumeGross').textContent = money(pv.net);
     if (lbl) lbl.textContent = pnc.view === 'hole'
       ? (pv.net < 0 ? 'Still owed to deductions this period' : 'Truly yours this pay period')
@@ -4732,8 +4769,8 @@ function renderPast(ledger, now){
   el('pastList').innerHTML = list.map(function(p){
     var amount, sub;
     if (view === 'net'){
-      var bd = currentNetView(p.gross, p.hours, 'net', p.otHours,
-                              p.otHoursBefore * state.cfg.rate * ((state.cfg.otMultiplier || 1.5) - 1));
+      var bd = currentNetView(p.gross, p.hours, 'net', p.qualOt,
+                              (p.qualOtBefore || 0) * state.cfg.rate * 0.5);
       amount = money(bd.net);
       sub = 'gross ' + money(p.gross) + ' · withheld ' + money(p.gross - bd.net);
     } else {
@@ -5822,7 +5859,8 @@ function ytdSums(ledger, now){
   }
   return sumRange(ledger.parts, from, +new Date(y + 1, 0, 1));
 }
-function otPremiumOf(t){ return (t.otHours || 0) * state.cfg.rate * ((state.cfg.otMultiplier || 1.5) - 1); }
+/* The deduction is a half-time premium on qualified hours, whatever the contract pays. */
+function otPremiumOf(t){ return (t.qualOt || 0) * state.cfg.rate * 0.5; }
 
 /* This year's wages before the period being priced — the year to date, carry-in included,
    less the period itself. Social Security and the Additional Medicare surtax are both annual
@@ -7667,7 +7705,7 @@ try {
       var wLed = buildLedger(wAll, cfg);
       var wTot = sumRange(wLed.parts, wp.startMs, wp.endMs);
       var wPremBefore = Math.max(0, otPremiumOf(ytdSums(wLed, now)) - otPremiumOf(wTot));
-      var wv = currentNetView(wTot.gross, wTot.hours, null, wTot.otHours, wPremBefore);
+      var wv = currentNetView(wTot.gross, wTot.hours, null, wTot.qualOt, wPremBefore);
       wmoney.textContent = money(wv.net);
       wmoney.style.color = wv.net < 0 ? 'var(--bad)' : '';
       wsub.textContent = (wnc.view === 'hole'

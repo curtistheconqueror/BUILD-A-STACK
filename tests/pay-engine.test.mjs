@@ -262,6 +262,73 @@ const gross = (sessions, c = cfg) => {
        withY.net - noY.net, noY.ss - withY.addMedicare);
 }
 
+/* ---------------- qualified overtime is FLSA's, not the contract's ---------------- */
+{
+  /* The 2025-2028 deduction is defined by the FLSA: only hours past 40 in a workweek
+     qualify, and only the half-time premium the FLSA itself requires is deductible. Neither
+     figure comes from the employer's own rule, which is the whole point. */
+  const base = { ...E.DEFAULTS, rate: 40, lunchMins: 0, weekStartDay: 0,
+                 holidays: [], banks: [], daysOff: [], vacations: [],
+                 periodAnchor: '2026-08-09', periodLengthDays: 14 };
+  const day = (d, len) => ({ id: 'd' + d, start: +new Date(2026, 7, d, 7),
+                             end: +new Date(2026, 7, d, 7) + len * E.HOUR_MS });
+  const sum = (ss, cfg) => E.sumRange(E.buildLedger(ss, cfg, +new Date(2026, 8, 1)).parts,
+                                      +new Date(2026, 7, 9), +new Date(2026, 7, 23));
+
+  // Five nines: 45 hours in a week, so five of them are past forty.
+  const nines = [9, 10, 11, 12, 13].map(d => day(d, 9));
+  near('45 hours in a week qualifies 5',
+       sum(nines, { ...base, otMode: 'weekly', weeklyThreshold: 40 }).qualOt, 5);
+
+  /* Same shifts on a daily rule pay overtime every day — nine hours of contractual overtime
+     — but the FLSA figure does not move, because the week is still 45. */
+  const daily = sum(nines, { ...base, otMode: 'daily', dailyThreshold: 8 });
+  near('a daily rule pays overtime on all five days', daily.otHours, 5);
+  near('but qualified overtime is still 5',           daily.qualOt, 5);
+
+  /* Four eights and one four: 36 hours. A daily rule at 6 h pays contractual overtime; the
+     FLSA qualifies none of it, because the week never reached forty. */
+  const short = [9, 10, 11, 12].map(d => day(d, 8)).concat([day(13, 4)]);
+  const s6 = sum(short, { ...base, otMode: 'daily', dailyThreshold: 6 });
+  ok('a low daily threshold pays contractual overtime', s6.otHours > 0, s6.otHours + ' h');
+  near('and none of it qualifies',                     s6.qualOt, 0);
+
+  /* Under 8 and 80, three twelves a week is 24 hours of contractual overtime and 0 qualified
+     — 36 hours a week never reaches forty. This is exactly the case the old formula got
+     wrong, and it is the commonest schedule in a hospital. */
+  const twelves = [9, 10, 11, 16, 17, 18].map(d => day(d, 12));
+  const e80 = sum(twelves, { ...base, otMode: 'eighty80', dailyThreshold: 8, periodThreshold: 80 });
+  near('8 and 80 pays 24 hours of overtime', e80.otHours, 24);
+  near('and qualifies none of it',           e80.qualOt, 0);
+
+  /* The multiplier changes what is PAID, never what is deductible. */
+  const cfg15 = { ...base, otMode: 'weekly', weeklyThreshold: 40, otMultiplier: 1.5 };
+  const cfg2  = { ...cfg15, otMultiplier: 2 };
+  near('double time pays more', sum(nines, cfg2).gross - sum(nines, cfg15).gross, 5 * 40 * 0.5);
+  near('but qualifies the same hours', sum(nines, cfg2).qualOt, sum(nines, cfg15).qualOt);
+
+  const nc = { filing: 'single', dependents: 0, ficaOn: true, statePct: 4.95, items: [], otBreak: true };
+  const at15 = E.periodNetView(4000, 80, [], nc, cfg15, 'hole', 5, 0);
+  const at2  = E.periodNetView(4000, 80, [], nc, cfg2,  'hole', 5, 0);
+  near('and the deduction is half-time either way', at15.otDeducted, 5 * 40 * 0.5);
+  near('double time deducts no more than time and a half', at2.otDeducted, at15.otDeducted);
+
+  // Paid leave is not time worked, so a holiday week does not qualify on the holiday's hours.
+  const withHol = { ...base, otMode: 'weekly', weeklyThreshold: 40,
+                    holidays: [{ id: 'x', name: 'Test', on: true, kind: 'on', date: '2026-08-12',
+                                 ot: true }] };
+  const w = sum([9, 10, 11, 12, 13].map(d => day(d, 8)), withHol);
+  ok('a holiday week can be paid past forty', w.hours >= 40, w.hours + ' h');
+  near('without qualifying any hours for the deduction', w.qualOt, 0);
+
+  // The annual cap still applies on top.
+  const capped = E.periodNetView(60000, 80, [], nc, cfg15, 'hole', 800, 0);
+  near('the deduction is still capped', capped.otDeducted, E.TAX2026.otCap.single);
+
+  near('turning the break off deducts nothing',
+       E.periodNetView(4000, 80, [], { ...nc, otBreak: false }, cfg15, 'hole', 5, 0).otDeducted, 0);
+}
+
 /* ------------------------------------------------------------------ */
 group('Pay period boundaries (anchor 2026-07-26, 14 days)');
 {
