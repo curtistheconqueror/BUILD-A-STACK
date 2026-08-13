@@ -150,6 +150,118 @@ const gross = (sessions, c = cfg) => {
   near('the headline threshold is the daily one', E.otThresholdOf(c), 8);
 }
 
+/* ---------------- Social Security is an annual cap, not a per-cheque one ---------------- */
+{
+  const T = E.TAX2026;
+  const nc = { filing: 'single', dependents: 0, ficaOn: true, statePct: 4.95, items: [] };
+  const P = 26, per = 600000 / P;                    // $23,076.92 a cheque
+
+  /* Left out, it behaves as it always did: the base divided by the number of periods. That
+     is exactly right for anyone who never reaches the base, which is nearly everyone. */
+  const flat = E.netBreakdown(per, 0, 0, nc, P);
+  near('with no year-to-date it uses the per-period ceiling',
+       flat.ss, (T.ssWageBase / P) * T.ssRate);
+
+  /* Given the year to date, it does what payroll does: full rate until the base, nothing
+     after. The annual total is the same either way — only the distribution differs, and the
+     distribution is what a cheque shows. */
+  let ytd = 0, paid = [], crossed = 0;
+  for (let i = 0; i < P; i++){
+    const bd = E.netBreakdown(per, 0, 0, { ...nc, wagesBefore: ytd }, P);
+    paid.push(bd.ss); ytd += per;
+    if (bd.ss > 0.005) crossed = i + 1;
+  }
+  near('the first cheque pays the full rate', paid[0], per * T.ssRate);
+  near('the last one pays nothing',           paid[P - 1], 0);
+  /* $184,500 / $23,076.92 is just under eight cheques, so the eighth is the one that
+     straddles the base and the ninth is the first clear of it. */
+  near('it stops during the eighth',          crossed, 8);
+  near('and the year still totals the same',
+       paid.reduce((a, b) => a + b, 0), T.ssWageBase * T.ssRate);
+  near('which is the same total the old way gave', flat.ss * P, T.ssWageBase * T.ssRate);
+
+  /* The cheque you actually get is more than three times what a per-period cap claimed. */
+  ok('an early cheque withholds far more than the flat figure said',
+     paid[0] > flat.ss * 3, '$' + paid[0].toFixed(2) + ' vs $' + flat.ss.toFixed(2));
+
+  // A wage that never reaches the base is untouched by any of this.
+  const small = 87530 / P;
+  near('someone under the base pays the same either way',
+       E.netBreakdown(small, 0, 0, { ...nc, wagesBefore: 87530 - small }, P).ss,
+       E.netBreakdown(small, 0, 0, nc, P).ss);
+
+  // Exactly at the base, and one dollar past it.
+  near('the cheque that lands exactly on the base is still fully taxed',
+       E.netBreakdown(1000, 0, 0, { ...nc, wagesBefore: T.ssWageBase - 1000 }, P).ss, 1000 * T.ssRate);
+  near('the next dollar is not', E.netBreakdown(1000, 0, 0, { ...nc, wagesBefore: T.ssWageBase }, P).ss, 0);
+  near('and a cheque straddling it is split',
+       E.netBreakdown(1000, 0, 0, { ...nc, wagesBefore: T.ssWageBase - 400 }, P).ss, 400 * T.ssRate);
+
+  near('switching FICA off zeroes it whatever the year to date',
+       E.netBreakdown(per, 0, 0, { ...nc, ficaOn: false, wagesBefore: 0 }, P).ss, 0);
+}
+
+/* ---------------- Additional Medicare, 0.9% over $200,000 ---------------- */
+{
+  const T = E.TAX2026;
+  const nc = { filing: 'single', dependents: 0, ficaOn: true, statePct: 4.95, items: [] };
+  const P = 26;
+
+  near('the rate is 0.9%',    T.addMedicareRate, 0.009);
+  near('it starts at 200,000', T.addMedicareFrom, 200000);
+
+  near('below the line nothing is owed',
+       E.netBreakdown(3000, 0, 0, { ...nc, wagesBefore: 100000 }, P).addMedicare, 0);
+  near('above it the whole cheque is surcharged',
+       E.netBreakdown(3000, 0, 0, { ...nc, wagesBefore: 250000 }, P).addMedicare, 3000 * 0.009);
+  /* The cheque that crosses the line is surcharged only on the part above it. */
+  near('the crossing cheque is split at the line',
+       E.netBreakdown(3000, 0, 0, { ...nc, wagesBefore: 199000 }, P).addMedicare, 2000 * 0.009);
+
+  // A whole year at $600k: the surtax is owed on everything past the first $200,000.
+  let ytd = 0, add = 0;
+  for (let i = 0; i < P; i++){
+    add += E.netBreakdown(600000 / P, 0, 0, { ...nc, wagesBefore: ytd }, P).addMedicare;
+    ytd += 600000 / P;
+  }
+  near('a $600,000 year owes 0.9% on $400,000', add, 400000 * 0.009);
+  ok('which is $3,600 nobody was withholding before', Math.abs(add - 3600) < 0.01, '$' + add.toFixed(2));
+
+  /* Withheld from $200,000 whatever the filing status: the higher married threshold is
+     settled on the return, not in payroll. */
+  near('married is withheld on the same $200,000 basis',
+       E.netBreakdown(3000, 0, 0, { ...nc, filing: 'married', wagesBefore: 250000 }, P).addMedicare,
+       3000 * 0.009);
+
+  near('with no year-to-date given, nothing is assumed',
+       E.netBreakdown(3000, 0, 0, nc, P).addMedicare, 0);
+  near('and FICA off zeroes it too',
+       E.netBreakdown(3000, 0, 0, { ...nc, ficaOn: false, wagesBefore: 250000 }, P).addMedicare, 0);
+
+  // It reaches the totals rather than being computed and dropped.
+  const bd = E.netBreakdown(3000, 0, 0, { ...nc, wagesBefore: 250000 }, P);
+  near('it is inside the tax total', bd.taxes, bd.fed + bd.state + bd.ss + bd.medicare + bd.addMedicare);
+  near('and taken out of take-home', bd.net, 3000 - bd.taxes);
+
+  /* periodNetView is the door every screen comes through, so the year to date has to survive
+     the trip. */
+  const cfg = { ...E.DEFAULTS, rate: 200, otMultiplier: 1.5, periodLengthDays: 14 };
+  const withY = E.periodNetView(3000, 80, [], nc, cfg, 'hole', 0, 0, 250000);
+  const noY   = E.periodNetView(3000, 80, [], nc, cfg, 'hole', 0, 0);
+  ok('periodNetView passes the year to date down', withY.addMedicare > 0 && noY.addMedicare === 0,
+     `$${withY.addMedicare.toFixed(2)} vs $${noY.addMedicare.toFixed(2)}`);
+  /* Take-home goes UP, not down, and that is the whole point of doing this properly: by
+     $250,000 Social Security has stopped, and losing 6.2% dwarfs picking up 0.9%. Someone
+     high-earning sees their cheque grow mid-year, which the old per-period cap hid
+     completely. */
+  ok('Social Security has stopped by then', withY.ss === 0 && noY.ss > 0,
+     `$${withY.ss.toFixed(2)} vs $${noY.ss.toFixed(2)}`);
+  ok('so take-home rises despite the surtax', withY.net > noY.net,
+     `$${withY.net.toFixed(2)} vs $${noY.net.toFixed(2)}`);
+  near('by the 6.2% that stopped, less the 0.9% that started',
+       withY.net - noY.net, noY.ss - withY.addMedicare);
+}
+
 /* ------------------------------------------------------------------ */
 group('Pay period boundaries (anchor 2026-07-26, 14 days)');
 {

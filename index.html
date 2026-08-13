@@ -2416,6 +2416,9 @@ function quantize(ms, unit){
 var TAX_YEAR = 2026;
 var TAX2026 = {
   ssRate: 0.062, ssWageBase: 184500, medicareRate: 0.0145,
+  /* Employee-only, no employer match, and withheld from the $200,000 mark regardless of
+     filing status — the married threshold is reconciled on the return, not in payroll. */
+  addMedicareRate: 0.009, addMedicareFrom: 200000,
   ilRate: 0.0495,
   depCredit: 2200,
   /* 2025-2028 overtime deduction: only the PREMIUM half of OT pay, federal income tax
@@ -2494,9 +2497,28 @@ function netBreakdown(gross, fixedPre, fixedPost, n, periodsPerYear, scale){
   var taxable = Math.max(0, gross - pre);
   var sc = scale === undefined ? 1 : scale;
 
-  var ssCap = TAX2026.ssWageBase / periodsPerYear;
-  var ss = n.ficaOn === false ? 0 : Math.min(taxable, ssCap) * TAX2026.ssRate;
+  /* Social Security stops for the year once your wages pass the base — it is an annual cap
+     on cumulative wages, not a per-cheque ceiling. Dividing the base by the number of periods
+     gets the yearly total right and the individual cheques wrong for anyone who crosses it:
+     they pay the full 6.2% until they cross, then nothing, and their take-home visibly jumps
+     mid-year. At $600k that is $1,430.77 a cheque for six cheques and zero for the other
+     twenty, where a per-period cap reported a flat $439.96 all year.
+
+     `wagesBefore` is this year's earlier taxable wages. Left out, it falls back to the old
+     per-period ceiling, which is exactly right for anyone who never reaches the base. */
+  var before = Math.max(0, n.wagesBefore || 0);
+  var ssRoom = n.wagesBefore == null ? TAX2026.ssWageBase / periodsPerYear
+                                     : Math.max(0, TAX2026.ssWageBase - before);
+  var ss = n.ficaOn === false ? 0 : Math.min(taxable, ssRoom) * TAX2026.ssRate;
   var medicare = n.ficaOn === false ? 0 : taxable * TAX2026.medicareRate;
+
+  /* Additional Medicare: another 0.9% on wages past $200,000, employee-only and with no
+     employer match. Employers must withhold it on that basis whatever your filing status —
+     the higher married threshold is settled at filing, not in payroll — so this follows the
+     payroll rule rather than the return. */
+  var addMedFrom = TAX2026.addMedicareFrom;
+  var over = Math.max(0, (before + taxable) - addMedFrom) - Math.max(0, before - addMedFrom);
+  var addMedicare = n.ficaOn === false ? 0 : Math.max(0, Math.min(over, taxable)) * TAX2026.addMedicareRate;
 
   var fedTaxable = Math.max(0, taxable - (n.fedDeduct || 0));   // OT-premium deduction, fed only
   var fed = n.fedExempt ? 0
@@ -2506,9 +2528,9 @@ function netBreakdown(gross, fixedPre, fixedPost, n, periodsPerYear, scale){
     : (n.stateOverride != null ? n.stateOverride * sc
        : taxable * ((n.statePct != null ? n.statePct : 4.95) / 100));
 
-  var taxes = fed + st + ss + medicare;
+  var taxes = fed + st + ss + medicare + addMedicare;
   return { gross: gross, pretax: pre, taxable: taxable,
-           fed: fed, state: st, ss: ss, medicare: medicare,
+           fed: fed, state: st, ss: ss, medicare: medicare, addMedicare: addMedicare,
            taxes: taxes, posttax: fixedPost,
            deductions: pre + taxes + fixedPost,
            net: gross - pre - taxes - fixedPost };
@@ -2519,7 +2541,11 @@ function netBreakdown(gross, fixedPre, fixedPost, n, periodsPerYear, scale){
             smoothly from zero at the true net rate           (the default)
    'hole' — the full period's fixed deductions counted up front, so it starts
             negative and crossing zero means you are genuinely in the green */
-function periodNetView(gross, hours, items, n, cfg, mode, otHours, otPremYtdBefore){
+/* `wagesBefore` is this year's taxable wages before this period — the same shape as
+   otPremYtdBefore, and needed for the same reason: both Social Security and the Additional
+   Medicare surtax are annual thresholds, so a period cannot be priced without knowing what
+   came before it. Omitted, netBreakdown falls back to the per-period ceiling. */
+function periodNetView(gross, hours, items, n, cfg, mode, otHours, otPremYtdBefore, wagesBefore){
   var stdHours = Math.max(1, Math.round((cfg.periodLengthDays || 14) / 7) * 40);
   var pre = 0, post = 0;
   (items || []).forEach(function(it){
@@ -2531,11 +2557,12 @@ function periodNetView(gross, hours, items, n, cfg, mode, otHours, otPremYtdBefo
   // The overtime tax break: this period's OT premium comes off federal taxable income,
   // limited to whatever is left of the annual cap.
   var n2 = n;
+  if (wagesBefore != null) n2 = Object.assign({}, n2, { wagesBefore: wagesBefore });
   if (n.otBreak !== false && (otHours || 0) > 0){
     var prem = otHours * (cfg.rate || 0) * ((cfg.otMultiplier || 1.5) - 1);
     var cap = (TAX2026.otCap[n.filing] || TAX2026.otCap.single);
     var room = Math.max(0, cap - (otPremYtdBefore || 0));
-    n2 = Object.assign({}, n, { fedDeduct: Math.min(prem, room) });
+    n2 = Object.assign({}, n2, { fedDeduct: Math.min(prem, room) });
   }
   var bd = netBreakdown(gross, pre * frac, post * frac, n2, periods, frac);
   bd.otDeducted = n2.fedDeduct || 0;
@@ -4144,8 +4171,9 @@ function render(){
   mEl.classList.remove('inhole');
   var ytdT = ytdSums(ledger, now);
   var premBefore = Math.max(0, otPremiumOf(ytdT) + ytdBasePremium() - otPremiumOf(per));
+  var wagesBefore = wagesYtdBefore(ledger, now, per);
   if (netOn){
-    var perView = currentNetView(per.gross, per.hours, null, per.otHours, premBefore);
+    var perView = currentNetView(per.gross, per.hours, null, per.otHours, premBefore, wagesBefore);
     if (holeMode){
       txt = money(perView.net, 2);
       if (perView.net < 0) mEl.classList.add('inhole');
@@ -4155,7 +4183,8 @@ function render(){
         : 'in the green &nbsp;·&nbsp; gross <b>' + money(per.gross) + '</b> · deductions ' + money(perView.deductions);
     } else {
       var without = currentNetView(per.gross - shift.gross, Math.max(0, per.hours - shift.hours),
-                                   null, Math.max(0, per.otHours - shift.otHours), premBefore);
+                                   null, Math.max(0, per.otHours - shift.otHours), premBefore,
+                                   wagesBefore);
       var sessionNet = perView.net - without.net;
       txt = money(active ? sessionNet : 0, active && state.unit === 'sec' ? 4 : 2);
       netlineEl.innerHTML = active
@@ -5221,9 +5250,10 @@ function netCfg(){
 }
 
 /* Period-so-far net figure in the configured view mode. */
-function currentNetView(gross, hours, mode, otHours, otPremYtdBefore){
+function currentNetView(gross, hours, mode, otHours, otPremYtdBefore, wagesBefore){
   var nc = netCfg();
-  return periodNetView(gross, hours, nc.items, nc, state.cfg, mode || nc.view, otHours, otPremYtdBefore);
+  return periodNetView(gross, hours, nc.items, nc, state.cfg, mode || nc.view, otHours,
+                       otPremYtdBefore, wagesBefore);
 }
 
 /* ============================ quick pay calculator ============================
@@ -5416,7 +5446,7 @@ function renderCalc(){
     var bd = periodNetView(totGross, totHours, nc.items, n2, pcfg, 'net', 0, 0);
     html += '<div class="qline"><span>Federal</span><b style="color:var(--bad)">−' + money(bd.fed) + '</b></div>'
           + '<div class="qline"><span>State</span><b style="color:var(--bad)">−' + money(bd.state) + '</b></div>'
-          + '<div class="qline"><span>Social Security &amp; Medicare</span><b style="color:var(--bad)">−' + money(bd.ss + bd.medicare) + '</b></div>'
+          + '<div class="qline"><span>Social Security &amp; Medicare</span><b style="color:var(--bad)">−' + money(bd.ss + bd.medicare + bd.addMedicare) + '</b></div>'
           + (bd.fixedApplied > 0.004
               ? '<div class="qline"><span>Your other deductions</span><b style="color:var(--bad)">−' + money(bd.fixedApplied) + '</b></div>' : '')
           + '<div class="qline tot"><span>Take-home</span><b>' + money(bd.net) + '</b></div>';
@@ -5794,6 +5824,19 @@ function ytdSums(ledger, now){
 }
 function otPremiumOf(t){ return (t.otHours || 0) * state.cfg.rate * ((state.cfg.otMultiplier || 1.5) - 1); }
 
+/* This year's wages before the period being priced — the year to date, carry-in included,
+   less the period itself. Social Security and the Additional Medicare surtax are both annual
+   thresholds, so neither can be worked out from one cheque in isolation.
+
+   Gross rather than taxable: pre-tax deductions would shave a little off the true Social
+   Security wage base, so this reaches the cap marginally early. On a $184,500 base and a
+   healthcare deduction measured in tens of dollars a cheque, that moves the crossing by a
+   fraction of one pay period, where using a per-period ceiling moved it by six months. */
+function wagesYtdBefore(ledger, now, per){
+  var ytd = ytdSums(ledger, now).gross + (ytdBase().gross || 0);
+  return Math.max(0, ytd - ((per && per.gross) || 0));
+}
+
 function renderNetItems(){
   var nc = netCfg(), box = document.getElementById('nItems'), h = '';
   nc.items.forEach(function(it){
@@ -5815,7 +5858,7 @@ function previewNet(){
   document.getElementById('nPreview').innerHTML =
     'On a standard ' + bd.stdHours + ' h check of <b>' + money(stdGross) + '</b>:'
     + '<br>Federal ' + money(bd.fed) + ' · State ' + money(bd.state)
-    + ' · SS ' + money(bd.ss) + ' · Medicare ' + money(bd.medicare)
+    + ' · SS ' + money(bd.ss) + ' · Medicare ' + money(bd.medicare + bd.addMedicare)
     + (bd.fixedTotal ? ' · Fixed ' + money(bd.fixedTotal) : '')
     + '<br>Take-home <span class="pay">' + money(bd.net) + '</span>'
     + '  (' + (stdGross ? (100*bd.net/stdGross).toFixed(1) : '0') + '% of gross)';
