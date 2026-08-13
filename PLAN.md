@@ -145,7 +145,7 @@ A per-period cap hid that entirely.
 
 Engine suite: 548 → 620 assertions.
 
-### Stage 2 — The job layer, invisible
+### Stage 2 — The job layer, invisible *(done)*
 
 Introduce `state.jobs`, the migration, `jobId` on sessions, per-job ledgers and the combining
 layer. **Ship it with the UI completely unchanged and exactly one job.**
@@ -154,7 +154,7 @@ layer. **Ship it with the UI completely unchanged and exactly one job.**
 refactor is safe — if the app looks identical to a test written before the refactor, the
 refactor did not break it.
 
-### Stage 3 — The second job, visible
+### Stage 3 — The second job, visible *(done)*
 
 Add, name, edit and remove jobs. A job switcher that only appears at two or more. Clocking in
 against a specific job. The overlap guard. Per-job and combined views of every tile.
@@ -162,7 +162,7 @@ against a specific job. The overlap guard. Per-job and combined views of every t
 *Smoke test:* a new suite covering add/switch/remove, overlap, per-job overtime independence,
 and — critically — that removing the second job returns the interface exactly to Stage 2.
 
-### Stage 4 — Cross-job tax intelligence
+### Stage 4 — Cross-job tax intelligence *(done)*
 
 Combined year-to-date. Social Security overpayment detection with the refundable figure.
 The under-withholding estimate with what to do about it.
@@ -170,7 +170,7 @@ The under-withholding estimate with what to do about it.
 *Smoke test:* engine assertions against hand-computed two-job scenarios, including one that
 crosses the wage base and one that crosses a bracket.
 
-### Stage 5 — The profession layer
+### Stage 5 — The profession layer *(partly done)*
 
 The `PROFESSIONS` table, the setup wizard (field → role → state), and profile-driven
 rendering. Ships with `transit_operator` and `nurse` — both `clock`, so the mechanism is
@@ -178,7 +178,16 @@ proven without a new earning model.
 
 Existing users are migrated to `transit_operator` silently and see no change.
 
-Two pieces of the nurse profile are **not** data and have to be built here:
+**Shipped so far:** the `PROFESSIONS` table grouped by field and role, a per-job picker in
+Settings, the same question on the first-run screen (optional, and it visibly preselects the
+overtime rule rather than deciding behind your back), and `applyProfession()` — the one
+function that decides which settings groups a profession is worth showing. Transit operator,
+nurse, tech, trades and a plain hourly option.
+
+A profession suggests; it never corrects. Change the overtime rule yourself and the job is
+marked as decided, so picking a profession later will not quietly put it back.
+
+**Still to build here** — two pieces of the nurse profile that are not data:
 
 - **Stacking premiums.** Night *and* weekend *and* charge can apply to the same hour. The
   engine currently has one differential window. This becomes a list of windows, each with its

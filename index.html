@@ -144,7 +144,9 @@
   /* ---- job rows in Settings ---- */
   .jobrow{display:flex;align-items:center;gap:9px;border:1px solid var(--border);
     border-radius:11px;padding:8px 10px;margin-top:8px;min-height:44px}
-  .jobrow input[type=text]{flex:1 1 auto;min-width:0}
+  .jobrow{flex-wrap:wrap}
+  .jobrow input[type=text]{flex:1 1 140px;min-width:0}
+  .jobrow .jprof{flex:1 1 150px;min-width:0}
   .jobrow .tag{font-size:11.4px;letter-spacing:1.4px;text-transform:uppercase;font-weight:800;
     color:var(--acc);flex:none}
 
@@ -891,6 +893,10 @@
     <h2>Set up your clock</h2>
     <p class="slead">Two minutes now and it runs itself from here. Everything stays in this browser — nothing is sent anywhere.</p>
     <div class="sgrid">
+      <!-- Asked first because it sets sensible answers to several questions below. Optional:
+           skipping it leaves every default exactly as it was. -->
+      <div class="f"><label for="sProf">What kind of work do you do?</label>
+        <select id="sProf"></select></div>
       <div class="f"><label for="sRate">What do you earn per hour?</label>
         <div class="prefixed"><span>$</span><input type="number" id="sRate" min="0" step="0.01" placeholder="0.00" inputmode="decimal"></div></div>
       <div class="f"><label for="sAnchor">When did your current pay period start?</label>
@@ -3527,6 +3533,53 @@ if (state.__migrated){ delete state.__migrated; try { save(); } catch(e){} }
    is what makes this invisible: several hundred existing references to state.cfg.rate keep
    working, unchanged, and a save with one job is indistinguishable from one written before
    jobs existed apart from the wrapper. */
+/* ============================ professions ============================
+
+   A profession is a data record, not a code path. What actually varies between them is how
+   money accrues — a clock that runs, units logged against a threshold, or a contract divided
+   over pay dates — and everything downstream of gross pay is the same for all three.
+
+   These are starting points, never locks: every value a profile sets can still be changed in
+   Settings afterwards. What a profile does change for good is which controls are worth
+   showing at all. A surgeon has no clock to configure, so the overtime rule should not be
+   switched off for them — it should not be on screen. */
+var PROFESSIONS = {
+  transit_operator: { group: 'Transit',   role: 'Operator',        model: 'clock',
+                      otDefault: 'weekly' },
+  nurse:            { group: 'Medical',   role: 'Nurse (RN/LPN)',  model: 'clock',
+                      otDefault: 'eighty80',
+                      /* FLSA 7(j) is open to hospitals and residential care only, and only
+                         by agreement made before the work is performed — so it is offered
+                         as the default here and still asked about rather than assumed. */
+                      ask8080: true },
+  tech:             { group: 'Medical',   role: 'Tech / aide',     model: 'clock',
+                      otDefault: 'eighty80', ask8080: true },
+  trades:           { group: 'Trades',    role: 'Trades / plant',  model: 'clock',
+                      otDefault: 'weekly' },
+  other_hourly:     { group: 'Other',     role: 'Paid by the hour',model: 'clock',
+                      otDefault: 'weekly' }
+};
+function professionOf(job){
+  var j = job || activeJob();
+  return PROFESSIONS[(j && j.profession) || ''] || null;
+}
+/* Which earning model the job runs on. Everything not yet built falls back to the clock,
+   which is what the app has always been. */
+function jobModel(job){
+  var p = professionOf(job);
+  return (p && p.model) || 'clock';
+}
+/* Grouped for the picker: field first, then role within it. */
+function professionGroups(){
+  var out = [], seen = {};
+  Object.keys(PROFESSIONS).forEach(function(k){
+    var p = PROFESSIONS[k];
+    if (!seen[p.group]){ seen[p.group] = { group: p.group, roles: [] }; out.push(seen[p.group]); }
+    seen[p.group].roles.push({ id: k, role: p.role });
+  });
+  return out;
+}
+
 function newJobId(){ return 'j' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 function jobList(){ return Array.isArray(state.jobs) ? state.jobs : (state.jobs = []); }
 function jobById(id){
@@ -5356,6 +5409,32 @@ function renderLog(ledger, period, active, now){
    Nothing personal ships in this file, so the first launch collects the rate and
    pay schedule. Stored in this browser only. */
 var setupMode = 'weekly';
+var setupProf = '';
+(function(){
+  var sel = document.getElementById('sProf'); if (!sel) return;
+  sel.innerHTML = '<option value="">Rather not say / something else</option>'
+    + professionGroups().map(function(g){
+        return '<optgroup label="' + esc(g.group) + '">'
+          + g.roles.map(function(r){
+              return '<option value="' + r.id + '">' + esc(r.role) + '</option>'; }).join('')
+          + '</optgroup>';
+      }).join('');
+  /* Answering it moves the overtime buttons to the rule that profession usually runs on —
+     visibly, so it is obviously a suggestion sitting in a control you can still change,
+     rather than something decided behind your back. */
+  sel.onchange = function(){
+    setupProf = sel.value;
+    var p = PROFESSIONS[setupProf];
+    if (p && p.otDefault){
+      setupMode = p.otDefault;
+      [].forEach.call(document.querySelectorAll('#sMode button'), function(b){
+        b.classList.toggle('on', b.dataset.m === setupMode);
+      });
+      paintSetupMakeUp();
+    }
+    if (typeof previewSetup === 'function') previewSetup();
+  };
+})();
 /* Asked only of the daily and per-shift rules. Defaulted to yes because that is the common
    arrangement, but asked rather than assumed: welding it on would quietly show anyone under
    a statutory daily-overtime rule less than they are owed. */
@@ -5459,8 +5538,16 @@ function saveSetup(){
   var r = readSetup();
   if (r.error){ document.getElementById('sErr').textContent = r.error; show('sErr', true); return; }
   Object.assign(state.cfg, r);
+  /* Stored on the job rather than in its config: it describes the work, not the terms. */
+  var j = activeJob();
+  if (j){
+    j.profession = setupProf || '';
+    if (setupProf && (!j.name || j.name === 'My job')){
+      j.name = (PROFESSIONS[setupProf] || {}).role || j.name;
+    }
+  }
   state.configured = true;
-  save(); syncControls(); applyStage(); render();
+  save(); syncControls(); applyStage(); applyProfession(); render();
   toast('All set — ' + money(state.cfg.rate) + '/hr. Clock in whenever you like.');
 }
 
@@ -7576,6 +7663,29 @@ document.getElementById('jobList').addEventListener('input', function(e){
   j.name = i.value.slice(0, 28);
   save(); renderJobBar();
 });
+
+/* Choosing a profession sets defaults and nothing more. Everything it touches stays editable
+   afterwards, and an overtime rule you have already chosen yourself is never overwritten —
+   the profile is a starting point for someone who has not decided, not a correction for
+   someone who has. */
+document.getElementById('jobList').addEventListener('change', function(e){
+  var sel = e.target.closest('select[data-jprof]'); if (!sel) return;
+  var j = jobById(sel.dataset.jprof); if (!j) return;
+  var was = j.profession;
+  j.profession = sel.value;
+  var p = PROFESSIONS[sel.value];
+  var applied = '';
+  if (p && p.otDefault && !j.cfgTouched && j.cfg.otMode !== p.otDefault){
+    j.cfg.otMode = p.otDefault;
+    applied = p.otDefault === 'eighty80'
+      ? ' Overtime set to 8 and 80, the hospital rule — change it in Pay & overtime if yours differs.'
+      : '';
+  }
+  save(); syncControls(); applyProfession();
+  lastMoney = ''; lastHeavySig = ''; _ledCache = {};
+  render(); renderCfgSummaries();
+  if (sel.value !== was) toast((p ? p.role : 'Cleared') + ' saved.' + applied);
+});
 document.getElementById('jobList').addEventListener('click', function(e){
   var show = e.target.closest('button[data-jshow]');
   if (show){
@@ -7748,6 +7858,10 @@ CFG_FIELDS.forEach(function(f){
     if (state.cfg[key] === v) return;
 
     var was = Object.assign({}, state.cfg);
+    /* Marked once you change the overtime rule yourself. A profession suggests a rule for
+       someone who has not decided; once you have, picking a profession later must not quietly
+       put it back. */
+    if (key === 'otMode') activeJob().cfgTouched = true;
     state.cfg[key] = v; save(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render(); syncCalc();
     offerUndo(was, key);
   };
@@ -7979,6 +8093,23 @@ function cfgSummaries(){
 
 /* The bar is absent with one job and present with two, which is the whole seamlessness
    promise: nobody who never adds a second job ever learns this exists. */
+/* What a profession changes on screen. Nothing here decides pay — it decides which controls
+   are worth putting in front of someone. Kept in one function so the answer for a new
+   profession is a line here rather than a hunt through the settings markup. */
+function applyProfession(){
+  var model = jobModel();
+  /* A profession with no clock has no overtime rule, no schedule and no shift differential
+     to configure. Hiding the whole group is one decision; hiding nine scattered fields and
+     hoping none was missed is nine chances to be wrong — which is why Settings was grouped
+     before this was built. */
+  var clocked = model === 'clock';
+  ['gPay', 'gSched', 'gPrem'].forEach(function(id){
+    var e = document.getElementById(id);
+    if (e) e.classList.toggle('hide', !clocked);
+  });
+  document.body.classList.toggle('noclock', !clocked);
+}
+
 function renderJobBar(){
   var js = jobList(), bar = el('jobBar');
   if (!bar) return;
@@ -8011,6 +8142,16 @@ function renderJobList(){
     return '<div class="jobrow" data-job="' + j.id + '">'
       + '<input type="text" data-jname="' + j.id + '" maxlength="28" value="'
         + String(j.name || '').replace(/"/g, '&quot;') + '" placeholder="What is this job called?">'
+      + '<select data-jprof="' + j.id + '" class="jprof">'
+      + '<option value="">What kind of work?</option>'
+      + professionGroups().map(function(g){
+          return '<optgroup label="' + esc(g.group) + '">'
+            + g.roles.map(function(r){
+                return '<option value="' + r.id + '"' + (j.profession === r.id ? ' selected' : '')
+                     + '>' + esc(r.role) + '</option>';
+              }).join('') + '</optgroup>';
+        }).join('')
+      + '</select>'
       + (j.id === state.activeJob ? '<span class="tag">showing</span>'
                                   : '<button class="mini" data-jshow="' + j.id + '">Show</button>')
       + (js.length > 1 ? '<button class="mini danger" data-jdel="' + j.id + '">Remove</button>' : '')
@@ -8087,6 +8228,7 @@ renderThemeControls();
 applyCols();
 applyCfgGroups();
 bindCfgGroups();
+applyProfession();
 applyChart();
 (function(){
   var u = uiOpen();
