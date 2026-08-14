@@ -259,7 +259,7 @@ is not, it needs a new earning model.**
 | Surgeon / physician | Stage 6 | No clock exists in this job at all — `units` is a genuinely different way money arrives |
 | Teacher | Stage 7 | `contract` plus a pension that replaces Social Security |
 
-### Stage 8 — OT Expectancy
+### Stage 8 — OT Expectancy *(done — photos deferred)*
 
 Two numbers. **OT Expectancy**: expected overtime per period and per year, seasonally
 adjusted and trend-aware. **P(income ≥ target)**: the probability of clearing $90k, $100k,
@@ -334,11 +334,17 @@ feature exists to build.
 Lands after Stage 4, which builds the cross-job income picture — expectancy over combined
 jobs is the useful version.
 
+Shipped without the attached-photo half. The resampler, the two numbers, the season match,
+the lever, the refuse-below-minimum gate, manual month entry and the copyable summary are
+all in; photographs (IndexedDB storage, downscaling, redaction) are the one piece deferred,
+because half a privacy feature is worse than none. The export wording already holds the
+line: manual figures are "typed by the owner, not verified".
+
 *Smoke test:* the resampler reproduces a known distribution; probabilities move the right
 way with target, trend and variance; the seasonal index recovers a planted winter effect;
 and below the history minimum no probability is shown at all.
 
-### Stage 9 — WiseWage Lite
+### Stage 9 — WiseWage Lite *(done)*
 
 Not a second file, and not a smaller app. **A performance profile.**
 

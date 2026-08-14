@@ -44,6 +44,7 @@ const E = new Function(m[1] + `
            callbackMin, applyCallback,
            unitCfg, unitsInRange, unitPay, unitPace,
            contractCfg, stipendTotal, contractProgress, chequesPaid, contractView,
+           oteRand, otePeriodSamples, oteAllSamples, oteDrawPool, oteForecast, OTE_MIN_SAMPLES,
            fedNotWithheld, netBreakdown, periodNetView,
            TAX_YEAR, TAX2026, bracketTax, fedWithholding };
 `)();
@@ -267,6 +268,107 @@ const gross = (sessions, c = cfg) => {
   const spent = E.buildLedger(pastForty, c, +new Date(2026, 7, 20));
   near('but past forty straight the bar reads full',
        E.bucketHoursAt(spent, +new Date(2026, 7, 14, 16), c, 'r14_14'), 8);
+}
+
+/* ---------------- OT expectancy: resampled, not curve-fit ---------------- */
+{
+  const c = { ...E.DEFAULTS, rate: 40, otMultiplier: 1.5, otMode: 'weekly',
+              weeklyThreshold: 40, weekStartDay: 0, lunchMins: 0,
+              schedStart: '08:00', schedEnd: '16:00',
+              workDays: [false,true,true,true,true,true,false],
+              holidays: [], banks: [], daysOff: [], vacations: [],
+              periodAnchor: '2026-01-04', periodLengthDays: 14, payDateOffsetDays: 13 };
+  const mk = (month, ot) => ({ month, ot });
+  /* Exactly a period boundary, so no partial-period weighting muddies the arithmetic:
+     eleven whole periods remain in the year. */
+  const NOW = +new Date(2026, 7, 16, 0, 0);   // Jan 4 + 16 fortnights — a true boundary
+  /* basePer pinned so every figure below is arithmetic, not schedule reconstruction:
+     $3,200 a period of straight time, 26 periods, OT at $60. */
+  const fc = (samples, opts) => E.oteForecast(samples, c, NOW, 60000,
+    Object.assign({ basePer: 3200, draws: 2000 }, opts));
+
+  /* Below the minimum it refuses to answer at all — a probability from four periods is a
+     lie with a percent sign, and this feature exists to be trusted by someone who is not
+     the user. */
+  const few = [mk(0,4), mk(1,0), mk(2,8), mk(3,2)];
+  ok('below the minimum there is no probability', fc(few).ready === false,
+     JSON.stringify(fc(few)));
+  ok('and it says how much history it needs', fc(few).need === E.OTE_MIN_SAMPLES
+     && fc(few).n === 4, fc(few).n + ' of ' + fc(few).need);
+
+  /* Degenerate history reproduces itself exactly: if every period held 10 h of OT, the
+     forecast is not allowed to invent variance the data does not have. */
+  const flat10 = Array.from({length: 12}, (_, i) => mk(i, 10));
+  const f1 = fc(flat10, { targets: [1, 10 ** 9] });
+  ok('a flat history forecasts itself', Math.abs(f1.expOtPeriod - 10) < 1e-9, f1.expOtPeriod);
+  near('every replay lands on the same year', f1.p90 - f1.p10, 0);
+  ok('a trivial target is certain', f1.probs[1] === 1, String(f1.probs[1]));
+  ok('an absurd one is impossible', f1.probs[10 ** 9] === 0, String(f1.probs[10 ** 9]));
+
+  /* The year a flat-10 history produces, by hand: $60k banked + 11 remaining periods of
+     (3200 + 10 × 60) = $101,800. So the probability must step exactly there. */
+  /* Ten whole periods remain after 16 August: $60k banked + 10 × (3,200 + 10 × 60). */
+  near('the projected year is hand-checkable', f1.expYear, 60000 + 10 * 3800, 1);
+  const step = fc(flat10, { targets: [97999, 98001] });
+  ok('a dollar under the true year is certain', step.probs[97999] === 1);
+  ok('a dollar over it is impossible',          step.probs[98001] === 0);
+
+  /* Probabilities move the right way. Same history, rising target → falling chance. */
+  const mixed = [4,0,12,2,0,8,16,0,3,6,0,10].map((ot, i) => mk(i, ot));
+  const m = fc(mixed, { targets: [90000, 100000, 110000] });
+  ok('a higher target is never likelier',
+     m.probs[90000] >= m.probs[100000] && m.probs[100000] >= m.probs[110000],
+     [m.probs[90000], m.probs[100000], m.probs[110000]].join(' ≥ '));
+
+  /* The lever: more overtime per period raises the chance, never lowers it. */
+  const lever = fc(mixed, { targets: [96000], extraOt: 6 });
+  const flatL = fc(mixed, { targets: [96000] });
+  ok('six extra hours a period raises the chance',
+     lever.probs[96000] > flatL.probs[96000],
+     (100 * flatL.probs[96000]).toFixed(0) + '% → ' + (100 * lever.probs[96000]).toFixed(0) + '%');
+
+  /* Seasonality: a history where winter is heavy must forecast a heavier December than
+     June. The pool for a December draw prefers November-to-January. */
+  const seasonal = [];
+  for (const y of [0, 1]){                       // two winters, which is the point
+    for (let mo = 0; mo < 12; mo++) seasonal.push(mk(mo, (mo === 11 || mo === 0) ? 20 : 2));
+  }
+  const decPool = E.oteDrawPool(seasonal, 11), junPool = E.oteDrawPool(seasonal, 5);
+  const avg = pool => pool.reduce((a, s) => a + s.ot, 0) / pool.length;
+  ok('a December draw sees the winter effect', avg(decPool) > 10, avg(decPool).toFixed(1));
+  ok('a June draw does not', avg(junPool) < 5, avg(junPool).toFixed(1));
+  ok('and the pools are genuinely different', avg(decPool) - avg(junPool) > 8,
+     (avg(decPool) - avg(junPool)).toFixed(1) + ' h apart');
+
+  /* Determinism: the same inputs give the same answer, so the score does not flicker
+     between renders — it moves once per pay period. */
+  const a1 = fc(mixed, { targets: [100000] }), a2 = fc(mixed, { targets: [100000] });
+  ok('the same period gives the same figure', a1.probs[100000] === a2.probs[100000],
+     a1.probs[100000] + ' vs ' + a2.probs[100000]);
+
+  /* Manual months normalise into per-period samples: 26 hours in a month on a biweekly
+     calendar is 12 per period, tagged with its month for the season match. */
+  const manual = E.oteAllSamples([], c, NOW, [{ ym: '2025-12', otHours: 26 }]);
+  near('a manual month becomes a per-period sample', manual[0].ot, 26 * 12 / 26, 0.01);
+  ok('tagged with its month', manual[0].month === 11, String(manual[0].month));
+  ok('and marked as manual', manual[0].manual === true);
+  ok('garbage entries are dropped',
+     E.oteAllSamples([], c, NOW, [{ ym: '', otHours: 5 }, { ym: '2025-03', otHours: 'x' }]).length === 0);
+
+  /* Real periods come off the ledger: two fortnights, each holding two weeks of five
+     9-hour shifts — 5 h of OT a week, so 10 h a period under a 40-hour week. */
+  const sh = []; let id = 0;
+  for (const wk of [4, 11, 18, 25]){             // four consecutive weeks of Jan 2026
+    for (let d = 0; d < 5; d++){
+      const st = +new Date(2026, 0, wk + 1 + d, 8);
+      sh.push({ id: 's' + (id++), start: st, end: st + 9 * E.HOUR_MS });
+    }
+  }
+  const led = E.buildLedger(sh, c, +new Date(2026, 1, 10));
+  const ps = E.otePeriodSamples(led.parts, c, +new Date(2026, 1, 10));
+  ok('two completed periods become two samples', ps.length === 2, String(ps.length));
+  ok('each carrying its ten hours of overtime', ps.every(x => Math.abs(x.ot - 10) < 0.01),
+     ps.map(x => x.ot.toFixed(2)).join(', '));
 }
 
 /* ---------------- salary under contract: ten months worked, twelve months paid ---------------- */

@@ -359,6 +359,14 @@
   .paymode button{cursor:pointer;font-family:inherit;background:transparent;color:var(--muted);border:0;
     padding:7px 16px;font-size:11.6px;font-weight:800;letter-spacing:1.6px;transition:.2s}
   .paymode button.on{color:#05080f;background:linear-gradient(180deg,var(--ok),#2eb968)}
+  /* Lite: no animation, no blur, no shadow — nothing the compositor has to keep alive.
+     One class, so there is exactly one place for it to be wrong. */
+  body.lite *, body.lite *::before, body.lite *::after{
+    animation:none!important;transition:none!important;
+    backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+  body.lite .card{box-shadow:none!important}
+  #ote input{min-height:44px}
+  body.lite .card::before, body.lite .card::after{display:none!important}
   .netline{font-size:13.6px;color:var(--muted);font-variant-numeric:tabular-nums;margin-top:2px}
   .netline b{color:var(--ink)}
   .money.inhole{background:none;-webkit-text-fill-color:var(--bad);color:var(--bad)}
@@ -1570,6 +1578,49 @@
   </section>
 
   <!-- ================= QUICK PAY CALCULATOR ================= -->
+  <!-- OT expectancy: what overtime to expect, and the odds of clearing a yearly target.
+       Resampled from this person's own history — below the minimum it refuses to guess,
+       because a score that lies is worse than no score. -->
+  <section class="card col" id="ote">
+    <h2>OT outlook <span class="colsum" id="sum_ote"></span></h2>
+    <div class="colbody">
+      <div id="oReady">
+      <div class="tgrid">
+        <div class="tile"><div class="k">Expected overtime</div>
+          <div class="big" id="oExp">—</div><div class="det" id="oExpDet"></div></div>
+        <div class="tile"><div class="k">This year lands near</div>
+          <div class="big" id="oProj">—</div><div class="det" id="oProjDet"></div></div>
+        <div class="tile"><div class="k" id="oProbK">Chance of $100k</div>
+          <div class="big" id="oProb">—</div><div class="det" id="oProbDet"></div></div>
+      </div>
+      <div class="paymode" id="oTargets" style="margin-top:12px">
+        <button data-t="90000">$90k</button>
+        <button data-t="100000" class="on">$100k</button>
+        <button data-t="120000">$120k</button>
+      </div>
+      <div class="note" id="oLever" style="margin-top:10px"></div>
+      <div class="note" id="oMethod" style="margin-top:8px"></div>
+      <div class="actions" style="justify-content:flex-start;margin-top:10px">
+        <button class="mini" id="oCopy">Copy a summary to show someone</button>
+      </div>
+      </div>
+      <div class="note hide" id="oNeed" style="margin-top:4px"></div>
+
+      <div class="f" style="margin-top:18px"><label>History from before this app — off old paystubs or a W-2</label>
+        <div class="note">One line per month: how much overtime that month held. The photo of the
+        stub stays with you — the app never reads one and never says "verified".</div></div>
+      <div class="cfgrid">
+        <div class="f"><label for="ohMonth">Month</label><input type="month" id="ohMonth"></div>
+        <div class="f"><label for="ohHours">Overtime that month (h)</label>
+          <input type="number" id="ohHours" min="0" step="0.25" inputmode="decimal"></div>
+      </div>
+      <div class="actions" style="justify-content:flex-start;margin-top:10px">
+        <button class="btn go" id="ohAdd">+ Add the month</button>
+      </div>
+      <div id="ohList" style="margin-top:12px"></div>
+    </div>
+  </section>
+
   <section class="card col" id="calc">
     <h2>Quick pay calculator</h2>
     <div class="colbody">
@@ -2037,6 +2088,11 @@
             <option value="calm">Calm — barely there</option>
             <option value="">Normal</option>
             <option value="deep">Deep — full tank</option>
+          </select></div>
+        <div class="f"><label for="tPerf">Performance</label>
+          <select id="tPerf">
+            <option value="">Full — everything on</option>
+            <option value="lite">Lite — battery saver, instant feel</option>
           </select></div>
         <div class="f"><label for="tRgb">Heading colour</label>
           <select id="tRgb">
@@ -3982,6 +4038,135 @@ function contractView(cfg, nowMs, stipends){
   return pr;
 }
 
+/* ---- OT expectancy ----
+   Two numbers: the overtime you can expect, and the probability of clearing a yearly
+   income target. A projection states one confident figure and is usually wrong; a
+   probability is honest about a variable income, and it is the number someone actually
+   wants before signing a loan.
+
+   Computed by resampling the user's own history rather than fitting a curve. Overtime is
+   zero-inflated and right-skewed — many periods with none, occasional very large ones —
+   and a bell curve smears both away into confident nonsense. For each remaining period of
+   the year, draw a real observed outcome from the same season, sum the year, repeat
+   thousands of times, count what fraction cleared the target. It never assumes a shape
+   because it never needs one. */
+
+/* Deterministic PRNG, seeded by the number of completed periods — so the figure moves once
+   per pay period, not once per render. A score that flickers is a score nobody trusts. */
+function oteRand(seed){
+  var a = (seed | 0) + 0x6D2B79F5;
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* One sample per completed pay period that saw any work: which month it ended in, and how
+   much overtime it held. */
+function otePeriodSamples(parts, cfg, nowMs){
+  var out = [];
+  if (!parts || !parts.length) return out;
+  var first = parts.reduce(function(m, p){ return Math.min(m, p.start); }, Infinity);
+  var p = periodInfo(first, cfg), guard = 0;
+  while (p.endMs <= nowMs && guard++ < 200){
+    var t = sumRange(parts, p.startMs, p.endMs);
+    if (t.hours > 0.01)
+      out.push({ month: new Date(p.endMs - 1).getMonth(), ot: t.otHours });
+    p = periodInfo(p.endMs + 1, cfg);
+  }
+  return out;
+}
+
+/* Manual history — months typed off old paystubs or a W-2 — normalised to per-period
+   overtime so it can sit in the same pool as recorded periods. */
+function oteAllSamples(parts, cfg, nowMs, manual){
+  var out = otePeriodSamples(parts, cfg, nowMs);
+  var perYear = Math.max(1, Math.round(365.25 / (cfg.periodLengthDays || 14)));
+  (manual || []).forEach(function(m){
+    if (!m || !m.ym) return;
+    var mo = parseInt(String(m.ym).slice(5), 10) - 1;
+    var h = +m.otHours;
+    if (mo >= 0 && mo < 12 && isFinite(h) && h >= 0)
+      out.push({ month: mo, ot: Math.round(h * (12 / perYear) * 100) / 100, manual: true });
+  });
+  return out;
+}
+
+/* Seasonality by proximity: a draw for March prefers February-to-April, and falls back to
+   the whole pool only when the season is empty. Distinguishing "December is busy" from
+   "last December was busy" genuinely needs two winters, which is one reason the minimum
+   below exists. */
+function oteDrawPool(samples, month){
+  var near = samples.filter(function(s){
+    var d = Math.abs(s.month - month);
+    return Math.min(d, 12 - d) <= 1;
+  });
+  return near.length >= 3 ? near : samples;
+}
+
+var OTE_MIN_SAMPLES = 8;
+
+/* The forecast. `ytdGross` is everything already banked this year; the draws only fill in
+   the periods still to come, so as the year shortens the answer hardens — which is what a
+   probability should do. */
+function oteForecast(samples, cfg, nowMs, ytdGross, opts){
+  var o = opts || {};
+  var need = OTE_MIN_SAMPLES;
+  if (!samples || samples.length < need)
+    return { ready: false, n: (samples || []).length, need: need };
+
+  var perYear = Math.max(1, Math.round(365.25 / (cfg.periodLengthDays || 14)));
+  var basePer = o.basePer != null ? o.basePer
+              : scheduledWeekHours(cfg) * ((cfg.periodLengthDays || 14) / 7) * (cfg.rate || 0);
+  var otRate = (cfg.rate || 0) * (cfg.otMultiplier || 1.5);
+  var extraOt = o.extraOt || 0;
+
+  /* The periods still to come this calendar year, each tagged with its month. */
+  /* The current period is only partly still to come — the part already worked is inside
+     `ytdGross`, and drawing a whole period on top of it would count that work twice. So it
+     is weighted by the fraction of it that is actually left. */
+  var y = new Date(nowMs).getFullYear();
+  var rest = [], p = periodInfo(nowMs, cfg), guard = 0;
+  while (p.startMs < +new Date(y + 1, 0, 1) && guard++ < 40){
+    var w = nowMs > p.startMs
+      ? Math.max(0, (p.endMs - nowMs) / (p.endMs - p.startMs)) : 1;
+    if (w > 0.001) rest.push({ month: new Date(p.endMs - 1).getMonth(), w: w });
+    p = periodInfo(p.endMs + 1, cfg);
+  }
+
+  var completed = Math.round((nowMs - +new Date(y, 0, 1)) / ((cfg.periodLengthDays || 14) * DAY_MS));
+  var rnd = oteRand(1013904223 + completed * 7919 + samples.length * 131);
+  var draws = o.draws || 3000, targets = o.targets || [];
+  var hits = targets.map(function(){ return 0; });
+  var sumYear = 0, sumOt = 0, years = [];
+  for (var d = 0; d < draws; d++){
+    var yr = ytdGross, ot = 0;
+    for (var r = 0; r < rest.length; r++){
+      var pool = oteDrawPool(samples, rest[r].month);
+      var s = pool[Math.floor(rnd() * pool.length)];
+      var oh = Math.max(0, s.ot + extraOt) * rest[r].w;
+      yr += basePer * rest[r].w + oh * otRate;
+      ot += oh;
+    }
+    sumYear += yr; sumOt += ot; years.push(yr);
+    for (var t = 0; t < targets.length; t++) if (yr >= targets[t]) hits[t]++;
+  }
+  years.sort(function(a, b){ return a - b; });
+  var mean = samples.reduce(function(a, s){ return a + s.ot; }, 0) / samples.length;
+  var probs = {};
+  targets.forEach(function(t, i){ probs[t] = hits[i] / draws; });
+  return { ready: true, n: samples.length, need: need,
+           perYear: perYear, remaining: rest.length, basePer: basePer,
+           expOtPeriod: Math.round(mean * 100) / 100,
+           expOtYear: Math.round(mean * perYear * 10) / 10,
+           expYear: Math.round(sumYear / draws),
+           p10: Math.round(years[Math.floor(draws * 0.1)]),
+           p90: Math.round(years[Math.floor(draws * 0.9)]),
+           probs: probs };
+}
+
 /* ==ENGINE-END== */
 
 /* ============================ state ============================ */
@@ -4152,6 +4337,7 @@ function migrateJobs(base){
   (base.absences || []).forEach(function(a){ if (!a.jobId) a.jobId = first; });
   (base.units || []).forEach(function(u){ if (!u.jobId) u.jobId = first; });
   (base.stipends || []).forEach(function(x){ if (!x.jobId) x.jobId = first; });
+  (base.otHist || []).forEach(function(x){ if (!x.jobId) x.jobId = first; });
   /* The running clock belongs to the job it was started on, not to the app. That is what
      lets someone work a late shift at one employer and an early one at another without the
      two interfering — and it is why these move onto the job rather than staying global. */
@@ -4202,7 +4388,7 @@ function overlapWarning(nowMs){
 
 function load(){
   var base = { cfg: Object.assign({}, DEFAULTS), jobs: null, activeJob: null,
-               sessions: [], absences: [], units: [], stipends: [],
+               sessions: [], absences: [], units: [], stipends: [], otHist: [],
                activeStart: null, activeAdj: null,
                unit: 'sec', planOn: false, plannedHours: 8, sound: true,
                configured: false, autoOn: false, autoAt: '', autoDays: null, autoLast: '' };
@@ -4218,6 +4404,7 @@ function load(){
       base.absences = (s.absences || []).filter(function(x){ return x && x.date && +x.hours > 0; });
       base.units = (s.units || []).filter(function(x){ return x && x.date && +x.count > 0; });
       base.stipends = (s.stipends || []).filter(function(x){ return x && x.name && +x.amount > 0; });
+      base.otHist = (s.otHist || []).filter(function(x){ return x && x.ym && +x.otHours >= 0; });
     }
   } catch(e){ /* corrupt storage — fall back to defaults rather than dying */ }
   return defineCfgAccessor(migrateJobs(base));
@@ -5157,6 +5344,7 @@ function render(){
     renderJobWarn(now);
     renderUnits(now);
     renderSalary(now);
+    renderOte(now);
     // Synced to the real clock, so the banked figure has to keep up with it. Safe here:
     // renderCalc only writes result text, never the fields you type into.
     if (calcState().sync) renderCalc();
@@ -6141,7 +6329,7 @@ function applyStage(){
    Every section folds independently; nothing opens anything else. All collapsed by
    default — the header line carries a live summary so a folded section still reads. */
 var COLS = ['hero', 'salary', 'units', 'totals', 'period', 'progress', 'log', 'banks',
-            'extra', 'ytd', 'calc'];
+            'extra', 'ytd', 'ote', 'calc'];
 function uiOpen(){ return state.ui || (state.ui = { open: {} }); }
 function applyCols(){
   var o = uiOpen().open || {};
@@ -7067,6 +7255,7 @@ var SECTION_KEYS = [
   ['progress','Progress'],    ['log',      'Shift log'],    ['banks',   'Floaters & sick'],
   ['extra',   'Decimal time'],['ytd',      'Year to date'], ['calc',    'Calculator'],
   ['salary',  'My contract'],
+  ['ote',     'OT outlook'],
   ['units',   'Production'],
   ['cfg',     'Settings'],
   ['gJobs',   'Jobs'],
@@ -7129,6 +7318,21 @@ function applyTheme(){
   ['cycle', 'wave', 'pulse'].forEach(function(m){
     body.classList.toggle('rgb-' + m, t.rgb === m);
   });
+
+  /* WiseWage Lite is one switch, not a second app. Everything that costs battery without
+     changing a number — the water caustics, the colour cycling, the backdrop blurs, every
+     animation — is cut by a single class, and the choices underneath are kept so turning
+     Full back on restores exactly what was picked. The figures themselves are untouched:
+     Lite changes what the GPU does, never what the money says. */
+  var lite = t.perf === 'lite';
+  body.classList.toggle('lite', lite);
+  if (lite){
+    body.classList.remove('water', 'rgb-cycle', 'rgb-wave', 'rgb-pulse');
+    body.classList.add('flat');
+    body.removeAttribute('data-water');
+  }
+  var pe = document.getElementById('tPerf');
+  if (pe && document.activeElement !== pe) pe.value = t.perf || '';
 
   /* A section's own colour drives both its heading and its left rail, so the card reads as
      one thing rather than a coloured stripe next to a differently coloured title. */
@@ -7566,7 +7770,7 @@ function backup(){
        read this file — it will find the config where it expects it and ignore the rest. */
     cfg: state.cfg, jobs: state.jobs, activeJob: state.activeJob,
     sessions: state.sessions, absences: state.absences, units: state.units,
-    stipends: state.stipends,
+    stipends: state.stipends, otHist: state.otHist,
     configured: state.configured, theme: state.theme, net: state.net, ui: state.ui,
     unit: state.unit, planOn: state.planOn, plannedHours: state.plannedHours, sound: state.sound, calc: state.calc, calCal: state.calCal, activeAdj: state.activeAdj,
     autoOn: state.autoOn, autoAt: state.autoAt, autoDays: state.autoDays
@@ -7619,6 +7823,9 @@ function restoreFrom(text){
   state.stipends = (Array.isArray(d.stipends) ? d.stipends : [])
     .filter(function(x){ return x && x.name && +x.amount > 0; });
   state.stipends.forEach(function(x){ if (!x.jobId) x.jobId = state.activeJob; });
+  state.otHist = (Array.isArray(d.otHist) ? d.otHist : [])
+    .filter(function(x){ return x && x.ym && +x.otHours >= 0; });
+  state.otHist.forEach(function(x){ if (!x.jobId) x.jobId = state.activeJob; });
   state.sessions.forEach(function(x){ if (!x.jobId) x.jobId = state.activeJob; });
   state.absences.forEach(function(a){ if (!a.jobId) a.jobId = state.activeJob; });
   state.configured = d.configured !== false;
@@ -8293,6 +8500,65 @@ document.getElementById('jobBar').addEventListener('click', function(e){
   toast('Showing ' + (activeJob().name || 'that job') + '.');
 });
 
+/* ---- the performance profile ---- */
+document.getElementById('tPerf').addEventListener('change', function(e){
+  theme().perf = e.target.value || '';
+  save(); applyTheme();
+  toast(e.target.value === 'lite'
+    ? 'Lite is on — every figure is the same, the battery just works less.'
+    : 'Everything back on.');
+});
+
+/* ---- OT outlook: targets, history, export ---- */
+document.getElementById('oTargets').addEventListener('click', function(e){
+  var b = e.target.closest('button[data-t]'); if (!b) return;
+  oteTarget = +b.dataset.t;
+  _oteSig = ''; lastHeavySig = ''; render();
+});
+document.getElementById('ohAdd').onclick = function(){
+  var ym = el('ohMonth').value, h = parseFloat(el('ohHours').value);
+  if (!ym){ toast('Pick the month.'); return; }
+  if (!isFinite(h) || h < 0){ toast('How many overtime hours that month?'); return; }
+  state.otHist = state.otHist || [];
+  /* One line per month per job — typing March twice should correct March, not double it. */
+  state.otHist = state.otHist.filter(function(x){
+    return !(x.ym === ym && (!x.jobId || x.jobId === state.activeJob));
+  });
+  state.otHist.push({ id: uid(), jobId: state.activeJob, ym: ym,
+                      otHours: Math.round(h * 100) / 100 });
+  el('ohHours').value = '';
+  save(); _oteSig = ''; lastHeavySig = ''; render();
+  toast(ym + ' saved — ' + h + ' h of overtime.');
+};
+document.getElementById('ohList').addEventListener('click', function(e){
+  var b = e.target.closest('button[data-ohdel]'); if (!b) return;
+  state.otHist = (state.otHist || []).filter(function(x){ return x.id !== b.dataset.ohdel; });
+  save(); _oteSig = ''; lastHeavySig = ''; render();
+});
+/* The export is the point of a score: a number that exists to be handed to someone else.
+   It states the method and the sources, and never claims anything was verified. */
+document.getElementById('oCopy').onclick = function(){
+  var fc = _oteFc;
+  if (!fc || !fc.ready){ toast('Not enough history to summarise yet.'); return; }
+  var lines = [
+    APP_NAME + ' — overtime outlook, ' + new Date().toLocaleDateString(),
+    'Expected overtime: ' + fc.expOtPeriod.toFixed(1) + ' h per pay period ('
+      + Math.round(fc.expOtYear) + ' h a year).',
+    'Projected income this year: ' + money(fc.expYear, 0) + ' (80% of replays landed between '
+      + money(fc.p10, 0) + ' and ' + money(fc.p90, 0) + ').',
+    'Chance of clearing ' + money(oteTarget, 0) + ': '
+      + Math.round((fc.probs[oteTarget] || 0) * 100) + '%.',
+    'Method: resampled from ' + fc.n + ' real pay periods'
+      + (oteEntries().length ? ' (' + oteEntries().length + ' entered manually from old paystubs — '
+         + 'figures typed by the owner, not verified)' : '')
+      + ', 3,000 season-matched replays of the remaining ' + fc.remaining + ' periods.'
+  ].join('\n');
+  var done = function(){ toast('Summary copied — paste it anywhere.'); };
+  if (navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(lines).then(done, function(){ window.prompt('Copy it:', lines); });
+  else window.prompt('Copy it:', lines);
+};
+
 /* ---- the salary contract, and stipends ---- */
 [['cSalary','salary','num'], ['cCheques','contractCheques','int'],
  ['cConStart','contractStart','str'], ['cConEnd','contractEnd','str']].forEach(function(f){
@@ -8483,6 +8749,7 @@ document.getElementById('jobList').addEventListener('click', function(e){
   state.absences = (state.absences || []).filter(function(a){ return a.jobId !== id; });
   state.units = (state.units || []).filter(function(u){ return u.jobId !== id; });
   state.stipends = (state.stipends || []).filter(function(x){ return x.jobId !== id; });
+  state.otHist = (state.otHist || []).filter(function(x){ return x.jobId !== id; });
   if (state.activeJob === id) state.activeJob = state.jobs[0].id;
   save(); syncControls(); applyStage();
   lastMoney = ''; lastHeavySig = ''; _ledCache = {};
@@ -8921,7 +9188,7 @@ function applyProfession(){
   /* Never both. A surgeon has no punch to make and a bus operator has no wRVUs, so the two
      cards swap rather than stack — along with everything that only makes sense beside a
      clock: the shift log, the pay-period progress bar, the decimal time card. */
-  ['gPay', 'gSched', 'gPrem', 'hero', 'progress', 'log', 'extra'].forEach(function(id){
+  ['gPay', 'gSched', 'gPrem', 'hero', 'progress', 'log', 'extra', 'ote'].forEach(function(id){
     var e = document.getElementById(id);
     if (e) e.classList.toggle('hide', !clocked);
   });
@@ -9017,6 +9284,90 @@ function renderStipendList(){
   }).join('')
   + '<div class="note" style="margin-top:8px"><b>' + money(tot) + '</b> a year on top of the '
   + 'contract. Every tax applies, and so does the pension \u2014 stipends are creditable earnings.</div>';
+}
+
+/* ---- the OT outlook card ---- */
+var oteTarget = 100000, _oteSig = '', _oteFc = null, _oteLever = null;
+
+function oteEntries(jobId){
+  var jid = jobId || state.activeJob;
+  return (state.otHist || []).filter(function(x){
+    return x && (!x.jobId || x.jobId === jid);
+  });
+}
+
+/* Recomputed only when the data, the job or the target moves — three thousand resampled
+   years is cheap once, and pointless sixty times a minute. */
+function renderOte(now){
+  if (jobModel() !== 'clock') return;
+  var cfg = state.cfg;
+  var sig = dataVer + '|' + state.activeJob + '|' + oteTarget + '|'
+          + Math.floor(now / ((cfg.periodLengthDays || 14) * DAY_MS));
+  if (sig !== _oteSig){
+    _oteSig = sig;
+    var led = jobLedger(null, cfg);
+    var samples = oteAllSamples(led.parts, cfg, now, oteEntries());
+    var ytd = sumRange(led.parts, +new Date(new Date(now).getFullYear(), 0, 1), now).gross
+            + (ytdBase().gross || 0);
+    var opts = { targets: [90000, 100000, 120000, oteTarget], draws: 3000 };
+    _oteFc = oteForecast(samples, cfg, now, ytd, opts);
+    _oteLever = _oteFc.ready
+      ? oteForecast(samples, cfg, now, ytd,
+                    { targets: [oteTarget], draws: 3000, extraOt: 6 })
+      : null;
+  }
+  var fc = _oteFc;
+  show('oReady', fc.ready); show('oNeed', !fc.ready);
+  if (!fc.ready){
+    el('oNeed').innerHTML = 'Not enough history to be honest with you yet — <b>' + fc.n
+      + ' of ' + fc.need + '</b> pay periods. Keep clocking, or add months from old '
+      + 'paystubs below, and this will start answering. A guess shown too early is just '
+      + 'a lie with a percent sign.';
+    el('sum_ote').textContent = ' — ' + fc.n + ' of ' + fc.need + ' periods';
+    renderOteList();
+    return;
+  }
+  var pct = Math.round((fc.probs[oteTarget] || 0) * 100);
+  el('oExp').textContent = fc.expOtPeriod.toFixed(1) + ' h';
+  el('oExpDet').textContent = 'a period · about ' + Math.round(fc.expOtYear) + ' h a year';
+  el('oProj').textContent = money(fc.expYear, 0);
+  el('oProjDet').textContent = money(fc.p10, 0) + ' – ' + money(fc.p90, 0)
+    + ' · ' + fc.remaining + ' periods left';
+  el('oProbK').textContent = 'Chance of ' + money(oteTarget, 0);
+  el('oProb').textContent = pct + '%';
+  el('oProbDet').textContent = 'from ' + fc.n + ' real periods';
+  [].forEach.call(document.querySelectorAll('#oTargets button'), function(b){
+    b.classList.toggle('on', +b.dataset.t === oteTarget);
+  });
+  var lev = _oteLever ? Math.round((_oteLever.probs[oteTarget] || 0) * 100) : pct;
+  el('oLever').innerHTML = lev > pct
+    ? 'Six more OT hours a period takes the chance of ' + money(oteTarget, 0)
+      + ' from <b>' + pct + '%</b> to <b>' + lev + '%</b>. It is a lever, not a verdict.'
+    : 'More overtime barely moves this target — it is '
+      + (pct >= 97 ? 'already effectively certain.' : pct <= 3
+         ? 'out of reach on this base pay; the lever that matters is the rate.' : 'settled by your base pay.');
+  el('oMethod').innerHTML = 'Resampled from your own recorded periods'
+    + (oteEntries().length ? ' and ' + oteEntries().length + ' month'
+       + (oteEntries().length === 1 ? '' : 's') + ' entered from old stubs' : '')
+    + ' — 3,000 replays of the rest of the year, matched by season. It moves once per pay '
+    + 'period, not per shift, the way a score should.';
+  el('sum_ote').textContent = ' — ' + fc.expOtPeriod.toFixed(1) + ' h/period · '
+    + pct + '% of ' + money(oteTarget, 0);
+  renderOteList();
+}
+
+function renderOteList(){
+  var box = el('ohList'); if (!box) return;
+  var list = oteEntries().slice().sort(function(a, b){ return a.ym < b.ym ? 1 : -1; });
+  box.innerHTML = !list.length
+    ? '<div class="note">Nothing entered. Recorded pay periods count on their own.</div>'
+    : list.map(function(x){
+        return '<div class="jobrow" data-oh="' + x.id + '">'
+          + '<span style="flex:0 0 110px">' + esc(x.ym) + '</span>'
+          + '<b style="flex:1 1 auto">' + (+x.otHours).toFixed(2) + ' h OT</b>'
+          + '<button class="mini danger" data-ohdel="' + x.id + '">Remove</button>'
+          + '</div>';
+      }).join('');
 }
 
 /* ---- the production card ---- */
