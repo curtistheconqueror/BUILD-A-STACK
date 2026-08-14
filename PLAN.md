@@ -220,7 +220,7 @@ four are what every wRVU contract actually turns on, and a built-in CMS table wo
 the moment the schedule was revised. Entries are logged by date and belong to their job, so a
 locum list is priced on the locum contract. `tests/ui/units.mjs` covers it in 80 assertions.
 
-### Stage 7 — The `contract` model
+### Stage 7 — The `contract` model *(done)*
 
 The teacher profile. Annual salary over a 10-month-worked / 12-month-paid calendar so summer
 checks show correctly, stipends as discrete line items, and the pension/no-Social-Security
@@ -228,6 +228,22 @@ handling.
 
 *Smoke test:* the summer months pay correctly; TRS replaces Social Security in the net
 breakdown; stipends fall outside the base contract.
+
+Built in two halves. The pension came first because it is not really a teacher feature —
+fifteen states keep teachers outside Social Security and the same arrangement covers a lot
+of police, fire and municipal work, so it belongs to anyone in non-covered employment. It
+also exposed a defect: the app had one switch for FICA, and using it for a teacher would
+have stopped Medicare too, which covers essentially every public employee hired since April
+1986 whether Social Security does or not.
+
+The contract model itself accrues linearly across the contract calendar rather than per
+working day. A contract states a number of days but not which ones, institute days and
+breaks move every year, and no district settles deferred pay by counting them. The number
+the card exists for is what nobody's payslip shows: on the last day of school a teacher on
+$72,000 over 26 checks has earned all of it and been handed 20 checks, so the district is
+holding $16,615.40 — exactly six checks, which is exactly the summer.
+
+`tests/ui/contract.mjs` (74 assertions) and `tests/ui/pension.mjs` (51).
 
 ---
 

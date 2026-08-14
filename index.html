@@ -1001,6 +1001,39 @@
 
   <!-- Replaces the clock entirely for work that is counted rather than clocked. Never both:
        a surgeon has no punch to make, and a bus operator has no wRVUs. -->
+  <!-- Salary under contract. Ten months worked, twelve months paid — so during the school
+       year the district is holding money that has already been earned, and that balance is
+       what the summer cheques are. No payslip shows it. -->
+  <section class="card col hide" id="salary">
+    <h2>My contract <span class="colsum" id="sum_salary"></span></h2>
+    <div class="colbody">
+      <div class="tgrid">
+        <div class="tile"><div class="k">Earned so far</div>
+          <div class="big" id="sEarned">$0.00</div><div class="det" id="sEarnedDet"></div></div>
+        <div class="tile"><div class="k">Paid so far</div>
+          <div class="big" id="sPaid">$0.00</div><div class="det" id="sPaidDet"></div></div>
+        <div class="tile"><div class="k">Held for you</div>
+          <div class="big" id="sHeld">$0.00</div><div class="det" id="sHeldDet"></div></div>
+      </div>
+      <div class="bar"><div class="fill reg" id="sBarPaid"></div><div class="fill ot" id="sBarHeld"></div></div>
+      <div class="barrow"><span class="barlbl" id="sBarLbl"></span><span class="barnum" id="sBarNum"></span></div>
+      <div class="note" id="sNote" style="margin-top:10px"></div>
+
+      <div class="f" style="margin-top:18px"><label>Stipends — anything paid on top of the contract</label></div>
+      <div class="cfgrid">
+        <div class="f"><label for="stName">What is it?</label>
+          <input type="text" id="stName" maxlength="30" placeholder="e.g. head track coach"></div>
+        <div class="f"><label for="stAmt">A year</label>
+          <div class="prefixed"><span>$</span>
+            <input type="number" id="stAmt" min="0" step="50" inputmode="decimal"></div></div>
+      </div>
+      <div class="actions" style="justify-content:flex-start;margin-top:10px">
+        <button class="btn go" id="stAdd">+ Add it</button>
+      </div>
+      <div id="stList" style="margin-top:12px"></div>
+    </div>
+  </section>
+
   <section class="card col hide" id="units">
     <h2>Production <span class="colsum" id="sum_units"></span></h2>
     <div class="colbody">
@@ -1634,8 +1667,32 @@
       <div class="note" id="jobNote" style="margin-top:10px"></div>
         </div>
       </details>
+      <details class="cfgsec hide" id="gContract">
+        <summary><span class="cfgt">Your contract</span><span class="cfgsum" id="sumContract"></span></summary>
+        <div class="cfgbody">
+      <div class="f" style="margin-top:0"><label>The salary and the calendar</label>
+        <div class="note">The dates are the ones on your contract — the first and last day you are
+        required to be there, not the first and last day of classes. Everything else is worked out
+        from them.</div></div>
+      <div class="cfgrid">
+        <div class="f"><label for="cSalary">Annual salary</label>
+          <div class="prefixed"><span>$</span>
+            <input type="number" id="cSalary" min="0" step="100" inputmode="decimal"></div></div>
+        <div class="f"><label for="cCheques">Paid over how many checks?</label>
+          <input type="number" id="cCheques" min="1" max="60" step="1" inputmode="numeric"></div>
+        <div class="f"><label for="cConStart">Contract starts</label>
+          <input type="date" id="cConStart"></div>
+        <div class="f"><label for="cConEnd">Contract ends</label>
+          <input type="date" id="cConEnd"></div>
+      </div>
+      <div class="note" id="cConNote" style="margin-top:10px"></div>
+      <div class="note" style="margin-top:8px">Stipends go on the contract card, not here — they
+      are negotiated separately and can stop, but they are still earnings.</div>
+        </div>
+      </details>
+
       <details class="cfgsec hide" id="gUnits">
-        <summary><span class="cfgt">Your contract</span><span class="cfgsum" id="sumUnits"></span></summary>
+        <summary><span class="cfgt">Production contract</span><span class="cfgsum" id="sumUnits"></span></summary>
         <div class="cfgbody">
       <div class="f" style="margin-top:0"><label>Base and productivity</label>
         <div class="note">A base salary the contract already assumes a certain volume for, and
@@ -3844,6 +3901,87 @@ function unitPace(list, cfg, nowMs, factor){
            now: unitPay(soFar, cfg), year: unitPay(projected, cfg) };
 }
 
+/* ---- salary under contract ----
+   A teacher is not on a clock and not on units. The money is a fixed annual figure, the
+   work runs about ten months, and the pay is spread over twelve — which produces the one
+   number this model exists for: at any moment during the school year you have earned more
+   than you have been paid, and the district is holding the difference. That balance is what
+   the summer cheques are. Nothing on a payslip shows it. */
+function contractCfg(cfg){
+  var c = cfg || {};
+  return { salary:  +c.salary || 0,
+           start:   c.contractStart || '',
+           end:     c.contractEnd   || '',
+           cheques: Math.max(1, Math.round(+c.contractCheques || 26)) };
+}
+
+/* Stipends — coaching, a club, a department head line. Separate from the base contract
+   because they are negotiated separately and can stop, but they are still earnings: the
+   pension is assessed on them and so is every tax. */
+function stipendTotal(list){
+  var n = 0;
+  (list || []).forEach(function(s){ n += +(s && s.amount) || 0; });
+  return Math.round(n * 100) / 100;
+}
+
+/* Accrual is linear across the contract calendar rather than per working day. A contract
+   states a number of days but not which ones, institute days and breaks move every year,
+   and no district settles deferred pay by counting them — the salary accrues evenly over
+   the work year. Simple, and it is what the money actually does. */
+function contractProgress(cfg, nowMs, stipends){
+  var k = contractCfg(cfg);
+  var now = nowMs == null ? Date.now() : nowMs;
+  var s = k.start ? +ymd(k.start) : 0;
+  var e = k.end   ? +ymd(k.end)   : 0;
+  var span = e - s;
+  var frac = span > 0 ? Math.max(0, Math.min(1, (now - s) / span)) : 0;
+  var stip = stipendTotal(stipends);
+  var total = k.salary + stip;
+  return { salary: k.salary, stipendPay: stip, total: total,
+           earnedFrac: frac, earned: Math.round(total * frac * 100) / 100,
+           perCheque: Math.round((total / k.cheques) * 100) / 100,
+           cheques: k.cheques, startMs: s, endMs: e,
+           daysIn: span > 0 ? Math.round((Math.min(now, e) - s) / DAY_MS) : 0,
+           daysTotal: span > 0 ? Math.round(span / DAY_MS) : 0 };
+}
+
+/* Cheques banked since the contract began, counted off the real pay calendar rather than
+   assumed to be evenly spaced — the same periods, paydays and offsets everything else in
+   the app runs on, so a district that pays on a shifted cycle is still counted right. */
+function chequesPaid(cfg, nowMs){
+  var k = contractCfg(cfg);
+  if (!k.start) return 0;
+  var now = nowMs == null ? Date.now() : nowMs;
+  var p = periodInfo(+ymd(k.start), cfg), n = 0, guard = 0;
+  while (guard++ < 500){
+    if (+p.payDate > now) break;
+    n++;
+    p = periodInfo(p.endMs + 1, cfg);
+  }
+  return Math.min(n, k.cheques);
+}
+
+/* What has been earned, what has been handed over, and the gap between them. */
+function contractView(cfg, nowMs, stipends){
+  var pr = contractProgress(cfg, nowMs, stipends);
+  var n  = chequesPaid(cfg, nowMs);
+  /* The last cheque absorbs the rounding, the way payroll actually does it. A per-cheque
+     figure rounded to the cent does not multiply back to the salary — 26 × $2,769.23 is
+     $71,999.98 — and reporting two cents as still owed at the end of a contract year is
+     the sort of detail that makes someone distrust every other figure on the screen. */
+  var paid = n >= pr.cheques ? pr.total
+           : Math.min(pr.total, Math.round(n * pr.perCheque * 100) / 100);
+  pr.chequesPaid = n;
+  pr.chequesLeft = Math.max(0, pr.cheques - n);
+  pr.paid = paid;
+  /* Never negative. Early in a contract the first cheque can land before much has accrued,
+     and reporting that as "you owe the district" would be both wrong and alarming — the
+     figure this answers is how much of YOUR money somebody else is holding. */
+  pr.deferred = Math.max(0, Math.round((pr.earned - paid) * 100) / 100);
+  pr.remaining = Math.max(0, Math.round((pr.total - paid) * 100) / 100);
+  return pr;
+}
+
 /* ==ENGINE-END== */
 
 /* ============================ state ============================ */
@@ -3919,6 +4057,18 @@ var PROFESSIONS = {
                          licensed physicians from the salary-basis test too — so there is no
                          overtime rule to configure, and none is shown. */
                       exempt: '29 CFR 541.304' },
+  teacher:          { group: 'Education', role: 'Teacher',         model: 'contract',
+                      /* Exempt from overtime as a professional under 29 CFR 541.303, so
+                         there is no overtime rule to configure. The money question a
+                         teacher actually has is not overtime — it is how much of the
+                         salary the district is still holding. */
+                      exempt: '29 CFR 541.303',
+                      /* Illinois, and fourteen other states, keep teachers outside Social
+                         Security. Offered as a starting point, never assumed: it is wrong
+                         in the other thirty-five, and the paystub settles it. */
+                      askPension: { name: 'TRS', rate: 9 } },
+  para:             { group: 'Education', role: 'Paraprofessional / aide', model: 'clock',
+                      otDefault: 'weekly' },
   other_hourly:     { group: 'Other',     role: 'Paid by the hour',model: 'clock',
                       otDefault: 'weekly' }
 };
@@ -4001,6 +4151,7 @@ function migrateJobs(base){
   (base.sessions || []).forEach(function(s){ if (!s.jobId) s.jobId = first; });
   (base.absences || []).forEach(function(a){ if (!a.jobId) a.jobId = first; });
   (base.units || []).forEach(function(u){ if (!u.jobId) u.jobId = first; });
+  (base.stipends || []).forEach(function(x){ if (!x.jobId) x.jobId = first; });
   /* The running clock belongs to the job it was started on, not to the app. That is what
      lets someone work a late shift at one employer and an early one at another without the
      two interfering — and it is why these move onto the job rather than staying global. */
@@ -4051,7 +4202,8 @@ function overlapWarning(nowMs){
 
 function load(){
   var base = { cfg: Object.assign({}, DEFAULTS), jobs: null, activeJob: null,
-               sessions: [], absences: [], units: [], activeStart: null, activeAdj: null,
+               sessions: [], absences: [], units: [], stipends: [],
+               activeStart: null, activeAdj: null,
                unit: 'sec', planOn: false, plannedHours: 8, sound: true,
                configured: false, autoOn: false, autoAt: '', autoDays: null, autoLast: '' };
   try {
@@ -4065,6 +4217,7 @@ function load(){
       // comes back with none rather than with undefined.
       base.absences = (s.absences || []).filter(function(x){ return x && x.date && +x.hours > 0; });
       base.units = (s.units || []).filter(function(x){ return x && x.date && +x.count > 0; });
+      base.stipends = (s.stipends || []).filter(function(x){ return x && x.name && +x.amount > 0; });
     }
   } catch(e){ /* corrupt storage — fall back to defaults rather than dying */ }
   return defineCfgAccessor(migrateJobs(base));
@@ -5003,6 +5156,7 @@ function render(){
     renderJobBar();
     renderJobWarn(now);
     renderUnits(now);
+    renderSalary(now);
     // Synced to the real clock, so the banked figure has to keep up with it. Safe here:
     // renderCalc only writes result text, never the fields you type into.
     if (calcState().sync) renderCalc();
@@ -5986,7 +6140,8 @@ function applyStage(){
 /* ============================ collapsible sections ============================
    Every section folds independently; nothing opens anything else. All collapsed by
    default — the header line carries a live summary so a folded section still reads. */
-var COLS = ['hero', 'units', 'totals', 'period', 'progress', 'log', 'banks', 'extra', 'ytd', 'calc'];
+var COLS = ['hero', 'salary', 'units', 'totals', 'period', 'progress', 'log', 'banks',
+            'extra', 'ytd', 'calc'];
 function uiOpen(){ return state.ui || (state.ui = { open: {} }); }
 function applyCols(){
   var o = uiOpen().open || {};
@@ -5994,7 +6149,7 @@ function applyCols(){
     var v = o[id];
     // The clock opens by default so a first-time visitor sees what this is;
     // folding it is remembered like any other choice.
-    if (v === undefined && (id === 'hero' || id === 'units')) v = true;
+    if (v === undefined && (id === 'hero' || id === 'units' || id === 'salary')) v = true;
     var el2 = document.getElementById(id);
     if (el2) el2.classList.toggle('open', !!v);
   });
@@ -6005,7 +6160,7 @@ function toggleCol(id){
   // Flip from the effective state, not the stored one: the two cards that open by
   // default have nothing stored yet, so !undefined would "open" an already-open card
   // and the first tap would do nothing.
-  if (cur === undefined && (id === 'hero' || id === 'units')) cur = true;
+  if (cur === undefined && (id === 'hero' || id === 'units' || id === 'salary')) cur = true;
   u.open[id] = !cur;
   save(); applyCols();
 }
@@ -6911,10 +7066,12 @@ var SECTION_KEYS = [
   ['hero',    'Clock'],       ['totals',   'Earnings'],     ['period',  'Pay period'],
   ['progress','Progress'],    ['log',      'Shift log'],    ['banks',   'Floaters & sick'],
   ['extra',   'Decimal time'],['ytd',      'Year to date'], ['calc',    'Calculator'],
+  ['salary',  'My contract'],
   ['units',   'Production'],
   ['cfg',     'Settings'],
   ['gJobs',   'Jobs'],
-  ['gUnits',  'Your contract'],
+  ['gContract', 'Your contract'],
+  ['gUnits',  'Production contract'],
   ['gPay',    'Pay & overtime'], ['gPeriod', 'Pay period & payday'],
   ['gSched',  'Your schedule'],  ['gPrem',   'Premiums'],
   ['gOff',    'Time off'],       ['gLook',   'Appearance'],  ['gData', 'Your data']
@@ -7409,6 +7566,7 @@ function backup(){
        read this file — it will find the config where it expects it and ignore the rest. */
     cfg: state.cfg, jobs: state.jobs, activeJob: state.activeJob,
     sessions: state.sessions, absences: state.absences, units: state.units,
+    stipends: state.stipends,
     configured: state.configured, theme: state.theme, net: state.net, ui: state.ui,
     unit: state.unit, planOn: state.planOn, plannedHours: state.plannedHours, sound: state.sound, calc: state.calc, calCal: state.calCal, activeAdj: state.activeAdj,
     autoOn: state.autoOn, autoAt: state.autoAt, autoDays: state.autoDays
@@ -7458,6 +7616,9 @@ function restoreFrom(text){
   state.units = (Array.isArray(d.units) ? d.units : [])
     .filter(function(u){ return u && u.date && +u.count > 0; });
   state.units.forEach(function(u){ if (!u.jobId) u.jobId = state.activeJob; });
+  state.stipends = (Array.isArray(d.stipends) ? d.stipends : [])
+    .filter(function(x){ return x && x.name && +x.amount > 0; });
+  state.stipends.forEach(function(x){ if (!x.jobId) x.jobId = state.activeJob; });
   state.sessions.forEach(function(x){ if (!x.jobId) x.jobId = state.activeJob; });
   state.absences.forEach(function(a){ if (!a.jobId) a.jobId = state.activeJob; });
   state.configured = d.configured !== false;
@@ -8132,6 +8293,35 @@ document.getElementById('jobBar').addEventListener('click', function(e){
   toast('Showing ' + (activeJob().name || 'that job') + '.');
 });
 
+/* ---- the salary contract, and stipends ---- */
+[['cSalary','salary','num'], ['cCheques','contractCheques','int'],
+ ['cConStart','contractStart','str'], ['cConEnd','contractEnd','str']].forEach(function(f){
+  var e = document.getElementById(f[0]); if (!e) return;
+  e.onchange = function(ev){
+    var v = ev.target.value;
+    state.cfg[f[1]] = f[2] === 'num' ? Math.max(0, parseFloat(v) || 0)
+                    : f[2] === 'int' ? Math.max(1, Math.min(60, parseInt(v, 10) || 26))
+                    : (v || '');
+    save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+  };
+});
+document.getElementById('stAdd').onclick = function(){
+  var name = el('stName').value.trim(), amt = parseFloat(el('stAmt').value);
+  if (!name){ toast('What is the stipend for?'); return; }
+  if (!isFinite(amt) || amt <= 0){ toast('How much is it a year?'); return; }
+  state.stipends = state.stipends || [];
+  state.stipends.push({ id: uid(), jobId: state.activeJob, name: name.slice(0, 30),
+                        amount: Math.round(amt * 100) / 100 });
+  el('stName').value = ''; el('stAmt').value = '';
+  save(); lastHeavySig = ''; render();
+  toast(name + ' added.');
+};
+document.getElementById('stList').addEventListener('click', function(e){
+  var b = e.target.closest('button[data-sdel]'); if (!b) return;
+  state.stipends = (state.stipends || []).filter(function(x){ return x.id !== b.dataset.sdel; });
+  save(); lastHeavySig = ''; render();
+});
+
 /* ---- the unit contract, and logging production ---- */
 [['cUnitName','unitName','str'], ['cUnitBase','unitBase','num'],
  ['cUnitThr','unitThreshold','num'], ['cUnitRate','unitRate','num']].forEach(function(f){
@@ -8246,8 +8436,20 @@ document.getElementById('jobList').addEventListener('change', function(e){
     j.cfg.otMode = p.otDefault;
     applied = p.otDefault === 'eighty80'
       ? ' Overtime set to 8 and 80, the hospital rule — change it in Pay & overtime if yours differs.'
+      : p.otDefault === 'eight40'
+      ? ' Overtime set to 8 and 40, so you get whichever of the two rules pays more.'
       : '';
   }
+  /* Suggested, never applied. Whether a job sits outside Social Security is a tax question
+     with a different answer in thirty-five states, the setting is shared across every job
+     rather than owned by this one, and it moves real money on every cheque. So it is said
+     out loud and left for the user to do — the same way the overtime rule is never
+     corrected once someone has chosen it. */
+  var nc = state.net;
+  if (p && p.askPension && !(nc && nc.pension && nc.ssOn === false))
+    applied += ' If your district is outside Social Security — no OASDI line on your stub — '
+             + 'switch it on under Deductions; ' + p.askPension.name + ' is '
+             + p.askPension.rate + '%.';
   save(); syncControls(); applyProfession();
   lastMoney = ''; lastHeavySig = ''; _ledCache = {};
   render(); renderCfgSummaries();
@@ -8280,6 +8482,7 @@ document.getElementById('jobList').addEventListener('click', function(e){
   state.sessions = (state.sessions || []).filter(function(x){ return x.jobId !== id; });
   state.absences = (state.absences || []).filter(function(a){ return a.jobId !== id; });
   state.units = (state.units || []).filter(function(u){ return u.jobId !== id; });
+  state.stipends = (state.stipends || []).filter(function(x){ return x.jobId !== id; });
   if (state.activeJob === id) state.activeJob = state.jobs[0].id;
   save(); syncControls(); applyStage();
   lastMoney = ''; lastHeavySig = ''; _ledCache = {};
@@ -8584,11 +8787,23 @@ function syncControls(){
       ? 'You are <b>' + _owed.toFixed(2) + ' h</b> short of your schedule this pay period.'
       : 'You have worked every scheduled hour this pay period.';
   }
-  ['cUnitName|unitName', 'cUnitBase|unitBase', 'cUnitThr|unitThreshold', 'cUnitRate|unitRate']
+  ['cSalary|salary', 'cCheques|contractCheques', 'cConStart|contractStart', 'cConEnd|contractEnd',
+   'cUnitName|unitName', 'cUnitBase|unitBase', 'cUnitThr|unitThreshold', 'cUnitRate|unitRate']
     .forEach(function(pair){
       var p = pair.split('|'), e = el(p[0]);
       if (e && document.activeElement !== e) e.value = state.cfg[p[1]] == null ? '' : state.cfg[p[1]];
     });
+  var _cn = el('cConNote');
+  if (_cn){
+    var _k = contractCfg(state.cfg), _v = contractView(state.cfg, Date.now(), stipendEntries());
+    _cn.innerHTML = !_k.salary ? 'Nothing set yet.'
+      : !_k.start || !_k.end
+        ? money(_k.salary) + ' over ' + _k.cheques + ' checks is <b>' + money(_v.perCheque)
+          + '</b> each. Add the dates and it can also work out what is being held back.'
+        : money(_k.salary) + (_v.stipendPay > 0 ? ' plus ' + money(_v.stipendPay) + ' in stipends' : '')
+          + ' over ' + _k.cheques + ' checks is <b>' + money(_v.perCheque) + '</b> each, across a '
+          + _v.daysTotal + '-day contract.';
+  }
   var _un = el('cUnitNote');
   if (_un){
     var _u = unitCfg(state.cfg);
@@ -8628,7 +8843,8 @@ function syncControls(){
    fewest words that are still specific — "$37.78/hr · 1.5× after 40 h" answers the
    question without opening anything. Anything vague enough to need opening anyway
    ("configured", "3 settings") would be worse than an empty summary. */
-var CFG_GROUPS = ['gJobs', 'gUnits', 'gPay', 'gPeriod', 'gSched', 'gPrem', 'gOff', 'gLook', 'gData'];
+var CFG_GROUPS = ['gJobs', 'gContract', 'gUnits', 'gPay', 'gPeriod', 'gSched', 'gPrem',
+                  'gOff', 'gLook', 'gData'];
 
 function cfgSummaries(){
   var c = state.cfg, s = {};
@@ -8670,6 +8886,12 @@ function cfgSummaries(){
   var n = (state.sessions || []).length;
   s.sumData = n + (n === 1 ? ' shift' : ' shifts') + ' stored on this device';
 
+  var kc = contractCfg(c);
+  s.sumContract = kc.salary
+    ? money(kc.salary) + ' over ' + kc.cheques + ' checks'
+      + (kc.start && kc.end ? ' · ' + fdate(ymd(kc.start)) + ' – ' + fdate(ymd(kc.end)) : '')
+    : 'nothing set yet';
+
   var um = unitCfg(c);
   s.sumUnits = um.base || um.rate
     ? money(um.base) + ' base · ' + um.threshold.toLocaleString('en-US') + ' ' + um.name
@@ -8703,9 +8925,13 @@ function applyProfession(){
     var e = document.getElementById(id);
     if (e) e.classList.toggle('hide', !clocked);
   });
-  ['units', 'gUnits'].forEach(function(id){
-    var e = document.getElementById(id);
-    if (e) e.classList.toggle('hide', clocked);
+  /* Three models, and each non-clock one owns its own card and its own settings group.
+     Written as a table rather than as three pairs of toggles so that adding a fourth is
+     one row here instead of another place to forget. */
+  [['units', model === 'units'], ['gUnits', model === 'units'],
+   ['salary', model === 'contract'], ['gContract', model === 'contract']].forEach(function(r){
+    var e = document.getElementById(r[0]);
+    if (e) e.classList.toggle('hide', !r[1]);
   });
   document.body.classList.toggle('noclock', !clocked);
 }
@@ -8714,6 +8940,85 @@ function applyProfession(){
    days changed — doing it on every save would replace the input you are typing into and
    throw away the cursor. The note underneath is just text, so it can refresh whenever
    anything changes. */
+/* ---- the contract card ---- */
+/* Stipends belong to a job the way shifts and units do — a coaching line at one district
+   is not a coaching line at another. */
+function stipendEntries(jobId){
+  var jid = jobId || state.activeJob;
+  return (state.stipends || []).filter(function(x){
+    return x && (!x.jobId || x.jobId === jid) && +x.amount > 0;
+  });
+}
+
+function renderSalary(now){
+  if (jobModel() !== 'contract') return;
+  var cfg = state.cfg, list = stipendEntries();
+  var v = contractView(cfg, now, list);
+  var k = contractCfg(cfg);
+
+  el('sEarned').textContent = money(v.earned);
+  el('sEarnedDet').innerHTML = v.daysTotal
+    ? Math.round(v.earnedFrac * 100) + '% of the contract · day ' + v.daysIn + ' of ' + v.daysTotal
+    : 'set the contract dates and this will fill in';
+  el('sPaid').textContent = money(v.paid);
+  el('sPaidDet').textContent = v.chequesPaid + ' of ' + v.cheques + ' checks · '
+    + money(v.perCheque) + ' each';
+  el('sHeld').textContent = money(v.deferred);
+  el('sHeldDet').textContent = v.perCheque > 0
+    ? (v.deferred / v.perCheque).toFixed(1) + ' checks\u2019 worth'
+    : '';
+
+  /* The bar is the whole contract: what has been handed over, and what is still being held
+     on top of it. Together they are what has been earned. */
+  var scale = v.total || 1;
+  el('sBarPaid').style.width = Math.round(1000 * Math.min(v.paid, scale) / scale) / 10 + '%';
+  el('sBarHeld').style.width = Math.round(1000 * Math.min(v.deferred, scale - v.paid) / scale) / 10 + '%';
+  el('sBarLbl').textContent = 'Of ' + money(v.total) + ' this contract year';
+  el('sBarNum').textContent = money(v.paid) + ' paid'
+    + (v.deferred > 0.005 ? ' · ' + money(v.deferred) + ' held' : '');
+
+  /* The sentence the card exists for. Ten months worked and twelve months paid means the
+     summer is not a gift and it is not a gap — it is money already earned, arriving late. */
+  el('sNote').innerHTML = !k.salary
+    ? 'Put your annual salary and contract dates in Settings and this will show what you have '
+      + 'earned, what you have been paid, and the difference.'
+    : !v.daysTotal
+      ? 'Add the contract start and end dates and this can work out what is being held back.'
+      : v.deferred > 0.005
+        ? 'Your district is holding <span class="pay">' + money(v.deferred) + '</span> you have '
+          + 'already earned — about <b>' + (v.deferred / (v.perCheque || 1)).toFixed(1)
+          + ' checks</b>. That is what the summer is paid from. It is not extra, and it is not '
+          + 'the district\u2019s: you worked for it during the year.'
+        : v.earnedFrac >= 1
+          ? 'The contract is fully earned. <b>' + v.chequesLeft + '</b> check'
+            + (v.chequesLeft === 1 ? '' : 's') + ' left to come, worth <span class="pay">'
+            + money(v.remaining) + '</span>.'
+          : 'Nothing is being held back yet — pay is running level with the work.';
+
+  el('sum_salary').textContent = ' \u2014 ' + money(v.earned) + ' earned · ' + money(v.deferred) + ' held';
+  renderStipendList();
+}
+
+function renderStipendList(){
+  var box = el('stList'); if (!box) return;
+  var list = stipendEntries();
+  if (!list.length){
+    box.innerHTML = '<div class="note">No stipends. Coaching, a club, a department head line — '
+      + 'anything paid on top of the base contract goes here.</div>';
+    return;
+  }
+  var tot = stipendTotal(list);
+  box.innerHTML = list.map(function(x){
+    return '<div class="jobrow" data-s="' + x.id + '">'
+      + '<span style="flex:1 1 auto;min-width:0">' + esc(x.name || 'Stipend') + '</span>'
+      + '<b style="flex:0 0 92px;text-align:right">' + money(+x.amount) + '</b>'
+      + '<button class="mini danger" data-sdel="' + x.id + '">Remove</button>'
+      + '</div>';
+  }).join('')
+  + '<div class="note" style="margin-top:8px"><b>' + money(tot) + '</b> a year on top of the '
+  + 'contract. Every tax applies, and so does the pension \u2014 stipends are creditable earnings.</div>';
+}
+
 /* ---- the production card ---- */
 var unitWhatIf = 1;
 

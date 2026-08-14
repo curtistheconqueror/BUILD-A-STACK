@@ -43,6 +43,7 @@ const E = new Function(m[1] + `
            premiumList, premiumCovers, premiumsAt, splitPremiums,
            callbackMin, applyCallback,
            unitCfg, unitsInRange, unitPay, unitPace,
+           contractCfg, stipendTotal, contractProgress, chequesPaid, contractView,
            fedNotWithheld, netBreakdown, periodNetView,
            TAX_YEAR, TAX2026, bracketTax, fedWithholding };
 `)();
@@ -266,6 +267,105 @@ const gross = (sessions, c = cfg) => {
   const spent = E.buildLedger(pastForty, c, +new Date(2026, 7, 20));
   near('but past forty straight the bar reads full',
        E.bucketHoursAt(spent, +new Date(2026, 7, 14, 16), c, 'r14_14'), 8);
+}
+
+/* ---------------- salary under contract: ten months worked, twelve months paid ---------------- */
+{
+  /* A teacher on $72,000. Contract 17 August 2026 to 4 June 2027, spread over 26 biweekly
+     cheques on the same fortnightly calendar everything else in the app runs on. */
+  const c = { ...E.DEFAULTS, salary: 72000, contractStart: '2026-08-17',
+              contractEnd: '2027-06-04', contractCheques: 26,
+              periodAnchor: '2026-08-09', periodLengthDays: 14, payDateOffsetDays: 13,
+              weekStartDay: 0 };
+  const on = d => +new Date(d + 'T12:00:00');
+  const v = (d, st) => E.contractView(c, on(d), st || []);
+
+  near('a cheque is the salary over twenty-six', v('2027-01-01').perCheque, 72000 / 26, 0.01);
+  near('which is $2,769.23', v('2027-01-01').perCheque, 2769.23);
+
+  /* Accrual is linear across the contract calendar. Halfway through the dates is halfway
+     through the money. */
+  const mid = v('2027-01-10');
+  ok('halfway through the contract is about half earned',
+     Math.abs(mid.earnedFrac - 0.5) < 0.02, (mid.earnedFrac * 100).toFixed(1) + '%');
+  near('the last day earns all of it', v('2027-06-04').earnedFrac, 1);
+  near('and nothing accrues after it', v('2027-09-01').earnedFrac, 1);
+  near('nor before it starts', v('2026-07-01').earnedFrac, 0);
+  near('the day it starts is nothing yet', v('2026-08-17').earnedFrac, 0, 0.01);
+
+  /* The number the whole model exists for. On the last day of the school year the salary is
+     fully earned but only twenty of twenty-six cheques have been handed over — so the
+     district is holding six cheques' worth, and that is exactly what the summer is paid
+     from. It is not a bonus and it is not the district's money. */
+  const last = v('2027-06-04');
+  near('twenty cheques paid by the last day of school', last.chequesPaid, 20);
+  near('so $55,384.60 has been handed over',            last.paid, 55384.60, 0.05);
+  near('and $16,615.40 is still being held',            last.deferred, 16615.40, 0.05);
+  near('which is exactly six cheques of summer pay',    last.deferred / last.perCheque, 6, 0.01);
+  near('six still to come',                             last.chequesLeft, 6);
+
+  /* It drains over the summer rather than sitting there. */
+  const jul = v('2027-07-01');
+  ok('the balance falls once school is out', jul.deferred < last.deferred,
+     '$' + last.deferred.toFixed(2) + ' → $' + jul.deferred.toFixed(2));
+  near('and the total paid climbs to meet it', jul.paid, 22 * last.perCheque, 0.05);
+  const aug = v('2027-08-15');
+  near('one cheque left at the end', aug.chequesLeft, 1);
+  near('and one cheque still held',  aug.deferred, last.perCheque, 0.05);
+
+  /* Never negative. The first payday of a contract can land before much has accrued, and
+     "you owe the district" is both wrong and frightening. */
+  ['2026-08-17','2026-08-25','2026-09-05','2026-09-20'].forEach(function(d){
+    ok('deferred is never negative on ' + d, v(d).deferred >= 0, v(d).deferred.toFixed(2));
+  });
+
+  /* Stipends are earnings. They lift the total, the per-cheque figure and everything
+     downstream — a coach on $5,200 and a yearbook sponsor on $1,800 is $7,000 more a year,
+     and the pension is assessed on all of it. */
+  const stips = [{ id:'a', name:'Head track coach', amount: 5200 },
+                 { id:'b', name:'Yearbook',         amount: 1800 }];
+  const withS = v('2027-06-04', stips);
+  near('two stipends total $7,000',        withS.stipendPay, 7000);
+  near('the contract year is worth $79,000', withS.total, 79000);
+  near('and each cheque grows with it',    withS.perCheque, 79000 / 26, 0.01);
+  ok('so more is earned by the last day',  withS.earned > last.earned,
+     '$' + (withS.earned - last.earned).toFixed(2));
+  near('no stipends means no addition', v('2027-06-04', []).stipendPay, 0);
+  near('and a nonsense stipend adds nothing',
+       E.stipendTotal([{ id: 'x', name: 'broken', amount: 'abc' }]), 0);
+
+  /* Cheques are counted off the real pay calendar, not assumed evenly spaced — so a
+     district on a different anchor or a different lag is still counted correctly. */
+  const shifted = { ...c, periodAnchor: '2026-08-16', payDateOffsetDays: 45 };
+  ok('a different pay calendar gives a different count',
+     E.chequesPaid(shifted, on('2027-06-04')) !== E.chequesPaid(c, on('2027-06-04')),
+     E.chequesPaid(c, on('2027-06-04')) + ' vs ' + E.chequesPaid(shifted, on('2027-06-04')));
+  ok('and it is never more than the contract has',
+     E.chequesPaid(c, on('2029-01-01')) <= 26, String(E.chequesPaid(c, on('2029-01-01'))));
+
+  /* Nothing configured must not produce nonsense — this runs on every render. */
+  /* And the last cheque squares the rounding rather than leaving two cents outstanding. */
+  const done = v('2027-09-30');
+  near('by the final cheque the whole salary has been handed over', done.paid, 72000);
+  near('with nothing left held', done.deferred, 0);
+  near('and nothing outstanding', done.remaining, 0);
+
+  const empty = E.contractView({ ...E.DEFAULTS }, on('2027-01-01'), []);
+  near('no contract earns nothing', empty.earned, 0);
+  near('holds nothing',             empty.deferred, 0);
+  near('and owes nothing',          empty.remaining, 0);
+  ok('with no cheques counted',     empty.chequesPaid === 0, String(empty.chequesPaid));
+  const noDates = E.contractView({ ...E.DEFAULTS, salary: 60000 }, on('2027-01-01'), []);
+  near('a salary with no dates still prices a cheque', noDates.perCheque, 60000 / 26, 0.01);
+  near('but earns nothing without a calendar', noDates.earned, 0);
+
+  /* Everything reconciles: what is held plus what is paid is what has been earned. */
+  ['2026-10-15','2026-12-24','2027-02-15','2027-04-15','2027-06-04'].forEach(function(d){
+    const x = v(d, stips);
+    near('on ' + d + ' held plus paid is earned', x.deferred + x.paid, x.earned, 0.02);
+    ok('on ' + d + ' nothing is earned twice', x.earned <= x.total + 1e-9,
+       x.earned.toFixed(2) + ' of ' + x.total.toFixed(2));
+  });
 }
 
 /* ---------------- a public pension in place of Social Security ---------------- */

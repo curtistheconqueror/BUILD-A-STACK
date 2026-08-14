@@ -41,7 +41,6 @@ async function boot(){
   await p.evaluate(()=>{const d=document.querySelector('#cfg>details'); if(d) d.open=true;});
   await p.waitForTimeout(300); return p;
 }
-const GROUPS=['gJobs','gUnits','gPay','gPeriod','gSched','gPrem','gOff','gLook','gData'];
 const CONTROLS=`cRate cMult cMode cWeekStart cWeekThr cPeriodThr cDailyThr cShiftThr cAnchor cLen
 cPayOff cClock24 cSound cLunch cLunchExtra rNew rDate rApply cYtd cSchedStart2 cSchedEnd2 cNightOn
 cNightRate cNightFrom cNightTo cShiftDay cSkewOn cSkewMins cMakeUp cMakeUpWin cHolHours cHolAdj
@@ -52,9 +51,19 @@ let p=await boot();
 console.log('\n━━ Settings opens to nine headings, not fifty controls ━━');
 const secs=await p.$$eval('#cfg .cfgsec',es=>es.map(e=>({id:e.id,open:e.open,
   title:e.querySelector('.cfgt').textContent})));
-ok('nine groups', secs.length===9, secs.map(s=>s.title).join(' | '));
+/* Counted against the app's own list rather than a number written here. A new group must
+   arrive with a heading and a place in the order; it must not arrive by breaking a test
+   whose only complaint is that there is one more than there used to be. */
+const appGroups=await p.evaluate(()=>CFG_GROUPS.slice());
+ok('one heading per group', secs.length===appGroups.length,
+   secs.length+' of '+appGroups.length+': '+secs.map(s=>s.title).join(' | '));
+ok('every heading is named', secs.every(s=>s.title && s.title.trim().length>2),
+   secs.map(s=>JSON.stringify(s.title)).join(' | '));
+ok('and no two share a name', new Set(secs.map(s=>s.title)).size===secs.length,
+   secs.map(s=>s.title).join(' | '));
 ok('all closed on a first run', secs.every(s=>!s.open), JSON.stringify(secs.map(s=>s.open)));
-ok('they are in the order planned', secs.map(s=>s.id).join()===GROUPS.join(), secs.map(s=>s.id).join());
+ok('they are in the order planned', secs.map(s=>s.id).join()===appGroups.join(),
+   secs.map(s=>s.id).join()+' vs '+appGroups.join());
 const visible=await p.evaluate(()=>[...document.querySelectorAll('#cfg input,#cfg select')]
   .filter(e=>e.checkVisibility({contentVisibilityAuto:true,visibilityProperty:true})).length);
 ok('almost nothing is on screen until you open one', visible<=2, visible+' controls visible');
@@ -71,19 +80,30 @@ ok('and every one is reachable once its group is open', reach.length===0, reach.
 console.log('\n━━ A folded group still tells you what is inside ━━');
 await p.evaluate(()=>document.querySelectorAll('#cfg .cfgsec').forEach(d=>d.open=false));
 await p.waitForTimeout(300);
-const sums=await p.$$eval('#cfg .cfgsum',es=>es.map(e=>e.textContent.trim()));
-sums.forEach((t,i)=>console.log('       '+GROUPS[i].padEnd(8)+' '+t));
-ok('jobs names the job', /\w/.test(sums[0]), sums[0]);
-ok('the contract group reports itself', /\w/.test(sums[1]), sums[1]);
-ok('every group has a summary', sums.every(t=>t.length>0), String(sums.filter(t=>!t).length)+' empty');
-ok('pay names the rate and the rule', /37\.78/.test(sums[2]) && /40 h a week/.test(sums[2]), sums[2]);
-ok('period names its length and payday', /14 days/.test(sums[3]) && /13 days after/.test(sums[3]), sums[3]);
+/* Keyed by group rather than by position. Indices shift every time a group is added, and
+   a suite that then checks the wrong summary against the wrong group reports a failure
+   that has nothing to do with what broke. */
+const sums=await p.$$eval('#cfg .cfgsec',es=>{const o={};
+  es.forEach(e=>{o[e.id]=(e.querySelector('.cfgsum')?.textContent||'').trim();}); return o;});
+Object.keys(sums).forEach(k=>console.log('       '+k.padEnd(10)+' '+sums[k]));
+const S=k=>sums[k]||'';
+ok('jobs names the job', /\w/.test(S('gJobs')), S('gJobs'));
+ok('every group has a summary',
+   Object.keys(sums).every(k=>sums[k].length>0),
+   Object.keys(sums).filter(k=>!sums[k]).join(',')||'none empty');
+ok('pay names the rate and the rule', /37\.78/.test(S('gPay')) && /40 h a week/.test(S('gPay')), S('gPay'));
+ok('period names its length and payday',
+   /14 days/.test(S('gPeriod')) && /13 days after/.test(S('gPeriod')), S('gPeriod'));
 ok('schedule names hours, days and lunch',
-   /2:00 PM–10:30 PM/.test(sums[4]) && /Sun Mon Tue Wed Thu/.test(sums[4]) && /30 min lunch/.test(sums[4]), sums[4]);
-ok('premiums names the differential', /\$0\.15\/h/.test(sums[5]) && /6:00 PM/.test(sums[5]), sums[5]);
-ok('time off counts what you have', /holidays/.test(sums[6]) && /1 vacation/.test(sums[6]), sums[6]);
-ok('appearance names the theme and clock', /12-hour/.test(sums[7]) && /sound on/.test(sums[7]), sums[7]);
-ok('your data counts the shifts', /2 shifts/.test(sums[8]), sums[8]);
+   /2:00 PM–10:30 PM/.test(S('gSched')) && /Sun Mon Tue Wed Thu/.test(S('gSched'))
+   && /30 min lunch/.test(S('gSched')), S('gSched'));
+ok('premiums names the differential', /\$0\.15\/h/.test(S('gPrem')) && /6:00 PM/.test(S('gPrem')), S('gPrem'));
+ok('time off counts what you have', /holidays/.test(S('gOff')) && /1 vacation/.test(S('gOff')), S('gOff'));
+ok('appearance names the theme and clock',
+   /12-hour/.test(S('gLook')) && /sound on/.test(S('gLook')), S('gLook'));
+ok('your data counts the shifts', /2 shifts/.test(S('gData')), S('gData'));
+ok('the salary contract reports itself', /\w/.test(S('gContract')), S('gContract'));
+ok('and so does the production one', /\w/.test(S('gUnits')), S('gUnits'));
 
 console.log('\n━━ Summaries are live ━━');
 await p.evaluate(()=>{document.getElementById('gPay').open=true;});
