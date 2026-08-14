@@ -196,12 +196,62 @@
   .mklegend { font-size: 12.5px; color: #8b91a0; line-height: 1.9; padding-top: 6px; }
   .mchip { font-weight: 700; padding: 2px 8px; border-radius: 6px; border: 1px solid #6e4a24; background: #20140b; color: #ffc4bd; white-space: nowrap; }
 
+  /* ---------- probe mode (virtual test light) ---------- */
+  .hide { display: none !important; }
+  #probeBar {
+    display: none; align-items: baseline; gap: 8px; flex-wrap: wrap;
+    margin-top: 9px; padding: 9px 11px; border: 1px solid #245b6e;
+    border-radius: 10px; background: #0b1a20; font-size: 12.5px; line-height: 1.45;
+  }
+  .probe #probeBar { display: flex; }
+  .pb-name { font-weight: 800; color: #8fe4ff; letter-spacing: .04em; white-space: nowrap; }
+  .pb-val { font-weight: 800; padding: 2px 9px; border-radius: 999px; border: 1px solid #34353e; color: #aeb4c2; white-space: nowrap; }
+  .pb-val.ok { color: #9be8b4; border-color: #2c6e44; background: #0d1f15; }
+  .pb-val.bad { color: #ffb3b3; border-color: #7a2020; background: #200d0d; }
+  .pb-note { color: #aeb4c2; flex: 1 1 220px; min-width: 0; }
+  #probePts { display: none; }
+  .probe #probePts { display: block; }
+  .tp { cursor: pointer; animation: tppulse 1.7s ease-in-out infinite; }
+  @keyframes tppulse { 0%,100% { opacity: .95; } 50% { opacity: .45; } }
+  .tp-ring { fill: rgba(63,210,255,.08); stroke: #3fd2ff; stroke-width: 2.5; stroke-dasharray: 5 5; }
+  .tp-x { stroke: #3fd2ff; stroke-width: 2; }
+  .tp.sel { animation: none; }
+  .tp.sel .tp-ring { stroke: #ffd24a; fill: rgba(255,210,74,.15); stroke-dasharray: none; filter: drop-shadow(0 0 8px #ffd24a); }
+  .tp.sel .tp-x { stroke: #ffd24a; }
+
+  /* ---------- guided diagnosis ---------- */
+  #coach { display: none; margin: 12px 0 0; border: 1px solid #274a5e; border-radius: 12px; background: #0a141c; padding: 14px 16px; }
+  .guided #coach { display: block; }
+  .guided .bench-top { display: none; }
+  .guided .diag { display: none; }
+  .guided.revealed .diag { display: block; }
+  .mystery .mk { display: none !important; }
+  .mystery #relayEmph, .mystery #routerTag { opacity: 0 !important; }
+  .c-sym { font-weight: 800; color: #8fe4ff; font-size: 14px; line-height: 1.45; }
+  .c-open { color: #aeb4c2; font-size: 13px; line-height: 1.55; margin-top: 8px; }
+  .c-log { margin-top: 9px; font-size: 12.5px; color: #9be8b4; line-height: 1.75; }
+  .c-log:empty, .c-hint:empty { display: none; }
+  .c-step { margin-top: 9px; font-weight: 700; color: #ffd24a; font-size: 13.5px; line-height: 1.5; }
+  .c-hint { color: #ffb3b3; font-size: 12.5px; margin-top: 6px; line-height: 1.4; }
+  .c-qt { margin-top: 10px; font-weight: 700; color: #e6e8ee; font-size: 13.5px; line-height: 1.5; }
+  .c-opts { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .c-opts button {
+    text-align: left; background: #14151a; border: 1px solid #34353e; color: #c4c9d4;
+    border-radius: 10px; padding: 10px 12px; font: 600 13px/1.4 system-ui, sans-serif;
+    cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  }
+  .c-opts button:focus-visible { outline: 2px solid #3fd2ff; outline-offset: 2px; }
+  .c-opts button.bad { border-color: #7a2020; color: #ffb3b3; }
+  .c-opts button.good { border-color: #2c6e44; color: #9be8b4; background: #0d1f15; }
+  .c-done { margin-top: 10px; color: #9be8b4; font-size: 13px; line-height: 1.6; border-top: 1px solid #1c2b26; padding-top: 10px; }
+  .c-ctl { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+
   @media (prefers-reduced-motion: reduce) {
     .flow.lit, #hint, .snd-hi #hornHi, .snd-lo #hornLo,
     .snd-hi .wv-hi.wv1, .snd-hi .wv-hi.wv2, .snd-hi .wv-hi.wv3,
     .snd-lo .wv-lo.wv1, .snd-lo .wv-lo.wv2, .snd-lo .wv-lo.wv3,
     .spin #hatchGrp, .spin #rollerSpokes, .spin #wheelIcon,
-    .live #spark, .live #clickTxt, .mk.shown, .hlrelay #relayEmph { animation: none; }
+    .live #spark, .live #clickTxt, .mk.shown, .hlrelay #relayEmph, .tp { animation: none; }
     .live #spark, .live #clickTxt, .flow.lit { opacity: 1; }
   }
 </style>
@@ -214,9 +264,15 @@
         <div class="chips">
           <button class="chip" id="soundBtn" aria-pressed="true">🔊 SOUND</button>
           <button class="chip" id="spinBtn" aria-pressed="false">↻ WHEEL</button>
+          <button class="chip" id="probeBtn" aria-pressed="false">🔦 PROBE</button>
         </div>
       </div>
       <button id="hornBtn" aria-pressed="false">🖐 PRESS HORN</button>
+      <div id="probeBar">
+        <span class="pb-name" id="pbName">PROBE</span>
+        <span class="pb-val" id="pbVal">—</span>
+        <span class="pb-note" id="pbNote">Tap a glowing test point on the diagram to take a reading.</span>
+      </div>
     </div>
   </header>
 
@@ -225,6 +281,7 @@
       <div class="bench-top">
         <span class="bench-lbl">SCENARIO</span>
         <select id="faultSel" class="fsel" aria-label="Circuit scenario"></select>
+        <button class="chip" id="guideBtn">🎯 GUIDED</button>
       </div>
       <div class="sides">
         <span class="sidepill ctrl">CONTROL SIDE ▲ &nbsp;coil · button · slip-ring</span>
@@ -235,6 +292,22 @@
         <div class="drow"><span class="dk">Rules out</span><span class="dv" id="dRule">—</span></div>
         <div class="drow"><span class="dk">Fault zone</span><span class="dv zone ok" id="dZone">—</span></div>
         <div class="drow"><span class="dk">Likely fix</span><span class="dv" id="dFix">—</span></div>
+      </div>
+      <div id="coach">
+        <div class="c-sym" id="cSym"></div>
+        <div class="c-open" id="cOpen"></div>
+        <div class="c-log" id="cLog"></div>
+        <div class="c-step" id="cStep"></div>
+        <div class="c-hint" id="cHint"></div>
+        <div id="cQ" class="hide">
+          <div class="c-qt" id="cQt"></div>
+          <div class="c-opts" id="cOpts"></div>
+        </div>
+        <div id="cDone" class="c-done hide"></div>
+        <div class="c-ctl">
+          <button class="chip" id="gNew">🎲 NEW MYSTERY</button>
+          <button class="chip" id="gExit">✕ EXIT GUIDED</button>
+        </div>
       </div>
     </section>
 
@@ -617,6 +690,28 @@
         </g>
       </g>
 
+      <!-- ============ probe test points (rings only — readings show in the sticky bar) ============ -->
+      <g id="probePts">
+        <g class="tp hit" data-tp="batt" transform="translate(260,2378)">
+          <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+        <g class="tp hit" data-tp="fuse" transform="translate(420,2360)">
+          <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+        <g class="tp hit" data-tp="t86" transform="translate(460,2120)">
+          <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+        <g class="tp hit" data-tp="t85" transform="translate(460,2240)">
+          <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+        <g class="tp hit" data-tp="t87" transform="translate(660,2320)">
+          <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+        <g class="tp hit" data-tp="hiPwr" transform="translate(210,3172)">
+          <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+        <g class="tp hit" data-tp="hiGnd" transform="translate(250,3172)">
+          <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+        <g class="tp hit" data-tp="loPwr" transform="translate(600,3172)">
+          <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+        <g class="tp hit" data-tp="loGnd" transform="translate(560,3172)">
+          <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+      </g>
+
       <!-- tap targets -->
       <rect id="hitHorn" class="hit" x="270" y="300" width="260" height="280" fill="transparent"/>
       <circle id="hitWheel" class="hit" cx="120" cy="1150" r="64" fill="transparent"/>
@@ -832,6 +927,12 @@
     app.classList.remove('fuse-blown', 'hlrelay');
     app.classList.toggle('coil-hot', F.relayClicks);
     hornBtn.setAttribute('aria-pressed', 'true');
+    if (guided && gStep === -1) {           // guided: the press-and-observe stage is done
+      gStep = 0;
+      coachHint('');
+      barMsg('Step 1 — ' + G.steps[0].say);
+      renderCoach();
+    }
     litZones(F.control);
     clearTimeout(relayTimer); clearTimeout(seqTimer);
     if (!F.relayClicks) {
@@ -926,6 +1027,258 @@
   }
   spinBtn.addEventListener('click', toggleSpin);
   document.getElementById('hitWheel').addEventListener('click', toggleSpin);
+
+  /* ==================== probe mode — a virtual test light ==================== */
+  var $ = function (id) { return document.getElementById(id); };
+  var probeBtn = $('probeBtn');
+  var PT_NAMES = {
+    batt: 'Battery +', fuse: 'Fuse output', t86: 'Relay 86 · coil feed',
+    t85: 'Relay 85 · trigger', t87: 'Relay 87 · output',
+    hiPwr: 'High horn · power', hiGnd: 'High horn · ground',
+    loPwr: 'Low horn · power', loGnd: 'Low horn · ground'
+  };
+
+  /* What a meter would read at each point, given the live scenario + button state. */
+  function readProbe(id) {
+    var blown = app.classList.contains('fuse-blown');
+    var live = app.classList.contains('live');
+    var on = honking;
+    var R = function (v, good, n) { return { v: v, good: good, n: n }; };
+    switch (id) {
+      case 'batt':
+        return R('12 V', true, 'Battery feed is alive.');
+      case 'fuse':
+        return blown ? R('0 V', false, 'Dead on the load side of the fuse — the fuse is blown. Fuses only blow for a reason: find the short before re-fusing.')
+                     : R('12 V', true, 'Hot at all times — battery feed and fuse are good.');
+      case 't86':
+        return blown ? R('0 V', false, 'No feed — the blown fuse killed this whole leg.')
+                     : R('12 V', true, 'The relay coil has its feed.');
+      case 't85':
+        if (blown) return R('0 V', false, 'Dead — nothing is fed while the fuse is gone.');
+        if (F.id === 'stuck-on') return R('~0 V', false, 'Grounded with the button UP — a chafed trigger wire is holding the coil on. That is the fault.');
+        if (!on) return R('12 V', true, 'Button up: the coil holds this wire at 12 V, waiting for the button to ground it.');
+        if (F.id === 'ctrl-open') return R('12 V', false, 'Still 12 V with the button held — the trigger never reaches ground. The open is upstream: slip-ring, trigger wire, or the button.');
+        return R('~0 V', true, 'Pulled to ground through the button — the entire control side is working.');
+      case 't87':
+        if (blown) return R('0 V', false, 'Dead — no feed behind the relay (the fuse is blown).');
+        if (live) return R('12 V', true, 'The relay contacts are switching power — the load side is live from here.');
+        if (on && F.id === 'ctrl-open') return R('0 V', false, 'No output — the relay never energized (that is why there was no click). The fault is upstream, on the control side.');
+        return R('0 V', true, 'No output with the horn off — normal.');
+      case 'hiPwr': case 'loPwr':
+        if (blown) return R('0 V', false, 'Dead — nothing is coming down the power wire.');
+        if (live) {
+          if (F.id === 'bad-horn' || (F.id === 'one-horn' && id === 'loPwr'))
+            return R('12 V', true, 'Power reaches this horn — yet it stays silent. If its ground also checks out, the horn itself is dead.');
+          return R('12 V', true, 'Power reaches this horn.');
+        }
+        if (on && F.id === 'ctrl-open') return R('0 V', false, 'No power here — but there was no click either, so the problem is back upstream.');
+        return R('0 V', true, 'No power with the horn off — normal.');
+      case 'hiGnd': case 'loGnd':
+        return F.id === 'bad-ground'
+          ? R('OPEN', false, 'No path to the frame — bracket AND redundant ground wire are open. No ground, no current, no sound.')
+          : R('GND ✓', true, 'Solid path to the frame.');
+    }
+  }
+
+  function onProbe(id) {
+    var r = readProbe(id);
+    Array.prototype.forEach.call(document.querySelectorAll('.tp.sel'), function (t) { t.classList.remove('sel'); });
+    var g = document.querySelector('.tp[data-tp="' + id + '"]');
+    if (g) g.classList.add('sel');
+    $('pbName').textContent = PT_NAMES[id];
+    var v = $('pbVal');
+    v.textContent = r.v;
+    v.className = 'pb-val ' + (r.good ? 'ok' : 'bad');
+    $('pbNote').textContent = r.n;
+    guidedProbe(id, r);
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('#probePts .tp'), function (g) {
+    g.addEventListener('click', function () { onProbe(g.getAttribute('data-tp')); });
+  });
+  probeBtn.addEventListener('click', function () {
+    var on = !app.classList.contains('probe');
+    if (!on && guided) { coachHint('Probe mode stays on during a guided diagnosis.'); return; }
+    app.classList.toggle('probe', on);
+    probeBtn.setAttribute('aria-pressed', String(on));
+  });
+
+  /* ==================== guided diagnosis — mystery fault coach ==================== */
+  var guided = false, G = null, gFid = null, gStep = -1, gDone = false, gLog = [], qBuilt = false;
+  var GUIDE_IDS = ['bad-horn', 'bad-ground', 'one-horn', 'ctrl-open', 'short-power', 'stuck-on'];
+  var GUIDES = {
+    'bad-horn': {
+      sym: 'Press the horn — the relay CLICKS, but total silence.',
+      open: 'That click proves the entire control side: button, slip-ring, coil and its ground. So we work the LOAD side, from the relay outward.',
+      steps: [
+        { need: 't87', on: true, say: 'Keep the horn ON and probe relay output 87.' },
+        { need: 'hiPwr', on: true, say: 'Follow the power downstream: probe the HIGH horn’s power terminal.' },
+        { need: 'hiGnd', say: 'Now check that horn’s ground path.' }
+      ],
+      q: 'Power ✓ at the horn, ground ✓ — and still silence. What’s the fix?',
+      opts: ['Replace the horns', 'Clean & re-bond the grounds', 'Replace the relay'], a: 0,
+      done: 'Power and ground both check out at a silent horn — the horns themselves are dead. Replace them. (The classic bus outcome.)'
+    },
+    'bad-ground': {
+      sym: 'Press the horn — the relay CLICKS, but total silence.',
+      open: 'A click clears the whole control side. Load side it is — same drill as any silent-horn case.',
+      steps: [
+        { need: 't87', on: true, say: 'Keep the horn ON and probe relay output 87.' },
+        { need: 'hiPwr', on: true, say: 'Probe the HIGH horn’s power terminal.' },
+        { need: 'hiGnd', say: 'Power is present — now check the horn’s ground path.' }
+      ],
+      q: 'Power reaches the horn, but the ground reads OPEN. What’s the fix?',
+      opts: ['Replace the horns', 'Clean & re-bond the ground connections', 'Replace the fuse'], a: 1,
+      done: 'No ground = no current = no sound, even with perfect power. Clean and re-bond the bracket and the redundant ground wire. (Both grounds had to fail — that’s exactly why the redundancy exists.)'
+    },
+    'one-horn': {
+      sym: 'Press the horn — it clicks, and only ONE thin note sounds.',
+      open: 'The working horn is free information: relay, fuse and the shared feed are all proven. Only the dead branch is suspect.',
+      steps: [
+        { need: 'loPwr', on: true, say: 'Keep the horn ON and probe the silent (LOW) horn’s power terminal.' },
+        { need: 'loGnd', say: 'Now its ground path.' }
+      ],
+      q: 'The dead horn has power and ground. The fix?',
+      opts: ['Replace the low-note horn', 'Repair the splice', 'Replace the relay'], a: 0,
+      done: 'Feed ✓, ground ✓, silent — that one horn is dead. Replace it and the two-note voice comes back.'
+    },
+    'ctrl-open': {
+      sym: 'Press the horn — nothing. No click, no sound.',
+      open: 'No click means the coil never energized: the fault is UPSTREAM, on the control side. The load side is untested — and innocent until proven otherwise.',
+      steps: [
+        { need: 't86', on: true, say: 'Hold the horn ON and probe relay terminal 86 (coil feed).' },
+        { need: 't85', on: true, say: 'Feed is good — now probe terminal 85, the trigger side of the coil.' }
+      ],
+      q: '86 is hot, but 85 stays at 12 V even with the button held. The fix?',
+      opts: ['Repair the trigger path — slip-ring / trigger wire / button', 'Replace the fuse', 'Replace the horns'], a: 0,
+      done: 'A held button should pull 85 to ground — it never does, so the trigger path is open. Inspect the slip-ring roller, the column trigger wire, and the button contacts.'
+    },
+    'short-power': {
+      sym: 'Press the horn — a click, a pop… then everything is dead.',
+      open: 'Something drew a violent surge. First rule: a fuse never blows for no reason.',
+      steps: [
+        { need: 'batt', say: 'Probe the battery + post.' },
+        { need: 'fuse', say: 'Battery is fine. Probe the output side of the FUSE.' }
+      ],
+      q: 'The fuse is blown. What’s the right fix?',
+      opts: ['Find and repair the chafed power wire, then fit a new fuse', 'Just fit a new fuse', 'Replace the relay'], a: 0,
+      done: 'The power wire is shorted to the frame — that dead short is what popped the fuse. A new fuse alone will just blow again; find the chafe, repair it, then re-fuse.'
+    },
+    'stuck-on': {
+      sym: 'The horn is BLARING and nobody is touching the button.',
+      open: 'The horns are just obeying orders — the question is who is giving them. Check the trigger.',
+      steps: [
+        { need: 't85', say: 'With the button untouched, probe relay terminal 85 (trigger).' }
+      ],
+      q: '85 reads grounded with the button UP. What’s the fix?',
+      opts: ['Find the chafed trigger wire (pull the relay to silence it now)', 'Replace the horns', 'Replace the button return spring'], a: 0,
+      done: 'The trigger wire is chafed to ground before the button, holding the coil energized full-time. Pull the relay to shut it up, then find and repair the chafe.'
+    }
+  };
+
+  function coachHint(t) { $('cHint').textContent = t; }
+  function barMsg(note) {
+    $('pbName').textContent = 'GUIDED';
+    var v = $('pbVal'); v.textContent = '🎯'; v.className = 'pb-val';
+    $('pbNote').textContent = note;
+  }
+  function renderCoach() {
+    if (!guided) return;
+    $('cSym').textContent = '🔍 ' + G.sym;
+    $('cOpen').textContent = G.open;
+    $('cLog').innerHTML = gLog.join('<br>');
+    var stepTxt = '';
+    if (!gDone) {
+      if (gStep === -1) stepTxt = '▶ First: press the horn button up top, and watch & listen.';
+      else if (gStep < G.steps.length) stepTxt = '🔦 Step ' + (gStep + 1) + ' of ' + G.steps.length + ' — ' + G.steps[gStep].say;
+      else stepTxt = '🧠 Readings collected — answer below.';
+    }
+    $('cStep').textContent = stepTxt;
+    var qOn = !gDone && gStep >= G.steps.length;
+    $('cQ').classList.toggle('hide', !qOn);
+    if (qOn && !qBuilt) buildOpts();
+    $('cDone').classList.toggle('hide', !gDone);
+    if (gDone) $('cDone').innerHTML = '✅ ' + G.done;
+  }
+  function buildOpts() {
+    qBuilt = true;
+    $('cQt').textContent = G.q;
+    var box = $('cOpts'); box.innerHTML = '';
+    G.opts.forEach(function (t, i) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.textContent = t;
+      b.addEventListener('click', function () {
+        if (gDone) return;
+        if (i === G.a) {
+          b.classList.add('good');
+          gDone = true;
+          app.classList.remove('mystery');
+          app.classList.add('revealed');
+          faultSel.value = F.id;
+          coachHint('');
+          barMsg('Solved! The fault markers and full diagnosis are now revealed on the diagram.');
+          renderCoach();
+        } else {
+          b.classList.add('bad');
+          coachHint('Not quite — look back at the readings you collected.');
+        }
+      });
+      box.appendChild(b);
+    });
+  }
+  /* A probe taken while guided: advance if it is the step's point, nudge if not. */
+  function guidedProbe(id, r) {
+    if (!guided || gDone || gStep < 0 || gStep >= G.steps.length) return;
+    var st = G.steps[gStep];
+    if (id !== st.need) {
+      var msg = 'Fine to explore — but this step wants: ' + PT_NAMES[st.need] + '.';
+      coachHint(msg);
+      $('pbNote').textContent += '  ▸ ' + msg;
+      return;
+    }
+    if (st.on && !honking && !app.classList.contains('fuse-blown')) {
+      var m2 = 'Turn the horn ON first (top button), then probe again.';
+      coachHint(m2);
+      $('pbNote').textContent += '  ▸ ' + m2;
+      return;
+    }
+    gLog.push('✓ ' + PT_NAMES[id] + ' → ' + r.v);
+    gStep++;
+    coachHint('');
+    $('pbNote').textContent += (gStep < G.steps.length
+      ? '  ▸ NEXT: ' + G.steps[gStep].say
+      : '  ▸ Readings collected — answer the question in the coach panel (top of page).');
+    renderCoach();
+  }
+  function startGuided(fid) {
+    guided = true; gDone = false; gLog = []; qBuilt = false; gFid = fid; G = GUIDES[fid];
+    app.classList.add('guided', 'mystery', 'probe');
+    app.classList.remove('revealed');
+    probeBtn.setAttribute('aria-pressed', 'true');
+    selectFault(fid);
+    gStep = F.autoOn ? 0 : -1;
+    coachHint('');
+    barMsg(gStep === 0
+      ? 'Step 1 — ' + G.steps[0].say
+      : 'First: press the horn button up top and observe — then follow the steps here.');
+    renderCoach();
+  }
+  function exitGuided() {
+    guided = false; G = null; gFid = null;
+    app.classList.remove('guided', 'mystery', 'revealed');
+    faultSel.value = 'none';
+    selectFault('none');
+    $('pbName').textContent = 'PROBE';
+    var v = $('pbVal'); v.textContent = '—'; v.className = 'pb-val';
+    $('pbNote').textContent = 'Tap a glowing test point on the diagram to take a reading.';
+  }
+  function randomGuide() {
+    var pool = GUIDE_IDS.filter(function (x) { return x !== gFid; });
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+  $('guideBtn').addEventListener('click', function () { startGuided(randomGuide()); });
+  $('gNew').addEventListener('click', function () { startGuided(randomGuide()); });
+  $('gExit').addEventListener('click', exitGuided);
+  window.__hcGuide = startGuided;   // deterministic entry point for automated tests
 
   /* ---- init ---- */
   updateHUD();

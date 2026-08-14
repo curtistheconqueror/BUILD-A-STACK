@@ -55,6 +55,12 @@ A **scenario** selector turns the same diagram into a diagnostic bench. Beyond *
 
 It's framed around the two sides of a relay circuit: the **control side** (the coil, and the button/slip-ring that trigger it) versus the **load side** (the contacts out to the horns). The relay is the *power router* on the boundary, so the **click** is the key clue — a click proves the whole control side works and sends you *downstream* to the load side; no click means the fault is *upstream*. The headline case, *relay clicks but no horn*, spotlights the relay as the only thing working and routes power right up to the dead horns. A live readout gives the symptom, what it rules out, the fault zone, and the likely fix, with a full symptom→cause table below the diagram.
 
+### Probe the circuit
+
+A **🔦 probe** toggle turns the diagram into a bench with a virtual test light: nine tappable test points (battery, fuse, all four relay terminals, and each horn's power and ground) read out 12 V / 0 V / ground-good / open for whatever scenario and button state is live — including the classic trigger-wire tell: 12 V at terminal 85 with the button up, pulled to ~0 V when a healthy button grounds it. Readings land in a sticky bar with a one-line "what this proves."
+
+**🎯 Guided diagnosis** deals a mystery fault (markers hidden), states only the symptom, and coaches the probe sequence step by step — click first, then bisect the remaining half — logging each reading until you're asked to call the fix. Answer right and the diagram reveals the fault; a dice button deals the next mystery.
+
 ## Roadmap
 
 - **Phase A — Learn (glossary)**
