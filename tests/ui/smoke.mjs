@@ -97,7 +97,18 @@ ok('timer shows the full span', (await T('#timer')).startsWith('80:'), await T('
 ok('80 h rule caught it', (await T('#p80Note')).includes('80 h'), await T('#p80Note'));
 ok('never claims "passed" while showing 0.00 h of OT',
    !((await T('#p80Note')).includes('passed') && (await T('#p80Note')).includes('0.00 h so far')), await T('#p80Note'));
-await page.click('#punch'); await page.waitForTimeout(300);
+/* An 80-hour punch is now questioned rather than banked in silence — this is the exact
+   case the guard exists for. The first tap puts the question; tapping again means "bank it
+   as it stands", which is what the rest of this section measures. */
+const rowsBefore = await page.locator('#logBody tbody tr').count();
+await page.click('#punch'); await page.waitForTimeout(400);
+ok('it asks before banking eighty hours', await page.isVisible('#forgotBar'));
+ok('and the shift is still running', await page.evaluate(()=>!!state.activeStart));
+ok('with nothing new in the log', (await page.locator('#logBody tbody tr').count())===rowsBefore,
+   rowsBefore + ' → ' + await page.locator('#logBody tbody tr').count());
+ok('it offers to end it at the rostered time',
+   (await T('#forgotFix')).startsWith('End it at'), await T('#forgotFix'));
+await page.click('#punch'); await page.waitForTimeout(400);
 ok('clocking out banks it across days', (await page.locator('#logBody tbody tr').count())>=1);
 ok('OT priced in', await N('#cumeGross') > 80*38, await T('#cumeGross'));
 

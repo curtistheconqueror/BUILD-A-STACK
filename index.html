@@ -368,6 +368,13 @@
   #ote input{min-height:44px}
   body.lite .card::before, body.lite .card::after{display:none!important}
   .bankdot.carried{opacity:.55;border-style:dashed}
+  .forgot{margin:12px 0 4px;padding:12px 14px;border-radius:14px;
+    background:color-mix(in srgb,var(--warn,#e8a33d) 14%,transparent);
+    border:1px solid color-mix(in srgb,var(--warn,#e8a33d) 46%,transparent);text-align:left}
+  .forgot .ftxt{font-size:14px;line-height:1.45;color:var(--ink)}
+  .forgot .frow{display:flex;gap:9px;flex-wrap:wrap;margin-top:10px}
+  .forgot .frow .btn{flex:1 1 auto;min-height:44px}
+  .forgot .frow .mini{min-height:44px}
   .netline{font-size:13.6px;color:var(--muted);font-variant-numeric:tabular-nums;margin-top:2px}
   .netline b{color:var(--ink)}
   .money.inhole{background:none;-webkit-text-fill-color:var(--bad);color:var(--bad)}
@@ -1100,6 +1107,15 @@
     <div class="money" id="money">$0.00</div>
     <div class="netline hide" id="netline"></div>
     <div class="liveline" id="liveline"></div>
+    <!-- Shown only when the running clock looks like a punch nobody ended. Never acts on
+         its own: a genuine sixteen-hour day exists, and "keep it running" is one tap. -->
+    <div class="forgot hide" id="forgotBar">
+      <div class="ftxt" id="forgotTxt"></div>
+      <div class="frow">
+        <button class="btn go" id="forgotFix"></button>
+        <button class="mini" id="forgotKeep">No, it is still running</button>
+      </div>
+    </div>
     <div class="permoney" id="permoney">$0.00</div>
     <div class="permoneyLbl" id="permoneyLbl">pay period total</div>
     <!-- What this period will actually pay you, in the month it lands in. Climbs with the
@@ -4208,6 +4224,55 @@ function oteForecast(samples, cfg, nowMs, ytdGross, opts){
            probs: probs };
 }
 
+/* ---- a punch that was never ended ----
+   Forgetting to clock IN was solved three ways: a scheduled auto clock-in, backdating a
+   start, and reopening a shift you closed by accident. Forgetting to clock OUT had nothing,
+   and it is the more expensive mistake by far — the clock simply keeps running.
+
+   Overnight that invents hours nobody worked, and under a per-shift or 8-and-40 rule almost
+   all of them bill at time and a half, because those rules ask how long ONE shift ran and a
+   forgotten punch makes one shift enormous. It then spreads: the period total, the year to
+   date, the exempt tracker, and now the overtime forecast, where that period becomes a
+   monster sample the resampler keeps drawing from for years.
+
+   So it is caught rather than logged. Never corrected automatically — a genuine sixteen-hour
+   day exists, and a time clock that silently rewrites a punch is worse than one that asks. */
+var FORGOT_FALLBACK_H = 14;
+
+function forgottenShift(activeStart, nowMs, cfg){
+  if (!activeStart) return null;
+  var now = nowMs == null ? Date.now() : nowMs;
+  var hours = (now - activeStart) / HOUR_MS;
+  if (hours <= 0) return null;
+
+  /* The scheduled end of the day the shift began on. schedEndMs already carries the shift
+     past midnight when the roster does, so a 2 PM–10:30 PM run is one window and not two. */
+  var day = +midnight(activeStart);
+  var ss = hhmmToMin(cfg.schedStart), se = hhmmToMin(cfg.schedEnd);
+  var scheduled = (ss != null && se != null && isWorkDay(cfg, new Date(day).getDay()))
+    ? schedEndMs(cfg, day) : null;
+
+  /* A grace hour past the rostered end, because staying late is ordinary and being asked
+     about it every time you do would train someone to dismiss the question unread. */
+  var suggested = null, why = '';
+  if (scheduled != null && scheduled > activeStart && now > scheduled + HOUR_MS){
+    suggested = scheduled; why = 'sched';
+  } else if (scheduled == null && hours >= FORGOT_FALLBACK_H){
+    /* No roster to measure against, so fall back to a length no ordinary shift reaches. */
+    suggested = activeStart + FORGOT_FALLBACK_H * HOUR_MS; why = 'long';
+  }
+  if (suggested == null) return null;
+
+  return { hours: Math.round(hours * 100) / 100,
+           suggested: suggested,
+           suggestedHours: Math.round(((suggested - activeStart) / HOUR_MS) * 100) / 100,
+           extra: Math.round(((now - suggested) / HOUR_MS) * 100) / 100,
+           why: why,
+           /* Crossed a midnight without being ended: the strongest signal there is, and the
+              one worth saying out loud rather than only counting hours. */
+           overnight: +midnight(now) > day };
+}
+
 /* ==ENGINE-END== */
 
 /* ============================ state ============================ */
@@ -5220,6 +5285,7 @@ function render(){
     }
   }
   show('netline', netOn);
+  renderForgot(active, now);
   if (txt !== lastMoney){
     mEl.textContent = txt; lastMoney = txt;
     mEl.classList.remove('bump'); void mEl.offsetWidth; mEl.classList.add('bump');
@@ -7918,7 +7984,7 @@ function restoreFrom(text){
 }
 
 /* ============================ wiring ============================ */
-document.getElementById('punch').onclick = function(){ state.activeStart ? clockOut() : clockIn(); };
+document.getElementById('punch').onclick = function(){ state.activeStart ? clockOutChecked() : clockIn(); };
 
 document.getElementById('seg').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
@@ -8289,7 +8355,7 @@ document.getElementById('hstrip').addEventListener('click', function(e){
   if (e.target.closest('.hchev')) return;
   toggleCol('hero');
 });
-document.getElementById('punchMini').onclick = function(){ state.activeStart ? clockOut() : clockIn(); };
+document.getElementById('punchMini').onclick = function(){ state.activeStart ? clockOutChecked() : clockIn(); };
 
 document.getElementById('payMode').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
@@ -9375,6 +9441,66 @@ function renderStipendList(){
   + 'contract. Every tax applies, and so does the pension \u2014 stipends are creditable earnings.</div>';
 }
 
+/* ---- a punch that was never ended ----
+   Two moments, because there are two ways to notice. The banner catches it when you open
+   the app the next morning and the clock is still running; the intercept catches it at the
+   moment you finally tap clock out. Neither one ever edits a punch by itself. */
+var forgotDismissed = 0;    // "stop asking about this punch" — the Keep button
+var forgotAsked = 0;        // "the question has been put once" — a clock-out tap
+
+function renderForgot(activeStart, now){
+  var f = activeStart && forgotDismissed !== activeStart
+        ? forgottenShift(activeStart, now, state.cfg) : null;
+  show('forgotBar', !!f);
+  if (!f) return;
+  var lost = payForSpan(f.suggested, f.extra);
+  el('forgotTxt').innerHTML =
+    (f.overnight ? 'This clock has been running <b>since ' + fdate(new Date(activeStart))
+                 + '</b> at ' + ptime(activeStart) + ' — '
+                 : 'This shift has been running for ')
+    + '<b>' + f.hours.toFixed(2) + ' h</b>'
+    + (f.overnight ? '.' : ' now.')
+    + ' Did you forget to clock out?'
+    + (f.why === 'sched'
+        ? ' Your schedule ends at ' + ftimeCfg(state.cfg.schedEnd, state.cfg) + '.'
+        : '')
+    + ' Ending it there drops <b>' + f.extra.toFixed(2) + ' h</b> the app has been counting'
+    + (lost > 0.005 ? ', worth <span class="pay">' + money(lost) + '</span>' : '') + '.';
+  el('forgotFix').textContent = 'End it at ' + ptime(f.suggested);
+}
+
+/* Clocking out on a shift that looks forgotten asks instead of banking it silently. The
+   answer is always the user's — this only refuses to make the expensive choice for them. */
+function clockOutChecked(){
+  if (!state.activeStart) return;
+  var f = forgottenShift(state.activeStart, Date.now(), state.cfg);
+  /* Asked once and tapped again means the question has been seen and the answer is "bank it
+     as it stands". Refusing a second time would be a trap — somebody standing at the door
+     unable to clock out is worse than a shift they can still edit in the log. */
+  if (!f || forgotDismissed === state.activeStart || forgotAsked === state.activeStart){
+    clockOut(); return;
+  }
+  forgotAsked = state.activeStart;
+  lastMoney = ''; lastHeavySig = ''; render();
+  try { el('forgotBar').scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch(e){}
+  toast(f.hours.toFixed(2) + ' h on the clock — check the end time before this is banked.');
+}
+
+document.getElementById('forgotFix').onclick = function(){
+  var f = forgottenShift(state.activeStart, Date.now(), state.cfg);
+  if (!f) return;
+  clockOut(f.suggested);
+  forgotDismissed = 0; forgotAsked = 0;
+  toast('Ended at ' + ptime(f.suggested) + ' — ' + f.suggestedHours.toFixed(2)
+      + ' h banked. Edit it in the log if that is not right either.');
+};
+document.getElementById('forgotKeep').onclick = function(){
+  /* Remembered against THIS punch, so dismissing it does not also silence the next one. */
+  forgotDismissed = state.activeStart; forgotAsked = 0;
+  lastMoney = ''; lastHeavySig = ''; render();
+  toast('Left running. It will not ask about this shift again.');
+};
+
 /* ---- the OT outlook card ---- */
 var oteTarget = 100000, _oteSig = '', _oteFc = null, _oteLever = null;
 
@@ -9801,6 +9927,9 @@ try {
       wpunch.className = 'btn go wbtn';
     }
     wpunch.onclick = function(){
+      /* Not the checked version. Widget mode hides everything but its own card, so the
+         question would be asked somewhere invisible and the tap would appear to do nothing
+         — trapping someone on the clock is worse than banking a shift they can still edit. */
       if (state.activeStart) clockOut(); else clockIn();
       save(); widgetRender();
       if (window.BroadcastChannel){

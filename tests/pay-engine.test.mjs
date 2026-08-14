@@ -46,6 +46,7 @@ const E = new Function(m[1] + `
            unitCfg, unitsInRange, unitPay, unitPace,
            contractCfg, stipendTotal, contractProgress, chequesPaid, contractView,
            oteRand, otePeriodSamples, oteAllSamples, oteDrawPool, oteForecast, OTE_MIN_SAMPLES,
+           forgottenShift, FORGOT_FALLBACK_H,
            fedNotWithheld, netBreakdown, periodNetView,
            TAX_YEAR, TAX2026, bracketTax, fedWithholding };
 `)();
@@ -269,6 +270,79 @@ const gross = (sessions, c = cfg) => {
   const spent = E.buildLedger(pastForty, c, +new Date(2026, 7, 20));
   near('but past forty straight the bar reads full',
        E.bucketHoursAt(spent, +new Date(2026, 7, 14, 16), c, 'r14_14'), 8);
+}
+
+/* ---------------- a punch that was never ended ---------------- */
+{
+  /* Curtis's roster: Sun–Thu, 2:00 PM to 10:30 PM. The shift that matters runs past
+     midnight, which is exactly where a naive "same calendar day" test falls over. */
+  const c = { ...E.DEFAULTS, rate: 37.78, otMultiplier: 1.5, otMode: 'shift',
+              shiftThreshold: 8, weekStartDay: 0, lunchMins: 30,
+              schedStart: '14:00', schedEnd: '22:30',
+              workDays: [true,true,true,true,true,false,false],
+              holidays: [], banks: [], daysOff: [], vacations: [],
+              periodAnchor: '2026-08-09', periodLengthDays: 14, payDateOffsetDays: 13 };
+  const IN = +new Date(2026, 7, 12, 14);              // Wed 12 Aug, 2 PM
+  const at = (d, h, mi) => +new Date(2026, 7, d, h, mi || 0);
+  const f = (nowMs, cfg) => E.forgottenShift(IN, nowMs, cfg || c);
+
+  /* Ordinary shifts are never questioned. Being asked every time you stay late is how
+     someone learns to dismiss the question unread. */
+  ok('mid-shift, nothing is wrong',        f(at(12, 18)) === null);
+  ok('finishing on time is fine',          f(at(12, 22, 30)) === null);
+  ok('and so is half an hour over',        f(at(12, 23)) === null);
+  ok('the grace runs a full hour',         f(at(12, 23, 29)) === null);
+  ok('past that it speaks up',             !!f(at(13, 0, 30)), JSON.stringify(f(at(13, 0, 30))));
+
+  /* The overnight case this exists for: clocked in at 2 PM, noticed at 7 the next morning. */
+  const nextDay = f(at(13, 7));
+  ok('a forgotten punch is caught',        !!nextDay);
+  near('seventeen hours on the clock',     nextDay.hours, 17);
+  near('and it suggests the rostered end', nextDay.suggested, at(12, 22, 30), 1);
+  near('which is 8.5 h of shift',          nextDay.suggestedHours, 8.5);
+  near('leaving 8.5 h it had been counting', nextDay.extra, 8.5);
+  ok('it knows a midnight was crossed',    nextDay.overnight === true);
+  ok('and says the schedule is what it measured against', nextDay.why === 'sched', nextDay.why);
+
+  /* The money this saves, priced the way the app prices it. Under a per-shift rule the
+     8.5 phantom hours are ALL overtime, because the first eight were already used. */
+  const real = E.buildLedger([{ id: 'r', start: IN, end: at(12, 22, 30) }], c);
+  const runaway = E.buildLedger([{ id: 'r', start: IN, end: at(13, 7) }], c);
+  const sum = l => l.parts.reduce((a, p) => a + p.gross, 0);
+  const otOf = l => l.parts.reduce((a, p) => a + p.otHours, 0);
+  /* 2 PM to 10:30 PM less the half-hour lunch is exactly 8.00 h paid — the threshold, and
+     not a minute past it. */
+  near('the real shift carries no overtime at all', otOf(real), 0);
+  ok('the runaway invents hours of it', otOf(runaway) > 8, otOf(runaway).toFixed(2) + ' h');
+  ok('worth hundreds of dollars that were never earned',
+     sum(runaway) - sum(real) > 400, '$' + (sum(runaway) - sum(real)).toFixed(2));
+
+  /* A day off the roster has no scheduled end to measure against, so it falls back to a
+     length no ordinary shift reaches rather than saying nothing at all. */
+  const sat = +new Date(2026, 7, 15, 14);             // Saturday, not a work day
+  ok('an unrostered day is quiet at nine hours',
+     E.forgottenShift(sat, sat + 9 * E.HOUR_MS, c) === null);
+  const long = E.forgottenShift(sat, sat + 15 * E.HOUR_MS, c);
+  ok('but speaks up past the fallback', !!long, JSON.stringify(long));
+  ok('and says so',                     long.why === 'long', long.why);
+  near('suggesting the fallback length', long.suggestedHours, E.FORGOT_FALLBACK_H);
+
+  /* No schedule configured at all — the same fallback, not a crash and not silence. */
+  const bare = { ...c, schedStart: '', schedEnd: '' };
+  ok('no roster is quiet early',   f(at(12, 20), bare) === null);
+  ok('and speaks up late',         !!f(at(13, 5), bare), JSON.stringify(f(at(13, 5), bare)));
+
+  /* Nothing running, nothing to say. This is called on every render. */
+  ok('no active shift returns nothing',    E.forgottenShift(null, at(13, 7), c) === null);
+  ok('nor does a punch from the future',   E.forgottenShift(at(13, 9), at(13, 7), c) === null);
+
+  /* The suggestion is never later than now, and never earlier than the punch — either would
+     bank a negative shift or extend one that has not happened. */
+  [at(13, 0, 31), at(13, 7), at(14, 3), at(20, 12)].forEach(function(t){
+    const x = E.forgottenShift(IN, t, c);
+    ok('at ' + new Date(t).toISOString().slice(5, 16) + ' the suggestion sits inside the shift',
+       x && x.suggested > IN && x.suggested <= t, x ? String(x.suggested) : 'null');
+  });
 }
 
 /* ---------------- OT expectancy: resampled, not curve-fit ---------------- */
