@@ -172,7 +172,7 @@
   @keyframes hatch { to { transform: translateX(-28px); } }
   .spin #hatchGrp { animation: hatch .5s linear infinite; }
   @keyframes rspin { to { transform: rotate(360deg); } }
-  .spin #rollerSpokes { animation: rspin .7s linear infinite; transform-origin: 334px 1412px; }
+  .spin #rollerSpokes { animation: rspin .7s linear infinite; transform-origin: 350px 816px; }
   @keyframes steer { from { transform: rotate(-38deg); } to { transform: rotate(38deg); } }
   .spin #wheelIcon { animation: steer 2.6s ease-in-out infinite alternate; transform-origin: 120px 1150px; }
 
@@ -332,7 +332,7 @@
           <line x1="-10" y1="8" x2="10" y2="8"/>
           <line x1="-5" y1="16" x2="5" y2="16"/>
         </g>
-        <clipPath id="plateClip"><rect x="354" y="1384" width="92" height="56" rx="4"/></clipPath>
+        <clipPath id="plateClip"><rect x="312" y="770" width="176" height="24" rx="3"/></clipPath>
       </defs>
 
       <!-- ================= SECTION 1 : STEERING WHEEL ================= -->
@@ -415,10 +415,10 @@
       <rect x="385" y="700" width="30" height="1048" fill="#4c4e58"/>
       <rect x="393" y="700" width="6" height="1048" fill="#5d606c"/>
 
-      <!-- section 2 heading (drawn on top of the housing so it stays legible) -->
-      <text x="40" y="990" font-size="23" font-weight="800" letter-spacing="2.5" fill="#e6e8ee">2 · STEERING COLUMN</text>
-      <rect x="40" y="1002" width="60" height="4" rx="2" fill="#8a6a22"/>
-      <text x="40" y="1030" font-size="17" fill="#6b7280">the rotating contact</text>
+      <!-- section 2 heading — above the slip-ring assembly it introduces -->
+      <text x="40" y="740" font-size="23" font-weight="800" letter-spacing="2.5" fill="#e6e8ee">2 · STEERING COLUMN</text>
+      <rect x="40" y="752" width="60" height="4" rx="2" fill="#8a6a22"/>
+      <text x="40" y="780" font-size="17" fill="#6b7280">the rotating contact</text>
 
       <!-- steering-wheel top-view icon (turn demo) -->
       <g id="wheelIcon">
@@ -432,40 +432,50 @@
       <path d="M 172 1166 L 182 1160 L 184 1172 Z" fill="#4a4f5c"/>
       <text x="120" y="1224" text-anchor="middle" font-size="17" fill="#8b91a0">tap to turn the wheel</text>
 
-      <!-- brass plate (slip ring) on the shaft -->
-      <rect x="352" y="1380" width="96" height="64" rx="6" fill="url(#brassV)" stroke="#7a5f1d" stroke-width="3"/>
+      <!-- brass slip-ring PLATE — a big disc on the shaft, seen edge-on, high in the column.
+           Nearly the column's own diameter; insulated from the grounded shaft by a collar. -->
+      <rect x="310" y="768" width="180" height="28" rx="4" fill="url(#brassV)" stroke="#7a5f1d" stroke-width="3"/>
       <g clip-path="url(#plateClip)">
-        <g id="hatchGrp" stroke="#5c4712" stroke-width="4" opacity=".55">
-          <line x1="340" y1="1442" x2="360" y2="1386"/><line x1="354" y1="1442" x2="374" y2="1386"/>
-          <line x1="368" y1="1442" x2="388" y2="1386"/><line x1="382" y1="1442" x2="402" y2="1386"/>
-          <line x1="396" y1="1442" x2="416" y2="1386"/><line x1="410" y1="1442" x2="430" y2="1386"/>
-          <line x1="424" y1="1442" x2="444" y2="1386"/><line x1="438" y1="1442" x2="458" y2="1386"/>
-          <line x1="452" y1="1442" x2="472" y2="1386"/><line x1="466" y1="1442" x2="486" y2="1386"/>
-          <line x1="480" y1="1442" x2="500" y2="1386"/>
+        <g id="hatchGrp" stroke="#5c4712" stroke-width="4" opacity=".5">
+          <line x1="286" y1="796" x2="300" y2="768"/><line x1="300" y1="796" x2="314" y2="768"/>
+          <line x1="314" y1="796" x2="328" y2="768"/><line x1="328" y1="796" x2="342" y2="768"/>
+          <line x1="342" y1="796" x2="356" y2="768"/><line x1="356" y1="796" x2="370" y2="768"/>
+          <line x1="370" y1="796" x2="384" y2="768"/><line x1="384" y1="796" x2="398" y2="768"/>
+          <line x1="398" y1="796" x2="412" y2="768"/><line x1="412" y1="796" x2="426" y2="768"/>
+          <line x1="426" y1="796" x2="440" y2="768"/><line x1="440" y1="796" x2="454" y2="768"/>
+          <line x1="454" y1="796" x2="468" y2="768"/><line x1="468" y1="796" x2="482" y2="768"/>
+          <line x1="482" y1="796" x2="496" y2="768"/><line x1="496" y1="796" x2="510" y2="768"/>
+          <line x1="510" y1="796" x2="524" y2="768"/>
         </g>
       </g>
+      <!-- insulating bushing where the one-piece plate rides the shaft: the plate carries the
+           horn-button circuit, so it must NOT touch the grounded shaft. Inset, so the plate's
+           top and bottom edges stay continuous and it still reads as a single plate. -->
+      <rect x="383" y="771" width="34" height="22" fill="#14151a"/>
 
-      <!-- spring-loaded brass roller -->
-      <rect x="296" y="1398" width="14" height="28" rx="3" fill="#3a3b44"/>
-      <line x1="308" y1="1382" x2="333" y2="1412" stroke="#565863" stroke-width="5" stroke-linecap="round"/>
-      <polyline points="309,1444 317,1440 309,1435 317,1430 312,1426" fill="none" stroke="#8a8f9c" stroke-width="2.5"/>
-      <circle cx="334" cy="1412" r="20" fill="url(#brassV)" stroke="#7a5f1d" stroke-width="3"/>
+      <!-- spring-loaded brass roller — mounted below, pressing UP into the plate's underside -->
+      <rect x="330" y="874" width="40" height="12" rx="3" fill="#3a3b44"/>
+      <polyline points="350,874 336,868 364,860 336,852 364,844 350,838" fill="none" stroke="#8a8f9c" stroke-width="2.5"/>
+      <line x1="350" y1="842" x2="350" y2="822" stroke="#565863" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="350" cy="816" r="20" fill="url(#brassV)" stroke="#7a5f1d" stroke-width="3"/>
       <g id="rollerSpokes" stroke="#7a5f1d" stroke-width="3">
-        <line x1="334" y1="1396" x2="334" y2="1428"/>
-        <line x1="318" y1="1412" x2="350" y2="1412"/>
-        <line x1="323" y1="1401" x2="345" y2="1423"/>
-        <line x1="323" y1="1423" x2="345" y2="1401"/>
+        <line x1="350" y1="800" x2="350" y2="832"/>
+        <line x1="334" y1="816" x2="366" y2="816"/>
+        <line x1="339" y1="805" x2="361" y2="827"/>
+        <line x1="339" y1="827" x2="361" y2="805"/>
       </g>
-      <circle cx="334" cy="1412" r="4" fill="#4a3a10"/>
+      <circle cx="350" cy="816" r="4" fill="#4a3a10"/>
 
       <!-- section 2 callouts -->
       <g font-size="20" fill="#aeb4c2">
-        <text x="775" y="1352" text-anchor="end">Brass plate ring</text>
-        <text x="775" y="1376" text-anchor="end" font-size="17" fill="#8b91a0">turns with the wheel</text>
-        <line x1="608" y1="1368" x2="452" y2="1398" stroke="#4a4f5c" stroke-width="2"/>
-        <text x="25" y="1310">Spring-loaded brass roller</text>
-        <text x="25" y="1334" font-size="17" fill="#8b91a0">keeps contact while steering</text>
-        <line x1="205" y1="1344" x2="320" y2="1398" stroke="#4a4f5c" stroke-width="2"/>
+        <text x="775" y="724" text-anchor="end">Brass plate — the slip ring</text>
+        <text x="775" y="750" text-anchor="end" font-size="17" fill="#8b91a0">turns with the wheel</text>
+        <text x="775" y="774" text-anchor="end" font-size="17" fill="#8b91a0">insulated from the shaft</text>
+        <line x1="570" y1="762" x2="496" y2="780" stroke="#4a4f5c" stroke-width="2"/>
+        <text x="25" y="812">Spring-loaded brass roller</text>
+        <text x="25" y="836" font-size="17" fill="#8b91a0">presses up — keeps contact</text>
+        <line x1="252" y1="828" x2="330" y2="818" stroke="#4a4f5c" stroke-width="2"/>
+        <text x="202" y="1536" text-anchor="end" font-size="17" fill="#8b91a0">black wire</text>
         <text x="202" y="1560" text-anchor="end" fill="#8b91a0">to the horn relay ↓</text>
         <text x="775" y="1540" text-anchor="end" font-size="17" fill="#8b91a0">when honking, current returns</text>
         <text x="775" y="1564" text-anchor="end" font-size="17" fill="#8b91a0">down the grounded shaft</text>
@@ -480,9 +490,7 @@
       <text x="400" y="1906" text-anchor="middle" font-size="16" fill="#6b7280">bolts the column to the frame = ground</text>
 
       <!-- ================= SECTION 3 : RELAY & POWER ================= -->
-      <text x="400" y="1974" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2.5" fill="#e6e8ee">3 · HORN RELAY &amp; POWER</text>
       <rect x="370" y="1988" width="60" height="4" rx="2" fill="#8a6a22"/>
-      <text x="400" y="2016" text-anchor="middle" font-size="15" fill="#8b91a0">the relay is the boundary — <tspan fill="#3fd2ff" font-weight="700">◄ control side (coil)</tspan> · <tspan fill="#ff8a3d" font-weight="700">load side (contacts) ►</tspan></text>
 
       <!-- relay box -->
       <text x="600" y="2064" text-anchor="middle" font-size="22" font-weight="800" letter-spacing="3" fill="#aeb4c2">HORN RELAY</text>
@@ -492,7 +500,8 @@
 
       <!-- base wires -->
       <path class="wire" stroke="#6e5c20" d="M 225 2394 V 2360 H 420 M 420 2360 H 560 V 2320 M 420 2360 V 2248 a 8 8 0 0 1 0 -16 V 2120 H 510 V 2140"/>
-      <path class="wire" stroke="#1d5468" d="M 510 2230 V 2240 H 220 V 1412 H 333 M 377 1392 V 590 L 340 572 V 536"/>
+      <!-- horn-button circuit: black wire. Fixed run relay 85 → roller; rotating run plate → brass ring. -->
+      <path class="wire" stroke="#2e2e36" d="M 510 2230 V 2240 H 220 V 880 H 330 M 377 766 V 590 L 340 572 V 536"/>
       <path class="wire" stroke="#25563a" d="M 95 2388 V 2372 H 50 V 2520"/>
       <path class="wire" stroke="#6e401f" d="M 660 2320 V 2870 H 400 V 2940 M 400 2940 H 210 V 3172 M 400 2940 H 600 V 3172"/>
       <path class="wire" stroke="#25563a" d="M 250 3172 V 3160 H 330 V 3556 M 560 3172 V 3160 H 480 V 3556"/>
@@ -529,15 +538,11 @@
       </g>
       <g font-size="16" fill="#8b91a0">
         <text x="446" y="2112" text-anchor="end">coil feed</text>
-        <text x="446" y="2270" text-anchor="end">up to horn button</text>
         <text x="576" y="2352">battery</text>
         <text x="676" y="2352">to horns</text>
         <text x="544" y="2166" font-size="15" fill="#6b7280">coil</text>
         <text x="648" y="2214" font-size="15" fill="#6b7280" text-anchor="end">armature</text>
       </g>
-      <text x="600" y="2400" text-anchor="middle" font-size="18" fill="#8b91a0">A tiny current through the coil</text>
-      <text x="600" y="2426" text-anchor="middle" font-size="18" fill="#8b91a0">pulls the armature shut — and full</text>
-      <text x="600" y="2452" text-anchor="middle" font-size="18" fill="#8b91a0">battery power flows to the horns.</text>
 
       <!-- battery + fuse -->
       <rect x="70" y="2400" width="180" height="130" rx="10" fill="#191a20" stroke="#34353e" stroke-width="3"/>
@@ -557,7 +562,6 @@
       <circle cx="420" cy="2360" r="5" fill="#b89a3a"/>
 
       <!-- ================= SECTION 4 : HORNS ================= -->
-      <text x="400" y="2810" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2.5" fill="#e6e8ee">4 · TWIN HORNS — HIGH &amp; LOW NOTE</text>
       <rect x="370" y="2824" width="60" height="4" rx="2" fill="#8a6a22"/>
 
       <text x="644" y="2600" text-anchor="end" font-size="17" fill="#8b91a0">relay output — full power</text>
@@ -635,8 +639,8 @@
       <!-- ============ animated current overlays ============ -->
       <path class="flow fy" data-z="coil-feed" d="M 225 2394 V 2360 H 420 V 2248 a 8 8 0 0 1 0 -16 V 2120 H 510 V 2140"/>
       <path class="flow fy" data-z="pwr-feed" d="M 420 2360 H 560 V 2316"/>
-      <path class="flow fc" data-z="ctrl-trig" d="M 510 2230 V 2240 H 220 V 1412 H 377 V 590 L 340 572 V 534"/>
-      <path class="flow fg" data-z="ctrl-gnd" d="M 400 516 V 1378 M 400 1446 V 1815"/>
+      <path class="flow fc" data-z="ctrl-trig" d="M 510 2230 V 2240 H 220 V 880 H 350 V 782 H 377 V 590 L 340 572 V 534"/>
+      <path class="flow fg" data-z="ctrl-gnd" d="M 400 516 V 764 M 400 800 V 1815"/>
       <path class="flow fg" data-z="batt-gnd" d="M 50 2520 V 2372 H 95 V 2390"/>
       <path class="flow fo" data-z="pwr-out" d="M 560 2316 V 2196 L 660 2160 V 2870 H 400 V 2940"/>
       <path class="flow fo" data-z="pwr-hi" d="M 400 2940 H 210 V 3168"/>
@@ -648,25 +652,25 @@
       <path class="flow fg" data-z="frame-return" d="M 716 3582 H 96"/>
       <polygon id="gndArrow" points="84,3582 100,3573 100,3591" fill="#54e07a"/>
       <!-- fault-only partial flows -->
-      <path class="flow fc" data-z="short-trig" d="M 510 2230 V 2240 H 220 V 912"/>
+      <path class="flow fc" data-z="short-trig" d="M 510 2230 V 2240 H 220 V 988"/>
       <path class="flow fo" data-z="short-pwr" d="M 560 2316 V 2196 L 660 2160 V 2606"/>
 
       <!-- ============ fault markers ============ -->
       <g id="faultMarks" font-size="14">
         <g id="mkOpenSlip" class="mk">
-          <line class="mkptr" x1="300" y1="1462" x2="332" y2="1424"/>
-          <rect x="24" y="1466" width="286" height="32" rx="8"/>
-          <text x="38" y="1487">✂ SLIP-RING OPEN — no contact</text>
+          <line class="mkptr" x1="316" y1="908" x2="342" y2="836"/>
+          <rect x="30" y="900" width="286" height="32" rx="8"/>
+          <text x="44" y="921">✂ SLIP-RING OPEN — no contact</text>
         </g>
         <g id="mkShortTrig" class="mk">
-          <line class="mkptr" x1="212" y1="900" x2="220" y2="912"/>
-          <rect x="30" y="866" width="312" height="32" rx="8"/>
-          <text x="44" y="887">⚡ TRIGGER WIRE SHORTED TO GROUND</text>
+          <line class="mkptr" x1="200" y1="972" x2="220" y2="988"/>
+          <rect x="20" y="940" width="312" height="32" rx="8"/>
+          <text x="34" y="961">⚡ TRIGGER WIRE SHORTED TO GROUND</text>
         </g>
         <g id="mkShortPwr" class="mk">
-          <line class="mkptr" x1="640" y1="2588" x2="660" y2="2606"/>
-          <rect x="430" y="2556" width="322" height="32" rx="8"/>
-          <text x="444" y="2577">⚡ POWER WIRE SHORTED TO FRAME</text>
+          <line class="mkptr" x1="668" y1="2570" x2="661" y2="2602"/>
+          <rect x="430" y="2534" width="322" height="32" rx="8"/>
+          <text x="444" y="2555">⚡ POWER WIRE SHORTED TO FRAME</text>
         </g>
         <g id="mkFuseX" class="mk">
           <line x1="306" y1="2350" x2="354" y2="2372"/>
@@ -710,6 +714,19 @@
           <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
         <g class="tp hit" data-tp="loGnd" transform="translate(560,3172)">
           <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+      </g>
+
+      <!-- ============ top label layer ============
+           These labels sit where wires run. Drawn last so the text is always fully legible
+           and the wire simply passes behind the letters (rather than a plate breaking it). -->
+      <g id="topLabels">
+        <text x="400" y="1974" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2.5" fill="#e6e8ee">3 · HORN RELAY &amp; POWER</text>
+        <text x="400" y="2016" text-anchor="middle" font-size="15" fill="#8b91a0">the relay is the boundary — <tspan fill="#3fd2ff" font-weight="700">◄ control side (coil)</tspan> · <tspan fill="#ff8a3d" font-weight="700">load side (contacts) ►</tspan></text>
+        <text x="406" y="2270" text-anchor="end" font-size="16" fill="#8b91a0">up to horn button</text>
+        <text x="600" y="2400" text-anchor="middle" font-size="18" fill="#8b91a0">A tiny current through the coil</text>
+        <text x="600" y="2426" text-anchor="middle" font-size="18" fill="#8b91a0">pulls the armature shut — and full</text>
+        <text x="600" y="2452" text-anchor="middle" font-size="18" fill="#8b91a0">battery power flows to the horns.</text>
+        <text x="400" y="2810" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2.5" fill="#e6e8ee">4 · TWIN HORNS — HIGH &amp; LOW NOTE</text>
       </g>
 
       <!-- tap targets -->

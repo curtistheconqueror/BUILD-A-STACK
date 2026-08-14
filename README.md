@@ -43,7 +43,7 @@ Press the **horn button** at the top and current lights up through the whole sys
 It traces the real setup in four stops:
 
 - **Steering wheel** — the horn button: plastic cover over a brass cap, held up by a return spring; press it and the cap meets the brass contact ring to close the switch.
-- **Steering column** — the rotating contact: a spring-loaded **brass roller wheel** rides on a brass plate that turns with the wheel, so the horn-button circuit bridges the top and bottom halves at any steering angle.
+- **Steering column** — the rotating contact: a big **brass slip-ring plate**, near the column's own diameter, sits high on the shaft (insulated from it, since the shaft is ground) and turns with the wheel. A spring-loaded **brass roller** mounted below presses *up* into its underside, so the horn-button circuit bridges the rotating and fixed halves at any steering angle. A black wire carries it from the roller's mount down to the relay.
 - **Relay & power** — a small coil current pulls the armature shut and switches full battery power (via a fuse) through to the horns.
 - **Twin horns** — high note and low note, each with two wires, switched on the power side and permanently grounded to the frame plus a redundant ground wire; the frame carries the return back to the battery.
 
