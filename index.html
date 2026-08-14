@@ -4069,7 +4069,12 @@ function otePeriodSamples(parts, cfg, nowMs){
   var out = [];
   if (!parts || !parts.length) return out;
   var first = parts.reduce(function(m, p){ return Math.min(m, p.start); }, Infinity);
-  var p = periodInfo(first, cfg), guard = 0;
+  /* The walk is capped, so it must start near NOW and reach back — not start at the first
+     shift and hope to arrive. Started from the front, a history older than the cap silently
+     drops the RECENT periods, which are the only ones a forecast is entitled to lean on.
+     Four years is more seasonality than the resampler can use anyway. */
+  var span = 104 * (cfg.periodLengthDays || 14) * DAY_MS;
+  var p = periodInfo(Math.max(first, nowMs - span), cfg), guard = 0;
   while (p.endMs <= nowMs && guard++ < 200){
     var t = sumRange(parts, p.startMs, p.endMs);
     if (t.hours > 0.01)
@@ -4113,6 +4118,11 @@ var OTE_MIN_SAMPLES = 8;
    probability should do. */
 function oteForecast(samples, cfg, nowMs, ytdGross, opts){
   var o = opts || {};
+  /* Bad entries are dropped here as well as at every door, because this function is the
+     one place a NaN turns into "$NaN" on screen — a backup file is only one door. */
+  samples = (samples || []).filter(function(x){
+    return x && isFinite(x.ot) && x.ot >= 0 && x.month >= 0 && x.month < 12;
+  });
   var need = OTE_MIN_SAMPLES;
   if (!samples || samples.length < need)
     return { ready: false, n: (samples || []).length, need: need };
@@ -8457,7 +8467,9 @@ document.getElementById('cYtd').onchange = function(e){
 document.getElementById('presets').addEventListener('click', function(e){
   var b = e.target.closest('button[data-preset]'); if (!b) return;
   // A preset is a fresh start: drop per-colour overrides so it actually looks like itself.
-  state.theme = { preset: b.dataset.preset };
+  /* A colour preset replaces the palette, not the machine underneath it. Losing the
+     battery profile because you tapped a colour would be a silent, unrelated change. */
+  state.theme = { preset: b.dataset.preset, perf: theme().perf || '' };
   save(); applyTheme(); renderThemeControls();
   toast(PRESETS[b.dataset.preset].name + ' applied.');
 });

@@ -98,6 +98,18 @@ ok('because the choices underneath were kept, not overwritten',
    await p.evaluate(() => { const t = JSON.parse(localStorage.getItem('payclock.v1')).theme;
      return t.surface === 'water' && t.rgb === 'wave'; }));
 
+console.log('\n━━ A colour preset must not switch the battery saver off ━━');
+await openCfg();
+await p.selectOption('#tPerf', 'lite'); await p.waitForTimeout(400);
+await p.evaluate(() => { const b = document.querySelector('#presets button'); if (b) b.click(); });
+await p.waitForTimeout(500);
+ok('lite survives tapping a colour preset', /\blite\b/.test(await cls()), await cls());
+ok('and is still stored', await p.evaluate(() =>
+   JSON.parse(localStorage.getItem('payclock.v1')).theme.perf === 'lite'));
+await p.evaluate(() => { theme().surface='water'; theme().rgb='wave'; theme().perf='';
+  save(); applyTheme(); });
+await p.waitForTimeout(300);
+
 console.log('\n━━ It survives a reload ━━');
 await openCfg();
 await p.selectOption('#tPerf', 'lite'); await p.waitForTimeout(500);

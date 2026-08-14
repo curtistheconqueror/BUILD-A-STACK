@@ -355,6 +355,35 @@ const gross = (sessions, c = cfg) => {
   ok('garbage entries are dropped',
      E.oteAllSamples([], c, NOW, [{ ym: '', otHours: 5 }, { ym: '2025-03', otHours: 'x' }]).length === 0);
 
+  /* Hostile samples cannot poison the money: one NaN in the pool once turned the whole
+     projection into "$NaN" on screen. Dropped here, whatever door they came through. */
+  const dirty = flat10.concat([mk(0, NaN), mk(1, Infinity), mk(2, -5), mk(3, 1e9), mk(-1, 5)]);
+  const clean = fc(dirty.filter(x => isFinite(x.ot) && x.ot >= 0 && x.ot < 1e6
+                                     && x.month >= 0), { targets: [97999] });
+  const poisoned = fc(dirty, { targets: [97999] });
+  ok('a NaN sample never reaches the projection', isFinite(poisoned.expYear),
+     String(poisoned.expYear));
+  ok('negative and unplaced samples are dropped too',
+     poisoned.n === flat10.length + 1, poisoned.n + ' kept');   // the 1e9 outlier survives — huge is legal, NaN is not
+
+  /* Ancient history must not crowd out the present. With a first shift ten years back, the
+     capped walk once started at the beginning and never reached the recent periods — the
+     only ones a forecast is entitled to lean on. */
+  {
+    const ancient = [{ id: 'old', start: +new Date(2016, 0, 4, 8),
+                       end: +new Date(2016, 0, 4, 8) + 8 * E.HOUR_MS }];
+    let n = 0;
+    for (let w = 0; w < 8; w++) for (let d = 0; d < 5; d++){
+      const st = +new Date(2026, 5, 7 + w * 7 + d, 8);
+      ancient.push({ id: 'r' + (n++), start: st, end: st + 9 * E.HOUR_MS });
+    }
+    const oldLed = E.buildLedger(ancient, c, NOW);
+    const got = E.otePeriodSamples(oldLed.parts, c, NOW);
+    ok('a ten-year-old first shift keeps the recent periods',
+       got.filter(x => x.ot > 0).length >= 4, got.length + ' samples, '
+       + got.filter(x => x.ot > 0).length + ' with OT');
+  }
+
   /* Real periods come off the ledger: two fortnights, each holding two weeks of five
      9-hour shifts — 5 h of OT a week, so 10 h a period under a 40-hour week. */
   const sh = []; let id = 0;

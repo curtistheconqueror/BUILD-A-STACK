@@ -179,6 +179,19 @@ ok('enough manual months unlock the figures', await seen(p, '#oReady'));
 ok('and the notice is gone', !(await seen(p, '#oNeed')));
 await p.close();
 
+console.log('\n━━ A tampered backup cannot script the page ━━');
+const evil = JSON.parse(JSON.stringify(SEED));
+evil.otHist = [{ id:'x1', jobId:'j1', ym:'<img src=x onerror=window.__xss=1>', otHours:5 }];
+evil.stipends = [{ id:'x2', jobId:'j1', name:'<script>window.__xss=2</script>', amount:100 }];
+p = await boot(evil, NOW);
+ok('the hostile month renders as text', (await p.$$eval('#ohList .jobrow', r => r.length)) === 1
+   && /<img/.test(await txt(p, '#ohList')), (await txt(p, '#ohList')).slice(0,60));
+ok('and nothing executed', !(await p.evaluate(() => window.__xss)),
+   String(await p.evaluate(() => window.__xss)));
+ok('the NaN door is shut: figures are still money',
+   !/NaN/.test(await txt(p, '#ote')), (await txt(p, '#oProj')));
+await p.close();
+
 console.log('\n━━ It is a clock feature and stays out of other work ━━');
 const surg = JSON.parse(JSON.stringify(SEED));
 surg.jobs[0].profession = 'surgeon'; surg.sessions = [];
