@@ -30,7 +30,13 @@ const shift=(id,d,from,to)=>({id,start:J(d,from),end:J(d,to)});
 
 const base={configured:true,cfg:{rate:38,otMultiplier:1.5,otMode:'weekly',weeklyThreshold:40,
   periodThreshold:80,dailyThreshold:8,weekStartDay:0,periodAnchor:'2026-01-04',
-  periodLengthDays:14,payDateOffsetDays:13,schedStart:'09:00',schedEnd:'17:00'},
+  periodLengthDays:14,payDateOffsetDays:13,schedStart:'09:00',schedEnd:'17:00',
+  /* Floating holidays are an add-on rather than a shipped default now, and this whole
+     suite is about booking one — so the bank is seeded rather than assumed. */
+  banks:[{id:'float',name:'Floating holiday',count:3,hours:8,ot:true,makeUp:false,
+          slots:['MLK Day','Birthday','Anniversary']},
+         {id:'sick',name:'Sick day',count:5,hours:8,ot:false,makeUp:true,slots:[]},
+         {id:'vrd',name:'Vacation random day',count:5,hours:8,ot:false,makeUp:false,slots:[]}]},
   sessions:[],activeStart:null,unit:'sec',planOn:false,plannedHours:8,sound:false,
   calCal:{on:true,show:'money',otStyle:'accrue',dailyAfter:8,hours:{}}};
 

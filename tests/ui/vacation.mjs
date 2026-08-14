@@ -136,16 +136,23 @@ const d = await p.evaluate(()=>{
 console.log('       ' + JSON.stringify(d.banks));
 ok('six holidays', d.hols.length===6, String(d.hols.length));
 ok('none earning overtime credit', d.hols.every(h=>h.ot===false), JSON.stringify(d.hols));
-ok('three floaters', d.banks[0].count===3, String(d.banks[0].count));
-ok('five sick days', d.banks[1].count===5, String(d.banks[1].count));
-ok('five vacation random days', d.banks[2].id==='vrd' && d.banks[2].count===5, JSON.stringify(d.banks[2]));
-ok('the sick day is the one you owe back', d.banks[1].makeUp===true, JSON.stringify(d.banks[1]));
-ok('the VRD is not', d.banks[2].makeUp===false, JSON.stringify(d.banks[2]));
-const slots = await p.evaluate(()=>[...document.querySelectorAll('#cBankList input[data-bslot="0"]')].map(i=>i.value));
-ok('the floaters are MLK, Birthday, Anniversary',
-   JSON.stringify(slots)===JSON.stringify(['MLK Day','Birthday','Anniversary']), JSON.stringify(slots));
+/* No floating holiday ships: plenty of contracts have none, and an allowance the app
+   invents is one somebody has to notice and delete. It is one tap away under Add. */
+ok('no floating holiday is assumed', !d.banks.some(x=>x.id==='float'),
+   d.banks.map(x=>x.id).join(','));
+ok('five sick days', d.banks[0].id==='sick' && d.banks[0].count===5, JSON.stringify(d.banks[0]));
+ok('five vacation random days', d.banks[1].id==='vrd' && d.banks[1].count===5, JSON.stringify(d.banks[1]));
+ok('the sick day is the one you owe back', d.banks[0].makeUp===true, JSON.stringify(d.banks[0]));
+ok('the VRD is not', d.banks[1].makeUp===false, JSON.stringify(d.banks[1]));
+/* Named slots still work — added a floater and check it arrives nameable. */
+await p.selectOption('#cBankAdd','float'); await p.waitForTimeout(600);
+ok('a floating holiday can be added back',
+   (await p.locator('#cBankList .bankcfg').count())===3,
+   String(await p.locator('#cBankList .bankcfg').count()));
 ok('and both questions are asked per allowance',
    (await p.locator('#cBankList select[data-bf="makeUp"]').count())===3);
+ok('as is the already-used one',
+   (await p.locator('#cBankList input[data-bf="usedBefore"]').count())===3);
 
 console.log('\n━━ Editing and removing ━━');
 await p.close();

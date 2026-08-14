@@ -367,6 +367,7 @@
   body.lite .card{box-shadow:none!important}
   #ote input{min-height:44px}
   body.lite .card::before, body.lite .card::after{display:none!important}
+  .bankdot.carried{opacity:.55;border-style:dashed}
   .netline{font-size:13.6px;color:var(--muted);font-variant-numeric:tabular-nums;margin-top:2px}
   .netline b{color:var(--ink)}
   .money.inhole{background:none;-webkit-text-fill-color:var(--bad);color:var(--bad)}
@@ -988,8 +989,12 @@
     <div class="sgrid">
       <div class="f"><label for="sFloat">Floating / personal days a year</label>
         <input type="number" id="sFloat" min="0" max="99" step="1" value="0"></div>
+      <div class="f"><label for="sFloatUsed">…of those, already used this year</label>
+        <input type="number" id="sFloatUsed" min="0" max="99" step="1" value="0"></div>
       <div class="f"><label for="sSick">Paid sick days a year</label>
         <input type="number" id="sSick" min="0" max="99" step="1" value="0"></div>
+      <div class="f"><label for="sSickUsed">…of those, already used this year</label>
+        <input type="number" id="sSickUsed" min="0" max="99" step="1" value="0"></div>
       <div class="f"><label for="sOffHours">Hours each one is worth</label>
         <input type="number" id="sOffHours" min="0" max="24" step="0.5" value="8"></div>
     </div>
@@ -1988,7 +1993,13 @@
       </div>
       <div id="cBankList"></div>
       <div class="actions" style="justify-content:flex-start;margin-top:10px">
-        <button class="mini" id="cBankAdd">+ Add an allowance</button>
+        <select id="cBankAdd" style="max-width:220px">
+          <option value="">+ Add an allowance…</option>
+          <option value="float">Floating holiday</option>
+          <option value="sick">Sick day</option>
+          <option value="vrd">Vacation random day</option>
+          <option value="personal">Personal day</option>
+        </select>
         <button class="mini" id="cBankReset">↺ Back to the defaults</button>
       </div>
       <div class="f" style="margin-top:18px"><label>Vacation</label>
@@ -2195,8 +2206,9 @@ function HOLIDAY_DEFAULTS(){
    slots — sick days — is a plain count. */
 function BANK_DEFAULTS(){
   return [
-    { id: 'float', name: 'Floating holiday', count: 3, hours: 8, ot: true,  makeUp: false,
-      slots: ['MLK Day', 'Birthday', 'Anniversary'] },
+    /* No floating holidays here on purpose. Plenty of contracts do not have them at all,
+       and an allowance the app invents is one somebody has to notice and delete. They are
+       one tap away under "Add an allowance" for the contracts that do. */
     { id: 'sick',  name: 'Sick day',        count: 5, hours: 8, ot: false, makeUp: true,  slots: [] },
     /* Vacation random days: a block of vacation you split up however you like, paid flat.
        Approved time off, so unlike a sick day it leaves you owing nothing. */
@@ -3242,10 +3254,29 @@ function daysOffUsed(cfg, bankId, year){
     return d.bank === bankId && (year == null || +String(d.date).slice(0, 4) === year);
   }).sort(function(a, b){ return a.date < b.date ? -1 : 1; });
 }
+/* Days already spent this year BEFORE the app was installed. Somebody setting this up in
+   August has usually taken a sick day or two since January, and an app that says "5 of 5
+   left" is not being optimistic — it is wrong, and it is wrong about the one thing these
+   allowances exist to tell you.
+
+   Year-scoped on purpose. The allowance resets each January, so a carry-in belongs to the
+   year it was entered for and must vanish on 1 January rather than quietly eating next
+   year's days as well. */
+function bankUsedBefore(b, year){
+  var n = b ? Math.max(0, +b.usedBefore || 0) : 0;
+  if (!n) return 0;
+  if (year != null && b.usedYear && +b.usedYear !== year) return 0;
+  return Math.min(n, b.count || 0);
+}
+/* Everything spent this year: what was carried in, plus what the app has watched. */
+function bankUsed(cfg, bankId, year){
+  return bankUsedBefore(bankById(cfg, bankId), year)
+       + daysOffUsed(cfg, bankId, year).length;
+}
 function bankLeft(cfg, bankId, year){
   var b = bankById(cfg, bankId);
   if (!b) return 0;
-  return Math.max(0, (b.count || 0) - daysOffUsed(cfg, bankId, year).length);
+  return Math.max(0, (b.count || 0) - bankUsed(cfg, bankId, year));
 }
 /* Which slots of a bank are still unspent this year, as {index, name, usedOn}. */
 function bankSlots(cfg, bankId, year){
@@ -4615,6 +4646,13 @@ function renderBanks(){
   var banks = cfg.banks || [];
   el('bankBody').innerHTML = banks.length ? banks.map(function(b){
     var left = bankLeft(cfg, b.id, y), used = daysOffUsed(cfg, b.id, y);
+    var carried = bankUsedBefore(b, y);
+    /* Drawn first and drawn differently: these are spent, but the app never saw them go, so
+       it must not offer a ✕ to "give one back" — there is no record to undo. */
+    var carryDots = '';
+    for (var ci = 0; ci < carried; ci++)
+      carryDots += '<span class="bankdot carried">' + esc(b.name)
+                 + '<span class="when">before you started</span></span>';
     var dots;
     if (b.slots && b.slots.length){
       /* Named slots, because knowing you still have your birthday but have spent MLK is
@@ -4632,15 +4670,18 @@ function renderBanks(){
       }).join('');
       for (var i = 0; i < left; i++) dots += '<span class="bankdot free">available</span>';
     }
+    dots = carryDots + dots;
     return '<div class="bank"><div class="bankhd"><b>' + esc(b.name) + 's</b>'
       + '<span class="left' + (left ? '' : ' none') + '">' + left + ' of ' + (b.count || 0) + ' left</span></div>'
       + '<div class="bankdots">' + dots + '</div>'
       + '<div class="banknote">' + (b.hours == null ? 8 : b.hours) + ' h at your rate · '
       + (b.ot ? 'counts toward overtime' : 'does not count toward overtime')
-      + ' · allowance resets each January</div></div>';
+      + ' · allowance resets each January'
+      + (carried ? ' · <b>' + carried + '</b> already spent before you started tracking' : '')
+      + '</div></div>';
   }).join('') : '<div class="holnone">No allowances set up.</div>';
 
-  var spent = (cfg.banks || []).reduce(function(n, b){ return n + daysOffUsed(cfg, b.id, y).length; }, 0);
+  var spent = (cfg.banks || []).reduce(function(n, b){ return n + bankUsed(cfg, b.id, y); }, 0);
   var total = (cfg.banks || []).reduce(function(n, b){ return n + (b.count || 0); }, 0);
   el('sum_banks').textContent = total ? (total - spent) + ' of ' + total + ' left' : '';
 }
@@ -4782,6 +4823,9 @@ function renderBankCfg(){
       + '<div class="nums">'
       + '<div class="f"><label>How many a year</label>'
       + '<input type="number" min="0" max="99" step="1" data-bf="count" data-b="' + i + '" value="' + (b.count || 0) + '"></div>'
+      + '<div class="f"><label>Already used this year</label>'
+      + '<input type="number" min="0" max="99" step="1" data-bf="usedBefore" data-b="' + i + '" value="'
+        + (b.usedBefore || 0) + '"></div>'
       + '<div class="f"><label>Hours each</label>'
       + '<input type="number" min="0" max="24" step="0.5" data-bf="hours" data-b="' + i + '" value="' + (b.hours == null ? 8 : b.hours) + '"></div>'
       + '<div class="f"><label>Counts toward OT</label>'
@@ -6234,11 +6278,20 @@ function readSetup(){
   if (!isFinite(hours) || hours < 0 || hours > 24) hours = 8;
   var nFloat = Math.max(0, Math.min(99, parseInt(el('sFloat').value, 10) || 0));
   var nSick  = Math.max(0, Math.min(99, parseInt(el('sSick').value, 10) || 0));
+  /* Almost nobody installs a pay app on 1 January. Asked here rather than left to be
+     discovered, because "5 of 5 left" in August is not optimism, it is wrong — and it is
+     wrong about the single thing these allowances exist to tell you. The money side of the
+     same problem is the year-to-date carry-in; this is its twin for days. */
+  var yr = new Date().getFullYear();
+  var uFloat = Math.max(0, Math.min(nFloat, parseInt(el('sFloatUsed').value, 10) || 0));
+  var uSick  = Math.max(0, Math.min(nSick,  parseInt(el('sSickUsed').value, 10) || 0));
   var banks = [];
   if (nFloat) banks.push({ id: 'float', name: 'Floating holiday', count: nFloat,
-                           hours: hours, ot: true, slots: [] });
+                           hours: hours, ot: true, slots: [],
+                           usedBefore: uFloat, usedYear: yr });
   if (nSick)  banks.push({ id: 'sick',  name: 'Sick day', count: nSick,
-                           hours: hours, ot: false, slots: [] });
+                           hours: hours, ot: false, slots: [],
+                           usedBefore: uSick, usedYear: yr });
 
   return {
     rate: rate, periodAnchor: anchor,
@@ -6284,7 +6337,11 @@ function previewSetup(){
   var thr = otThresholdOf(cfg);
   var offs = [];
   for (var i = 0; i < 7; i++) if (!r.workDays[i]) offs.push(DOW[i]);
-  var give = (r.banks || []).map(function(b){ return b.count + ' ' + b.name.toLowerCase() + (b.count === 1 ? '' : 's'); });
+  var give = (r.banks || []).map(function(b){
+    var u = +b.usedBefore || 0;
+    return b.count + ' ' + b.name.toLowerCase() + (b.count === 1 ? '' : 's')
+         + (u ? ' (' + (b.count - u) + ' left)' : '');
+  });
   box.innerHTML = 'Current period <b>' + fdate(p.start) + ' → ' + fdateY(p.lastDay) + '</b>'
     + '<br>Payday <b>' + fdateY(p.payDate) + '</b>'
     + '<br>Overtime past ' + thr + ' h at <span class="pay">' + money(r.rate * cfg.otMultiplier) + '</span>/hr'
@@ -8066,6 +8123,14 @@ document.getElementById('cBankList').addEventListener('change', function(e){
     b.hours = isFinite(h) && h >= 0 ? Math.min(24, h) : 8;
     t.value = b.hours;
   }
+  if (f === 'usedBefore'){
+    var u = parseInt(t.value, 10);
+    /* Stamped with the year it was entered for, so it stops applying in January instead of
+       silently eating next year's allowance too. */
+    b.usedBefore = isFinite(u) && u > 0 ? Math.min(99, u) : 0;
+    b.usedYear = new Date().getFullYear();
+    t.value = b.usedBefore;
+  }
   if (f === 'ot') b.ot = t.value === '1';
   /* Written explicitly the moment it is touched, so it stops following the overtime flag
      and starts meaning what you set it to. */
@@ -8101,10 +8166,22 @@ document.getElementById('cVacList').addEventListener('click', function(e){
     toast('Vacation removed.');
   }
 });
-document.getElementById('cBankAdd').onclick = function(){
+var BANK_KINDS = {
+  float:    { name: 'Floating holiday',     count: 1, ot: true,  makeUp: false },
+  sick:     { name: 'Sick day',             count: 5, ot: false, makeUp: true  },
+  vrd:      { name: 'Vacation random day',  count: 5, ot: false, makeUp: false },
+  personal: { name: 'Personal day',         count: 1, ot: false, makeUp: false }
+};
+document.getElementById('cBankAdd').onchange = function(e){
+  var k = BANK_KINDS[e.target.value];
+  e.target.value = '';
+  if (!k) return;
   state.cfg.banks = state.cfg.banks || [];
-  state.cfg.banks.push({ id: uid(), name: 'Personal day', count: 1, hours: 8, ot: false, slots: [] });
+  state.cfg.banks.push({ id: uid(), name: k.name, count: k.count, hours: 8,
+                         ot: k.ot, makeUp: k.makeUp, slots: [],
+                         usedBefore: 0, usedYear: new Date().getFullYear() });
   save(); renderBankCfg(); renderBanks(); render();
+  toast(k.name + ' added — set how many you get and how many are already spent.');
 };
 document.getElementById('cBankReset').onclick = function(){
   state.cfg.banks = BANK_DEFAULTS();
@@ -8844,7 +8921,7 @@ document.getElementById('sWorkDays').addEventListener('click', function(e){
   setupDays[i] = !setupDays[i];
   paintSetupDays(); previewSetup();
 });
-['sSchedStart','sSchedEnd','sLunch','sHolOn','sFloat','sSick','sOffHours'].forEach(function(id){
+['sSchedStart','sSchedEnd','sLunch','sHolOn','sFloat','sSick','sFloatUsed','sSickUsed','sOffHours'].forEach(function(id){
   var e2 = document.getElementById(id);
   e2.addEventListener('input', previewSetup);
   e2.addEventListener('change', previewSetup);

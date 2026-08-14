@@ -179,9 +179,15 @@ ok('unticking goes back to a plain count',
    (await p.locator('#cBankList .slots input').count())===0);
 
 console.log('\n━━ Adding and removing an allowance ━━');
-await p.click('#cBankAdd'); await p.waitForTimeout(450);
+/* Adding is a picker rather than a button now — a floating holiday is a real kind you
+   choose, not a generic row you then have to rename. */
+await p.selectOption('#cBankAdd','float'); await p.waitForTimeout(500);
 ok('a third appears', (await p.locator('#cBankList .bankcfg').count())===3,
    String(await p.locator('#cBankList .bankcfg').count()));
+ok('and it is the kind that was picked',
+   (await p.textContent('#cBankList')).includes('Floating holiday')
+   || (await p.inputValue('#cBankList input[data-bf="name"] >> nth=2'))==='Floating holiday',
+   await p.inputValue('#cBankList input[data-bf="name"] >> nth=2'));
 ok('and shows in the balances', (await p.locator('#bankBody .bank').count())===3);
 await p.locator('#cBankList button[data-bdel]').last().click(); await p.waitForTimeout(500);
 ok('removing takes it away', (await p.locator('#cBankList .bankcfg').count())===2);
@@ -234,7 +240,7 @@ console.log('\n━━ What the answer stores ━━');
 console.log('\n━━ Putting the defaults back ━━');
 await p.click('#cBankReset'); await p.waitForTimeout(450);
 const back = await p.evaluate(()=>[...document.querySelectorAll('#cBankList input[data-bf="count"]')].map(x=>x.value));
-ok('three, five and five again', JSON.stringify(back)==='["3","5","5"]', JSON.stringify(back));
+ok('five sick and five vacation days again', JSON.stringify(back)==='["5","5"]', JSON.stringify(back));
 
 console.log('\n━━ The scheduled shift is one value in two places ━━');
 await p.fill('#cSchedStart2','06:30'); await p.locator('#cSchedStart2').blur(); await p.waitForTimeout(450);
@@ -254,7 +260,8 @@ await p.waitForTimeout(400);
 ok('rate still $24.50', (await p.inputValue('#cRate'))==='24.5', await p.inputValue('#cRate'));
 ok('shift still 07:15', (await p.inputValue('#cSchedStart2'))==='07:15');
 ok('roster still Mon–Fri', !(await cfgDayOn(p,0)) && await cfgDayOn(p,5));
-ok('allowances still there', (await p.locator('#cBankList .bankcfg').count())===3);
+ok('allowances still there', (await p.locator('#cBankList .bankcfg').count())===2,
+   String(await p.locator('#cBankList .bankcfg').count()));
 
 console.log('\n━━ On a phone ━━');
 await p.close();

@@ -31,6 +31,7 @@ const E = new Function(m[1] + `
            isWorkDay, anyWorkDay, adjacentWorkDay, dkey,
            workedOn, holidayEligibility, holidayYears, holidayCredits, holidayOutlook,
            BANK_DEFAULTS, bankById, daysOffUsed, bankLeft, bankSlots, dayOffName,
+           bankUsedBefore, bankUsed,
            bankCredits, daysOffOutlook, periodHistory, timeCardRows, timeCardTotals,
            extraTime, chartHours, otThresholdOf, otBucketKey, sumSessionRange,
            payMonths, currentPayMonth, shiftDayMs, toMinute,
@@ -1361,22 +1362,70 @@ group('Robustness');
 /* ---------------- floaters and sick days ---------------- */
 {
   const B = E.BANK_DEFAULTS();
-  ok('three banks ship', B.length === 3, B.length);
-  const fl = E.bankById({ banks: B }, 'float'), sk = E.bankById({ banks: B }, 'sick');
-  ok('three floaters', fl.count === 3, fl.count);
-  ok('five sick days', sk.count === 5, sk.count);
-  ok('both worth 8 h', fl.hours === 8 && sk.hours === 8);
-  ok('floaters count toward overtime', fl.ot === true);
-  ok('sick days do not',               sk.ot === false);
-  ok('the floater slots are named',
-     JSON.stringify(fl.slots) === JSON.stringify(['MLK Day','Birthday','Anniversary']),
-     JSON.stringify(fl.slots));
+  /* No floating holidays ship. Plenty of contracts do not have them, and an allowance the
+     app invents is one somebody has to notice and delete — they are an add-on now. */
+  ok('no floating holiday is assumed', !E.bankById({ banks: B }, 'float'),
+     B.map(b => b.id).join(','));
+  const sk = E.bankById({ banks: B }, 'sick');
+  ok('sick days still ship', sk.count === 5, sk.count);
+  ok('worth 8 h',            sk.hours === 8);
+  ok('and not counting toward overtime', sk.ot === false);
 
-  const cfg3 = { ...E.DEFAULTS, rate: 38, periodAnchor: '2026-01-04', banks: B,
+  /* Floaters remain a first-class bank when someone adds one — everything below still has
+     to work for them. */
+  const FL = { id: 'float', name: 'Floating holiday', count: 3, hours: 8, ot: true,
+               makeUp: false, slots: ['MLK Day','Birthday','Anniversary'] };
+  const cfg3 = { ...E.DEFAULTS, rate: 38, periodAnchor: '2026-01-04',
+                 banks: [FL].concat(B),
                  workDays: [true,true,true,true,true,false,false], daysOff: [] };
 
   ok('a fresh year has all three floaters', E.bankLeft(cfg3, 'float', 2026) === 3);
   ok('and all five sick days',             E.bankLeft(cfg3, 'sick',  2026) === 5);
+
+  /* ---- days already spent before the app was installed ----
+     Nobody installs a pay app on 1 January. "5 of 5 left" in August is not optimism; it is
+     wrong about the one thing the allowance exists to tell you. */
+  const carried = { ...cfg3, banks: [
+    { ...FL, usedBefore: 2, usedYear: 2026 },
+    { ...sk, usedBefore: 3, usedYear: 2026 }
+  ]};
+  ok('a carry-in is subtracted', E.bankLeft(carried, 'float', 2026) === 1,
+     String(E.bankLeft(carried, 'float', 2026)));
+  ok('and counted as used',      E.bankUsed(carried, 'float', 2026) === 2,
+     String(E.bankUsed(carried, 'float', 2026)));
+  ok('sick days too', E.bankLeft(carried, 'sick', 2026) === 2,
+     String(E.bankLeft(carried, 'sick', 2026)));
+
+  /* It stacks with days the app has actually watched, rather than replacing them. */
+  const mixedUse = { ...carried,
+    daysOff: [{ id: 'x', bank: 'sick', slot: null, date: '2026-09-02' }] };
+  ok('a carry-in plus a real day is four used', E.bankUsed(mixedUse, 'sick', 2026) === 4,
+     String(E.bankUsed(mixedUse, 'sick', 2026)));
+  ok('leaving one',                             E.bankLeft(mixedUse, 'sick', 2026) === 1,
+     String(E.bankLeft(mixedUse, 'sick', 2026)));
+
+  /* Year-scoped. The allowance resets each January, so a 2026 carry-in must not go on
+     eating 2027's days — the quiet kind of wrong that only shows up months later. */
+  ok('the carry-in expires with its year', E.bankLeft(carried, 'sick', 2027) === 5,
+     String(E.bankLeft(carried, 'sick', 2027)));
+  ok('and did not apply the year before',  E.bankLeft(carried, 'sick', 2025) === 5,
+     String(E.bankLeft(carried, 'sick', 2025)));
+
+  /* Nonsense never produces a negative allowance or a phantom one. */
+  const silly = { ...cfg3, banks: [{ ...sk, usedBefore: 99, usedYear: 2026 }] };
+  ok('a carry-in bigger than the allowance floors at zero',
+     E.bankLeft(silly, 'sick', 2026) === 0, String(E.bankLeft(silly, 'sick', 2026)));
+  ok('and never reports more used than exist',
+     E.bankUsed(silly, 'sick', 2026) === 5, String(E.bankUsed(silly, 'sick', 2026)));
+  [null, undefined, NaN, -4, 'two'].forEach(function(v){
+    ok('a carry-in of ' + JSON.stringify(v) + ' is simply none',
+       E.bankUsedBefore({ count: 5, usedBefore: v, usedYear: 2026 }, 2026) === 0,
+       String(E.bankUsedBefore({ count: 5, usedBefore: v, usedYear: 2026 }, 2026)));
+  });
+  ok('an unstamped carry-in still applies',
+     E.bankUsedBefore({ count: 5, usedBefore: 2 }, 2026) === 2);
+  ok('and no carry-in at all changes nothing',
+     E.bankLeft(cfg3, 'sick', 2026) === 5);
 
   // Spend the MLK floater on MLK day 2026 (Mon Jan 19) and a sick day in March.
   const spent = { ...cfg3, daysOff: [
@@ -1539,9 +1588,13 @@ group('Robustness');
      E.periodHistory(E.buildLedger([day(7, 27, 9, 17)], hcfg).parts, hcfg,
                      +new Date(2026, 6, 30, 12), 24).length === 0);
   // Holiday and booked days count toward a completed period the same as worked hours.
+  /* A floater is an added allowance rather than a shipped one, so the bank is built here
+     — the behaviour under test is that a BOOKED day counts, not where the bank came from. */
   const withHol = { ...hcfg, holidays: E.HOLIDAY_DEFAULTS(),
                     workDays: [true,true,true,true,true,false,false],
-                    banks: E.BANK_DEFAULTS(),
+                    banks: [{ id: 'float', name: 'Floating holiday', count: 3, hours: 8,
+                              ot: true, makeUp: false, slots: ['MLK Day','Birthday','Anniversary'] }]
+                           .concat(E.BANK_DEFAULTS()),
                     daysOff: [{ id: 'f', bank: 'float', slot: 0, date: '2026-08-11' }] };
   const wh = E.periodHistory(E.buildLedger(work, withHol).parts, withHol, now, 24);
   near('a booked floater lands in its period', wh[0].hours, 32);
@@ -1811,7 +1864,9 @@ group('Robustness');
   near('and priced with it', hAug.gross, 40 * 38 + 32 * 57);
 
   // Holidays and booked days land in the month their period pays in.
-  const withOff = { ...mcfg, banks: E.BANK_DEFAULTS(),
+  const withOff = { ...mcfg,
+                    banks: [{ id: 'float', name: 'Floating holiday', count: 3, hours: 8,
+                              ot: true, makeUp: false, slots: [] }].concat(E.BANK_DEFAULTS()),
                     daysOff: [{ id: 'f', bank: 'float', slot: 0, date: '2026-08-12' }] };
   const om = E.payMonths(E.buildLedger(work, withOff).parts, withOff, now, 0);
   near('a floater on Aug 12 pays in September', om.find(m => m.ym === '2026-09').hours, 32);
@@ -2290,17 +2345,18 @@ group('Robustness');
   ok('and none of them has to be made up',
      E.HOLIDAY_DEFAULTS().every(h => E.bankOwes({ ot: h.ot, makeUp: h.makeUp }) === false));
 
-  // Three floaters, five sick, five VRDs.
+  /* What actually ships: five sick, five VRDs, and NO floating holiday — plenty of
+     contracts have none, and an invented allowance is one somebody has to notice. */
   const B = E.BANK_DEFAULTS();
-  ok('three floaters', B[0].count === 3, String(B[0].count));
-  ok('named MLK, Birthday and Anniversary',
-     JSON.stringify(B[0].slots) === JSON.stringify(['MLK Day', 'Birthday', 'Anniversary']),
-     JSON.stringify(B[0].slots));
-  ok('five sick days', B[1].count === 5, String(B[1].count));
-  ok('and five vacation random days', B[2].id === 'vrd' && B[2].count === 5, JSON.stringify(B[2]));
-  ok('a floater earns overtime credit', B[0].ot === true);
-  ok('a sick day does not, and is owed back', B[1].ot === false && E.bankOwes(B[1]) === true);
-  ok('a VRD earns none but is owed nothing', B[2].ot === false && E.bankOwes(B[2]) === false);
+  ok('two banks ship', B.length === 2, B.map(b => b.id).join(','));
+  ok('no floating holiday among them', !B.some(b => b.id === 'float'), B.map(b => b.id).join(','));
+  ok('five sick days', B[0].id === 'sick' && B[0].count === 5, JSON.stringify(B[0]));
+  ok('and five vacation random days', B[1].id === 'vrd' && B[1].count === 5, JSON.stringify(B[1]));
+  ok('a sick day earns no overtime credit and is owed back',
+     B[0].ot === false && E.bankOwes(B[0]) === true);
+  ok('a VRD earns none but is owed nothing', B[1].ot === false && E.bankOwes(B[1]) === false);
+  ok('nothing ships pre-spent', B.every(b => !b.usedBefore),
+     JSON.stringify(B.map(b => b.usedBefore)));
   ok('an allowance saved before the two were told apart keeps its old meaning',
      E.bankOwes({ ot: false }) === true && E.bankOwes({ ot: true }) === false);
 
