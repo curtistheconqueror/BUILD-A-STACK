@@ -1286,10 +1286,21 @@
     </div>
 
     <div class="ngroup"><b>Fixed deductions, per paycheck</b>
-      <div class="note">Healthcare, union dues, 401k loan payments, child support — anything taken
-      from every check. Pre-tax means it comes out before taxes are figured (health premiums usually are).</div>
+      <div class="note">The same dollars every check — union dues, a 401k loan payment, child
+      support, a health premium. What each one comes out <i>before</i> matters: a health plan
+      comes out before every tax including Social Security, while a 401k comes out before
+      income tax only — Social Security and Medicare are still charged on it.</div>
       <div id="nItems"></div>
       <button class="mini" id="nAdd" style="margin-top:9px">＋ Add deduction</button>
+    </div>
+
+    <div class="ngroup"><b>Percentage deductions</b>
+      <div class="note">Anything taken as a share of your pay rather than a fixed sum — a 401k
+      or 403b contribution, a pension. Entered as a percentage because that is how payroll
+      assesses it: it moves with every overtime hour and every raise, where a dollar figure
+      typed in once is wrong by the next check.</div>
+      <div id="nPcts"></div>
+      <button class="mini" id="nPctAdd" style="margin-top:9px">＋ Add a percentage</button>
     </div>
 
     <div class="ngroup"><b>How the big number behaves in NET mode</b>
@@ -2927,6 +2938,38 @@ function fedWithholding(periodTaxable, periodsPerYear, filing, dependents){
    n          the net config: {filing, dependents, fedExempt, fedOverride,
                                statePct, stateExempt, stateOverride, ficaOn}
    Overrides are dollars per full period; scale lets a partial period take its share. */
+/* Percentage deductions — a 401(k), a pension, anything assessed as a share of pay rather
+   than as a typed figure. Modelled as a rate because that is how payroll actually assesses
+   them: they move with every hour of overtime and every raise, and a dollar amount entered
+   once is wrong by the next cheque.
+
+   `basis` is the part that matters and the part a boolean cannot express:
+     'all'    a Section 125 plan — health premiums. Comes out before EVERYTHING, FICA too.
+     'income' a 401(k) or 403(b) elective deferral. Before federal and state income tax,
+              but Social Security and Medicare are still charged on it.
+     'none'   after tax. Union dues, loan repayments, garnishments.
+   Collapsing the middle case into 'all' understates FICA — on a real stub, treating two
+   401k lines as fully pre-tax under-withheld Social Security by $17.79 in one fortnight,
+   about $460 across a year. */
+function pctSplit(gross, list){
+  var out = { all: 0, income: 0, none: 0, total: 0 };
+  (list || []).forEach(function(p){
+    var r = +(p && p.rate) || 0;
+    if (r <= 0) return;
+    var amt = gross * (r / 100);
+    var b = p.basis === 'all' ? 'all' : p.basis === 'income' ? 'income' : 'none';
+    out[b] += amt; out.total += amt;
+  });
+  return out;
+}
+/* A fixed dollar item carries the same three-way choice. Older saves only have the boolean,
+   where true meant "before everything" — so that is exactly what it still maps to. */
+function itemBasis(it){
+  if (!it) return 'none';
+  if (it.basis === 'all' || it.basis === 'income' || it.basis === 'none') return it.basis;
+  return it.pretax ? 'all' : 'none';
+}
+
 function netBreakdown(gross, fixedPre, fixedPost, n, periodsPerYear, scale){
   // The premium is owed in full even before it is earned back; only the tax shield
   // is limited by what has actually been earned.
@@ -2941,8 +2984,13 @@ function netBreakdown(gross, fixedPre, fixedPost, n, periodsPerYear, scale){
      a figure typed in once would be wrong by the next cheque. */
   var pen = n.pension && n.pension.rate > 0 ? gross * (n.pension.rate / 100) : 0;
   var penPre = !n.pension || n.pension.preTax !== false;
-  var pre = fixedPre + (penPre ? pen : 0);
-  var taxable = Math.max(0, gross - pre);
+  var pct = pctSplit(gross, n.pcts);
+  /* Two different wage figures from here on, because they are genuinely different numbers.
+     `ficaWages` is what Social Security and Medicare are charged on; `taxable` is what the
+     income taxes are charged on, which is smaller by every 401(k) dollar. */
+  var pre = fixedPre + (penPre ? pen : 0) + pct.all;
+  var ficaWages = Math.max(0, gross - pre);
+  var taxable = Math.max(0, ficaWages - (n.fixedIncome || 0) - pct.income);
   var sc = scale === undefined ? 1 : scale;
 
   /* Social Security stops for the year once your wages pass the base — it is an annual cap
@@ -2964,16 +3012,16 @@ function netBreakdown(gross, fixedPre, fixedPost, n, periodsPerYear, scale){
      is still liable for the surtax above $200,000. Collapsing the two would quietly hand
      them back money they genuinely owe. */
   var ssOff = n.ficaOn === false || n.ssOn === false;
-  var ss = ssOff ? 0 : Math.min(taxable, ssRoom) * TAX2026.ssRate;
-  var medicare = n.ficaOn === false ? 0 : taxable * TAX2026.medicareRate;
+  var ss = ssOff ? 0 : Math.min(ficaWages, ssRoom) * TAX2026.ssRate;
+  var medicare = n.ficaOn === false ? 0 : ficaWages * TAX2026.medicareRate;
 
   /* Additional Medicare: another 0.9% on wages past $200,000, employee-only and with no
      employer match. Employers must withhold it on that basis whatever your filing status —
      the higher married threshold is settled at filing, not in payroll — so this follows the
      payroll rule rather than the return. */
   var addMedFrom = TAX2026.addMedicareFrom;
-  var over = Math.max(0, (before + taxable) - addMedFrom) - Math.max(0, before - addMedFrom);
-  var addMedicare = n.ficaOn === false ? 0 : Math.max(0, Math.min(over, taxable)) * TAX2026.addMedicareRate;
+  var over = Math.max(0, (before + ficaWages) - addMedFrom) - Math.max(0, before - addMedFrom);
+  var addMedicare = n.ficaOn === false ? 0 : Math.max(0, Math.min(over, ficaWages)) * TAX2026.addMedicareRate;
 
   var fedTaxable = Math.max(0, taxable - (n.fedDeduct || 0));   // OT-premium deduction, fed only
   var fed = n.fedExempt ? 0
@@ -2984,15 +3032,17 @@ function netBreakdown(gross, fixedPre, fixedPost, n, periodsPerYear, scale){
        : taxable * ((n.statePct != null ? n.statePct : 4.95) / 100));
 
   var taxes = fed + st + ss + medicare + addMedicare;
-  var post = fixedPost + (penPre ? 0 : pen);
-  return { gross: gross, pretax: pre, taxable: taxable,
+  var post = fixedPost + (penPre ? 0 : pen) + pct.none;
+  var incomePre = (n.fixedIncome || 0) + pct.income;
+  return { gross: gross, pretax: pre + incomePre, ficaWages: ficaWages, taxable: taxable,
+           pctTotal: pct.total, incomePre: incomePre,
            fed: fed, state: st, ss: ss, medicare: medicare, addMedicare: addMedicare,
            /* Reported separately as well as folded into pre- or post-tax, because on a stub
               it is its own line and it is the largest single deduction most members have. */
            pension: pen, pensionPre: penPre,
            taxes: taxes, posttax: post,
-           deductions: pre + taxes + post,
-           net: gross - pre - taxes - post };
+           deductions: pre + incomePre + taxes + post,
+           net: gross - pre - incomePre - taxes - post };
 }
 
 /* The period's net so far, in either display mode.
@@ -3006,10 +3056,11 @@ function netBreakdown(gross, fixedPre, fixedPost, n, periodsPerYear, scale){
    came before it. Omitted, netBreakdown falls back to the per-period ceiling. */
 function periodNetView(gross, hours, items, n, cfg, mode, otHours, otPremYtdBefore, wagesBefore){
   var stdHours = Math.max(1, Math.round((cfg.periodLengthDays || 14) / 7) * 40);
-  var pre = 0, post = 0;
+  var pre = 0, post = 0, incomeOnly = 0;
   (items || []).forEach(function(it){
     var a = parseFloat(it.amount) || 0;
-    if (it.pretax) pre += a; else post += a;
+    var b = itemBasis(it);
+    if (b === 'all') pre += a; else if (b === 'income') incomeOnly += a; else post += a;
   });
   var frac = mode === 'hole' ? 1 : Math.min(1, (hours || 0) / stdHours);
   var periods = Math.max(1, Math.round(365.25 / (cfg.periodLengthDays || 14)));
@@ -3027,9 +3078,13 @@ function periodNetView(gross, hours, items, n, cfg, mode, otHours, otPremYtdBefo
     var room = Math.max(0, cap - (otPremYtdBefore || 0));
     n2 = Object.assign({}, n2, { fedDeduct: Math.min(prem, room) });
   }
+  /* The income-only slice rides along on the same scaling as the rest. */
+  if (incomeOnly) n2 = Object.assign({}, n2, { fixedIncome: incomeOnly * frac });
   var bd = netBreakdown(gross, pre * frac, post * frac, n2, periods, frac);
   bd.otDeducted = n2.fedDeduct || 0;
-  bd.fixedTotal = pre + post; bd.fixedApplied = (pre + post) * frac; bd.stdHours = stdHours;
+  bd.fixedTotal = pre + post + incomeOnly;
+  bd.fixedApplied = (pre + post + incomeOnly) * frac;
+  bd.stdHours = stdHours;
   return bd;
 }
 
@@ -6492,7 +6547,7 @@ function netCfg(){
     enabled: false, configured: false, view: 'net',
     filing: 'single', dependents: 0, fedExempt: false, fedOverride: null,
     state: 'IL', statePct: 4.95, stateExempt: false, stateOverride: null, ficaOn: true,
-    ssOn: true, pension: null,
+    ssOn: true, pension: null, pcts: [],
     items: [ { id: 'health', name: 'Healthcare', amount: 0, pretax: true },
              { id: 'dues',   name: 'Union dues', amount: 0, pretax: false } ]
   };
@@ -7187,17 +7242,49 @@ function wagesYtdBefore(ledger, now, per){
   return Math.max(0, ytd - ((per && per.gross) || 0));
 }
 
+/* One control, three real answers. The old pre-tax checkbox could only say "before
+   everything" or "after everything", and a 401k is neither. */
+function basisOptions(sel){
+  return [['all', 'Before every tax'], ['income', 'Before income tax only'],
+          ['none', 'After tax']].map(function(o){
+    return '<option value="' + o[0] + '"' + (sel === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+  }).join('');
+}
+
 function renderNetItems(){
   var nc = netCfg(), box = document.getElementById('nItems'), h = '';
   nc.items.forEach(function(it){
     h += '<div class="nitem" data-id="' + it.id + '">'
       + '<input type="text" data-f="name" placeholder="What is it?" value="' + String(it.name||'').replace(/"/g,'&quot;') + '">'
       + '<div class="prefixed"><span>$</span><input type="number" data-f="amount" min="0" step="0.01" inputmode="decimal" value="' + (it.amount||0) + '"></div>'
-      + '<select data-f="pretax"><option value="0"' + (it.pretax?'':' selected') + '>After-tax</option>'
-      + '<option value="1"' + (it.pretax?' selected':'') + '>Pre-tax</option></select>'
+      + '<select data-f="basis">' + basisOptions(itemBasis(it)) + '</select>'
       + '<button class="mini danger" data-del-item="' + it.id + '">✕</button></div>';
   });
   box.innerHTML = h || '<div class="note">No fixed deductions yet.</div>';
+}
+
+function renderNetPcts(){
+  var nc = netCfg(), box = document.getElementById('nPcts');
+  if (!box) return;
+  var gross = (state.cfg.rate || 0) * periodNetView(0, 0, [], nc, state.cfg, 'net').stdHours;
+  var h = '';
+  (nc.pcts || []).forEach(function(pc){
+    var amt = gross * ((+pc.rate || 0) / 100);
+    h += '<div class="nitem" data-pid="' + pc.id + '">'
+      + '<input type="text" data-pf="name" placeholder="What is it?" value="'
+        + String(pc.name||'').replace(/"/g,'&quot;') + '">'
+      + '<div class="prefixed"><span>%</span><input type="number" data-pf="rate" min="0" max="60" '
+        + 'step="0.01" inputmode="decimal" value="' + (pc.rate == null ? '' : pc.rate) + '"></div>'
+      + '<select data-pf="basis">' + basisOptions(pc.basis || 'income') + '</select>'
+      + '<button class="mini danger" data-del-pct="' + pc.id + '">✕</button>'
+      /* Priced against a standard check, because a percentage means nothing until it is
+         a number of dollars. */
+      + '<div class="note" style="grid-column:1/-1;margin:2px 0 0">'
+        + (amt > 0.004 ? '≈ ' + money(amt) + ' on a standard check, and it follows your gross'
+                       : 'Set the percentage and this will price it.') + '</div>'
+      + '</div>';
+  });
+  box.innerHTML = h || '<div class="note">None. A 401k or pension contribution goes here.</div>';
 }
 
 function previewNet(){
@@ -7211,6 +7298,7 @@ function previewNet(){
     + ' · SS ' + money(bd.ss) + ' · Medicare ' + money(bd.medicare + bd.addMedicare)
     + (bd.pension > 0 ? ' · ' + ((nc.pension && nc.pension.name) || 'Pension')
                         + ' ' + money(bd.pension) : '')
+    + (bd.pctTotal > 0.004 ? ' · Percentages ' + money(bd.pctTotal) : '')
     + (bd.fixedTotal ? ' · Fixed ' + money(bd.fixedTotal) : '')
     + '<br>Take-home <span class="pay">' + money(bd.net) + '</span>'
     + '  (' + (stdGross ? (100*bd.net/stdGross).toFixed(1) : '0') + '% of gross)';
@@ -7317,6 +7405,7 @@ function syncNetForm(){
     b.classList.toggle('on', b.dataset.v === nc.view);
   });
   renderNetItems();
+  renderNetPcts();
   previewNet();
 }
 
@@ -8505,24 +8594,69 @@ document.getElementById('nView').addEventListener('click', function(e){
   save(); previewNet();
 });
 document.getElementById('nAdd').onclick = function(){
-  netCfg().items.push({ id: uid(), name: '', amount: 0, pretax: false });
+  netCfg().items.push({ id: uid(), name: '', amount: 0, basis: 'none' });
   save(); renderNetItems(); previewNet();
 };
+document.getElementById('nPctAdd').onclick = function(){
+  var nc = netCfg();
+  nc.pcts = nc.pcts || [];
+  /* Defaults to the 401k case, because that is what almost every percentage deduction on a
+     private or union stub actually is. */
+  nc.pcts.push({ id: uid(), name: '', rate: 0, basis: 'income' });
+  save(); renderNetPcts(); previewNet();
+};
+document.getElementById('nPcts').addEventListener('input', function(e){
+  var row = e.target.closest('.nitem'); if (!row) return;
+  var nc = netCfg();
+  var pc = (nc.pcts || []).find(function(x){ return x.id === row.dataset.pid; }); if (!pc) return;
+  var f = e.target.dataset.pf;
+  if (f === 'name') pc.name = e.target.value;
+  if (f === 'rate') pc.rate = Math.max(0, Math.min(60, parseFloat(e.target.value) || 0));
+  if (f === 'basis') pc.basis = e.target.value;
+  save(); previewNet();
+  /* Only the priced note is redrawn, never the whole list — rebuilding it would replace the
+     field being typed into and throw away the cursor. */
+  var n = row.querySelector('.note');
+  if (n){
+    var gross = (state.cfg.rate || 0) * periodNetView(0, 0, [], nc, state.cfg, 'net').stdHours;
+    var amt = gross * ((+pc.rate || 0) / 100);
+    n.textContent = amt > 0.004
+      ? '≈ ' + money(amt) + ' on a standard check, and it follows your gross'
+      : 'Set the percentage and this will price it.';
+  }
+});
+document.getElementById('nPcts').addEventListener('change', function(e){
+  if (e.target.dataset.pf !== 'basis') return;
+  var row = e.target.closest('.nitem');
+  var pc = (netCfg().pcts || []).find(function(x){ return x.id === row.dataset.pid; });
+  if (pc){ pc.basis = e.target.value; save(); previewNet(); }
+});
+document.getElementById('nPcts').addEventListener('click', function(e){
+  var b = e.target.closest('button[data-del-pct]'); if (!b) return;
+  var nc = netCfg();
+  nc.pcts = (nc.pcts || []).filter(function(x){ return x.id !== b.dataset.delPct; });
+  save(); renderNetPcts(); previewNet();
+});
 document.getElementById('nItems').addEventListener('input', function(e){
   var row = e.target.closest('.nitem'); if (!row) return;
   var it = netCfg().items.find(function(x){ return x.id === row.dataset.id; }); if (!it) return;
   var f = e.target.dataset.f;
   if (f === 'name') it.name = e.target.value;
   if (f === 'amount') it.amount = Math.max(0, parseFloat(e.target.value) || 0);
-  if (f === 'pretax') it.pretax = e.target.value === '1';
+  if (f === 'basis'){ it.basis = e.target.value; it.pretax = e.target.value === 'all'; }
   save(); previewNet();
 });
 document.getElementById('nItems').addEventListener('change', function(e){
-  if (e.target.dataset.f === 'pretax'){
-    var row = e.target.closest('.nitem');
-    var it = netCfg().items.find(function(x){ return x.id === row.dataset.id; });
-    if (it){ it.pretax = e.target.value === '1'; save(); previewNet(); }
-  }
+  if (e.target.dataset.f !== 'basis') return;
+  var row = e.target.closest('.nitem');
+  var it = netCfg().items.find(function(x){ return x.id === row.dataset.id; });
+  if (!it) return;
+  it.basis = e.target.value;
+  /* The old boolean is kept in step so a backup restored into an older copy of the app still
+     reads sensibly — there, "before income tax only" is closer to after-tax than to before
+     everything, and the boolean says so. */
+  it.pretax = e.target.value === 'all';
+  save(); previewNet();
 });
 document.getElementById('nItems').addEventListener('click', function(e){
   var b = e.target.closest('button[data-del-item]'); if (!b) return;

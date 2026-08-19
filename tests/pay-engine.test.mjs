@@ -47,6 +47,7 @@ const E = new Function(m[1] + `
            contractCfg, stipendTotal, contractProgress, chequesPaid, contractView,
            oteRand, otePeriodSamples, oteAllSamples, oteDrawPool, oteForecast, OTE_MIN_SAMPLES,
            forgottenShift, FORGOT_FALLBACK_H,
+           pctSplit, itemBasis,
            fedNotWithheld, netBreakdown, periodNetView,
            TAX_YEAR, TAX2026, bracketTax, fedWithholding };
 `)();
@@ -572,6 +573,87 @@ const gross = (sessions, c = cfg) => {
     ok('on ' + d + ' nothing is earned twice', x.earned <= x.total + 1e-9,
        x.earned.toFixed(2) + ' of ' + x.total.toFixed(2));
   });
+}
+
+/* ---------------- what a deduction comes out BEFORE ---------------- */
+{
+  /* Settled against a real Pace stub rather than assumed. A Section 125 health premium comes
+     out before every tax including Social Security; a 401(k) deferral comes out before
+     income tax only, and FICA is still charged on it. The app used to have one boolean for
+     both, which under-withheld Social Security by $17.88 on a single fortnight. */
+  const P = 26, G = 3376.57;
+  const base = { filing: 'single', dependents: 0, fedExempt: true, statePct: 4.95,
+                 ficaOn: true, otBreak: false };
+  const HEALTH = 130.00, K = 135.06 + 151.95;      // the stub's two 401k lines
+
+  const right = E.netBreakdown(G, HEALTH, 0, { ...base, fixedIncome: K }, P);
+  near('Social Security is charged on the 401k', right.ss, (G - HEALTH) * E.TAX2026.ssRate, 0.01);
+  near('and so is Medicare',                     right.medicare, (G - HEALTH) * E.TAX2026.medicareRate, 0.01);
+  near('but state tax is not',                   right.state, (G - HEALTH - K) * 0.0495, 0.01);
+  near('the stub says $201.37 of Social Security', right.ss, 201.37, 0.10);
+  near('$47.09 of Medicare',                      right.medicare, 47.09, 0.10);
+  near('and $146.50 to Illinois',                 right.state, 146.50, 0.10);
+
+  /* The mistake the three-way choice exists to prevent. */
+  const wrong = E.netBreakdown(G, HEALTH + K, 0, base, P);
+  ok('treating a 401k as fully pre-tax under-withholds Social Security',
+     right.ss - wrong.ss > 17, '$' + (right.ss - wrong.ss).toFixed(2) + ' a fortnight');
+  near('by $17.79 on this cheque', right.ss - wrong.ss, 17.79, 0.02);
+
+  /* The two wage figures are reported separately, because they are different numbers. */
+  near('FICA wages exclude only the health premium', right.ficaWages, G - HEALTH, 0.01);
+  near('taxable wages exclude the 401k as well',     right.taxable, G - HEALTH - K, 0.01);
+  ok('and everything still reconciles',
+     Math.abs(right.gross - right.deductions - right.net) < 0.01,
+     right.gross.toFixed(2) + ' − ' + right.deductions.toFixed(2) + ' = ' + right.net.toFixed(2));
+
+  /* Percentages, which is how payroll actually assesses these. */
+  const pcts = [{ name: '401k Vol', rate: 4.0, basis: 'income' },
+                { name: '401k Mand', rate: 4.5, basis: 'income' }];
+  const byPct = E.netBreakdown(G, HEALTH, 0, { ...base, pcts: pcts }, P);
+  near('4% and 4.5% reproduce the stub exactly', byPct.pctTotal, K, 0.02);
+  near('with the same Social Security', byPct.ss, right.ss, 0.01);
+  near('the same state tax',            byPct.state, right.state, 0.01);
+  near('and the same net',              byPct.net, right.net, 0.02);
+
+  /* The whole point of a percentage: it follows the gross without being retyped. */
+  const big = E.netBreakdown(5500, HEALTH, 0, { ...base, pcts: pcts }, P);
+  near('on a bigger cheque it scales itself', big.pctTotal, 5500 * 0.085, 0.01);
+  ok('where a typed figure would have stayed still',
+     E.netBreakdown(5500, HEALTH, 0, { ...base, fixedIncome: K }, P).taxable
+     > big.taxable, 'the fixed one leaves more taxable');
+
+  /* Each basis does what it says. */
+  const one = b => E.netBreakdown(1000, 0, 0,
+    { ...base, pcts: [{ name: 'x', rate: 10, basis: b }] }, P);
+  near('before every tax cuts FICA',        one('all').ficaWages, 900, 0.01);
+  near('before income tax only does not',   one('income').ficaWages, 1000, 0.01);
+  near('though it still cuts taxable',      one('income').taxable, 900, 0.01);
+  near('after tax cuts neither',            one('none').taxable, 1000, 0.01);
+  near('but comes off the net all the same', one('none').net,
+       one('none').gross - one('none').deductions, 0.01);
+  [['all',900],['income',900],['none',1000]].forEach(function(c){
+    near(c[0] + ' leaves the same $100 out of pocket',
+         1000 - one(c[0]).net - one(c[0]).taxes, 100, 0.01);
+  });
+
+  /* An older save has only the boolean, where true meant "before everything". */
+  ok('a legacy pre-tax item still means before everything',
+     E.itemBasis({ pretax: true }) === 'all');
+  ok('and a legacy after-tax one still means after',
+     E.itemBasis({ pretax: false }) === 'none');
+  ok('an explicit basis wins over the old flag',
+     E.itemBasis({ pretax: true, basis: 'income' }) === 'income');
+  ok('and nothing at all is after-tax', E.itemBasis(null) === 'none');
+
+  /* Rubbish rates contribute nothing rather than a NaN on screen. */
+  [null, undefined, NaN, -5, 'x'].forEach(function(r){
+    near('a rate of ' + JSON.stringify(r) + ' takes nothing',
+         E.pctSplit(1000, [{ rate: r, basis: 'income' }]).total, 0);
+  });
+  near('an unknown basis is treated as after-tax',
+       E.pctSplit(1000, [{ rate: 10, basis: 'nonsense' }]).none, 100, 0.01);
+  near('and no list at all is nothing', E.pctSplit(1000, null).total, 0);
 }
 
 /* ---------------- a public pension in place of Social Security ---------------- */
