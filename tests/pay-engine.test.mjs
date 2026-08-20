@@ -46,7 +46,7 @@ const E = new Function(m[1] + `
            unitCfg, unitsInRange, unitPay, unitPace,
            contractCfg, stipendTotal, contractProgress, chequesPaid, contractView,
            oteRand, otePeriodSamples, oteAllSamples, oteDrawPool, oteForecast, OTE_MIN_SAMPLES,
-           forgottenShift, FORGOT_FALLBACK_H,
+           forgottenShift, FORGOT_FALLBACK_H, shiftShape,
            pctSplit, itemBasis,
            fedNotWithheld, netBreakdown, periodNetView,
            TAX_YEAR, TAX2026, bracketTax, fedWithholding };
@@ -285,25 +285,65 @@ const gross = (sessions, c = cfg) => {
               periodAnchor: '2026-08-09', periodLengthDays: 14, payDateOffsetDays: 13 };
   const IN = +new Date(2026, 7, 12, 14);              // Wed 12 Aug, 2 PM
   const at = (d, h, mi) => +new Date(2026, 7, d, h, mi || 0);
-  const f = (nowMs, cfg) => E.forgottenShift(IN, nowMs, cfg || c);
+  const f = (nowMs, cfg, ss) => E.forgottenShift(IN, nowMs, cfg || c, ss);
 
-  /* Ordinary shifts are never questioned. Being asked every time you stay late is how
-     someone learns to dismiss the question unread. */
+  /* ---- with no history yet ----
+     The roster is deliberately NOT the yardstick. A new starter whose first shifts each run
+     three hours long would be questioned on every one, and would learn to dismiss the thing
+     before it ever caught a real mistake. Missing a forgotten punch for a few hours costs
+     little — the banner is still there next time the app opens. Crying wolf costs the
+     warning itself. */
   ok('mid-shift, nothing is wrong',        f(at(12, 18)) === null);
   ok('finishing on time is fine',          f(at(12, 22, 30)) === null);
-  ok('and so is half an hour over',        f(at(12, 23)) === null);
-  ok('the grace runs a full hour',         f(at(12, 23, 29)) === null);
-  ok('past that it speaks up',             !!f(at(13, 0, 30)), JSON.stringify(f(at(13, 0, 30))));
+  ok('three hours past the roster is not questioned', f(at(13, 1, 30)) === null);
+  ok('nor is a twelve-hour day',           f(at(13, 2)) === null);
+  ok('past fourteen hours it speaks up',   !!f(at(13, 4, 30)), JSON.stringify(f(at(13, 4, 30))));
 
   /* The overnight case this exists for: clocked in at 2 PM, noticed at 7 the next morning. */
   const nextDay = f(at(13, 7));
   ok('a forgotten punch is caught',        !!nextDay);
   near('seventeen hours on the clock',     nextDay.hours, 17);
-  near('and it suggests the rostered end', nextDay.suggested, at(12, 22, 30), 1);
+  near('and with no history it suggests the rostered end', nextDay.suggested, at(12, 22, 30), 1);
   near('which is 8.5 h of shift',          nextDay.suggestedHours, 8.5);
   near('leaving 8.5 h it had been counting', nextDay.extra, 8.5);
   ok('it knows a midnight was crossed',    nextDay.overnight === true);
-  ok('and says the schedule is what it measured against', nextDay.why === 'sched', nextDay.why);
+
+  /* ---- with history, which is the case that actually matters ----
+     A real operator's log: rostered 8.5 h, works about 11.4, longest ever 12.98. Judged
+     against the roster, eighteen of twenty-three real shifts would have been questioned. */
+  const hist = [10.0, 10.25, 10.07, 11.19, 11.41, 8.58, 9.62, 10.77, 9.12, 9.49, 12.0,
+                11.5, 9.01, 12.98, 11.5, 11.4, 11.52, 12.31, 9.13, 12.51, 11.5, 11.25, 10.5]
+    .map(function(len, i){
+      const st = +new Date(2026, 6, 26 + i, 14);
+      return { id: 'h' + i, start: st, end: st + len * E.HOUR_MS };
+    });
+  const shape = E.shiftShape(hist);
+  ok('the shape is read from the last twenty', shape.n === 20, String(shape.n));
+  near('they typically work about 11.4 h', shape.typical, 11.4, 0.2);
+  near('and their longest is 12.98',       shape.longest, 12.98, 0.01);
+
+  ok('an eleven-hour night is not questioned', f(at(13, 1), c, hist) === null);
+  ok('nor is their longest ever',              f(at(13, 3), c, hist) === null);
+  ok('nor two hours past even that',           f(at(13, 4, 45), c, hist) === null);
+  const caught = f(at(13, 7), c, hist);
+  ok('but seventeen hours is',                 !!caught, JSON.stringify(caught && caught.why));
+  ok('judged against their own record',        caught.why === 'history', caught.why);
+  near('and it suggests their usual length',   caught.suggestedHours, shape.typical, 0.01);
+  ok('which is far later than the roster would have said',
+     caught.suggested > at(12, 22, 30), new Date(caught.suggested).toISOString());
+
+  /* Not one of the twenty-three real shifts would have raised the question. */
+  let cried = 0;
+  hist.forEach(function(h, i){
+    if (E.forgottenShift(h.start, h.end, c, hist.slice(0, i))) cried++;
+  });
+  ok('none of the twenty-three real shifts is questioned', cried === 0, cried + ' were');
+
+  /* Too little history to generalise from falls back rather than guessing. */
+  ok('three shifts is not a pattern', E.shiftShape(hist.slice(0, 3)) === null);
+  ok('four is',                       E.shiftShape(hist.slice(0, 4)) !== null);
+  ok('and rubbish rows are ignored',
+     E.shiftShape([{start:1,end:0},{start:0,end:1},null].concat(hist.slice(0,4))).n === 4);
 
   /* The money this saves, priced the way the app prices it. Under a per-shift rule the
      8.5 phantom hours are ALL overtime, because the first eight were already used. */
@@ -339,7 +379,7 @@ const gross = (sessions, c = cfg) => {
 
   /* The suggestion is never later than now, and never earlier than the punch — either would
      bank a negative shift or extend one that has not happened. */
-  [at(13, 0, 31), at(13, 7), at(14, 3), at(20, 12)].forEach(function(t){
+  [at(13, 5), at(13, 7), at(14, 3), at(20, 12)].forEach(function(t){
     const x = E.forgottenShift(IN, t, c);
     ok('at ' + new Date(t).toISOString().slice(5, 16) + ' the suggestion sits inside the shift',
        x && x.suggested > IN && x.suggested <= t, x ? String(x.suggested) : 'null');

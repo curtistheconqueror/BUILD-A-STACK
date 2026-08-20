@@ -170,6 +170,45 @@ ok('and it does not claim a schedule it does not have',
    (await txt(p, '#forgotTxt')).replace(/\s+/g,' ').slice(0,140));
 await p.close();
 
+console.log('\n━━ Somebody who works overtime is not questioned about it ━━');
+/* The case this nearly got wrong. A real operator rostered 2 PM–10:30 PM works about 11.4 h
+   a night, longest ever 12.98. Judged against the roster, eighteen of their twenty-three
+   real shifts would have raised the question — and a warning that fires every day is a
+   warning nobody reads. It is judged against their own record instead. */
+{
+  const lens = [10.0, 10.25, 11.19, 11.41, 9.62, 10.77, 9.12, 12.0, 11.5, 12.98,
+                11.5, 11.4, 11.52, 12.31, 12.51, 11.5, 11.25, 10.5];
+  const hist = lens.map((len, i) => {
+    const st = T(1 + i, 14);
+    return { id: 'h' + i, jobId: 'j1', start: st, end: st + len * 3600e3, note: '' };
+  });
+  const withHist = seedAt(T(20, 14));
+  withHist.sessions = hist;
+  await p.close();
+  /* Eleven and a half hours in — a completely ordinary night for them. */
+  p = await boot(withHist, T(21, 1, 30));
+  ok('an eleven-and-a-half hour night raises nothing', !(await seen(p, '#forgotBar')));
+  await p.clock.setFixedTime(new Date(T(21, 3))); await p.waitForTimeout(700);
+  ok('nor does thirteen hours', !(await seen(p, '#forgotBar')));
+  await p.clock.setFixedTime(new Date(T(21, 7))); await p.waitForTimeout(700);
+  ok('seventeen hours still does', await seen(p, '#forgotBar'));
+  const m = (await txt(p, '#forgotTxt')).replace(/\s+/g,' ');
+  ok('and it cites their own record, not the roster',
+     /longest shift in the last \d+/.test(m), m.slice(0,190));
+  ok('naming what they usually work', /usually work 11\.\d\d h/.test(m), m.slice(0,220));
+  ok('it does not mention the schedule at all', !/schedule ends at/.test(m), m.slice(0,190));
+  /* And the suggestion is their real finishing time, not the rostered one — offering 10:30
+     would throw away three hours of genuine overtime on a single tap. */
+  const btn = await txt(p, '#forgotFix');
+  ok('the fix offers their usual finish, not 10:30 PM', !/10:30 PM/.test(btn), btn);
+  await p.click('#forgotFix'); await p.waitForTimeout(800);
+  const banked = (await st(p)).sessions.slice(-1)[0];
+  const h = (banked.end - banked.start) / 3600e3;
+  ok('so it banks about their usual shift', Math.abs(h - 11.4) < 0.3, h.toFixed(2) + ' h');
+  ok('which is far more than the roster would have kept', h > 9, h.toFixed(2) + ' h');
+  await p.close();
+}
+
 console.log('\n━━ The widget never traps you ━━');
 /* Widget mode hides everything but its own card, so the question would be invisible.
    Banking a shift you can still edit beats a tap that appears to do nothing. */

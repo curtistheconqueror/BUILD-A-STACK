@@ -4294,7 +4294,26 @@ function oteForecast(samples, cfg, nowMs, ytdGross, opts){
    day exists, and a time clock that silently rewrites a punch is worse than one that asks. */
 var FORGOT_FALLBACK_H = 14;
 
-function forgottenShift(activeStart, nowMs, cfg){
+/* What this person's shifts actually look like, from the last twenty they finished.
+   A roster is what you are scheduled for; the log is what you work. Measured against one
+   real operator's record, eighteen shifts in twenty-three ran more than an hour past their
+   rostered end — so judging a forgotten punch against the roster would question almost every
+   shift they work, and a warning that fires every day is a warning nobody reads. */
+function shiftShape(sessions){
+  var lens = (sessions || [])
+    .filter(function(s){ return s && s.end > s.start; })
+    .sort(function(a, b){ return b.start - a.start; })
+    .slice(0, 20)
+    .map(function(s){ return (s.end - s.start) / HOUR_MS; })
+    .filter(function(h){ return h > 0.25 && h < 24; });
+  if (lens.length < 4) return null;              // too little to generalise from
+  var sorted = lens.slice().sort(function(a, b){ return a - b; });
+  return { n: sorted.length,
+           typical: sorted[Math.floor(sorted.length / 2)],
+           longest: sorted[sorted.length - 1] };
+}
+
+function forgottenShift(activeStart, nowMs, cfg, sessions){
   if (!activeStart) return null;
   var now = nowMs == null ? Date.now() : nowMs;
   var hours = (now - activeStart) / HOUR_MS;
@@ -4307,18 +4326,36 @@ function forgottenShift(activeStart, nowMs, cfg){
   var scheduled = (ss != null && se != null && isWorkDay(cfg, new Date(day).getDay()))
     ? schedEndMs(cfg, day) : null;
 
-  /* A grace hour past the rostered end, because staying late is ordinary and being asked
-     about it every time you do would train someone to dismiss the question unread. */
+  /* Staying late is ordinary, and being asked about it every time you do would train
+     someone to dismiss the question unread. So the yardstick is the log, not the roster. */
   var suggested = null, why = '';
-  if (scheduled != null && scheduled > activeStart && now > scheduled + HOUR_MS){
-    suggested = scheduled; why = 'sched';
-  } else if (scheduled == null && hours >= FORGOT_FALLBACK_H){
-    /* No roster to measure against, so fall back to a length no ordinary shift reaches. */
-    suggested = activeStart + FORGOT_FALLBACK_H * HOUR_MS; why = 'long';
+  var shape = shiftShape(sessions);
+  if (shape){
+    /* Two hours past the longest shift they have ever actually worked. Below that it is a
+       long day, which happens; above it, no shift in their record reaches this. And the
+       suggestion is their TYPICAL length, not the roster — somebody who works eleven hours
+       every night did not leave at half past ten, and offering that would throw away two
+       hours of real work on one tap. */
+    if (hours <= shape.longest + 2) return null;
+    suggested = activeStart + shape.typical * HOUR_MS;
+    why = 'history';
+  } else if (hours >= FORGOT_FALLBACK_H){
+    /* No history yet to judge against. The roster is NOT used as the yardstick here: a new
+       starter whose first four shifts each run three hours long would be questioned on every
+       one of them, and would learn to dismiss the thing before it ever caught a real mistake.
+       Fourteen hours is a length no ordinary shift reaches, and by the time anyone works one
+       there is history to judge the next by.
+
+       Missing a forgotten punch for a few hours costs little — the banner is still there when
+       the app is next opened. Crying wolf costs the warning itself. */
+    suggested = scheduled != null && scheduled > activeStart && scheduled < now
+      ? scheduled : activeStart + FORGOT_FALLBACK_H * HOUR_MS;
+    why = scheduled != null && scheduled > activeStart && scheduled < now ? 'sched' : 'long';
   }
   if (suggested == null) return null;
 
   return { hours: Math.round(hours * 100) / 100,
+           shape: shape,
            suggested: suggested,
            suggestedHours: Math.round(((suggested - activeStart) / HOUR_MS) * 100) / 100,
            extra: Math.round(((now - suggested) / HOUR_MS) * 100) / 100,
@@ -8077,7 +8114,7 @@ function restoreFrom(text){
      punch looks forgotten. A clock that would not trip that guard is a clock that is
      genuinely still running, and it comes back. */
   var wasRunning = (d.jobs && d.jobs[0] && d.jobs[0].activeStart) || d.activeStart || null;
-  var keep = wasRunning && !forgottenShift(wasRunning, Date.now(), state.cfg);
+  var keep = wasRunning && !forgottenShift(wasRunning, Date.now(), state.cfg, state.sessions);
   state.activeStart = keep ? wasRunning : null;
   state.activeAdj = keep ? ((d.jobs && d.jobs[0] && d.jobs[0].activeAdj) || d.activeAdj || null) : null;
   var dropped = !!wasRunning && !keep;
@@ -9601,7 +9638,7 @@ var forgotAsked = 0;        // "the question has been put once" — a clock-out 
 
 function renderForgot(activeStart, now){
   var f = activeStart && forgotDismissed !== activeStart
-        ? forgottenShift(activeStart, now, state.cfg) : null;
+        ? forgottenShift(activeStart, now, state.cfg, jobSessions()) : null;
   show('forgotBar', !!f);
   if (!f) return;
   var lost = payForSpan(f.suggested, f.extra);
@@ -9612,7 +9649,10 @@ function renderForgot(activeStart, now){
     + '<b>' + f.hours.toFixed(2) + ' h</b>'
     + (f.overnight ? '.' : ' now.')
     + ' Did you forget to clock out?'
-    + (f.why === 'sched'
+    + (f.why === 'history'
+        ? ' Your longest shift in the last ' + f.shape.n + ' is <b>' + f.shape.longest.toFixed(2)
+          + ' h</b>, and you usually work ' + f.shape.typical.toFixed(2) + ' h.'
+        : f.why === 'sched'
         ? ' Your schedule ends at ' + ftimeCfg(state.cfg.schedEnd, state.cfg) + '.'
         : '')
     + ' Ending it there drops <b>' + f.extra.toFixed(2) + ' h</b> the app has been counting'
@@ -9624,7 +9664,7 @@ function renderForgot(activeStart, now){
    answer is always the user's — this only refuses to make the expensive choice for them. */
 function clockOutChecked(){
   if (!state.activeStart) return;
-  var f = forgottenShift(state.activeStart, Date.now(), state.cfg);
+  var f = forgottenShift(state.activeStart, Date.now(), state.cfg, jobSessions());
   /* Asked once and tapped again means the question has been seen and the answer is "bank it
      as it stands". Refusing a second time would be a trap — somebody standing at the door
      unable to clock out is worse than a shift they can still edit in the log. */
@@ -9638,7 +9678,7 @@ function clockOutChecked(){
 }
 
 document.getElementById('forgotFix').onclick = function(){
-  var f = forgottenShift(state.activeStart, Date.now(), state.cfg);
+  var f = forgottenShift(state.activeStart, Date.now(), state.cfg, jobSessions());
   if (!f) return;
   clockOut(f.suggested);
   forgotDismissed = 0; forgotAsked = 0;
