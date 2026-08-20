@@ -125,5 +125,46 @@ await p.setInputFiles('#restoreFile', file); await p.waitForTimeout(500);
   ok("and only the file's two remain", got==='a1,a2', got);
 }
 
+/* Moving to a new phone, or to a new address, in the middle of a shift. The clock used to be
+   dropped on every restore — which is right about a six-month-old file and wrong about the
+   case that actually happens, where it silently loses the shift you are standing in. */
+console.log('\nA clock still running is judged, not simply dropped');
+{
+  await p.close();
+  /* The seed's schedule runs 09:00–17:00 and the harness stands at 12:00, so a punch made at
+     10:00 is an ordinary shift in progress. */
+  const midShift = { ...seeded, jobs: undefined,
+    activeStart: +new Date('2026-07-29T15:00:00Z') };
+  p = await boot(null);
+  const f = join(TMP, 'running.json');
+  writeFileSync(f, JSON.stringify({ app:'wisewage', version:1, savedAt:new Date().toISOString(),
+    cfg: seeded.cfg, sessions: seeded.sessions, absences: [],
+    activeStart: midShift.activeStart, configured: true }));
+  await p.setInputFiles('#restoreFile', f); await p.waitForTimeout(700);
+  const st = await p.evaluate(()=>state.activeStart);
+  ok('a punch made two hours ago comes back', st === midShift.activeStart,
+     st ? new Date(st).toISOString() : 'dropped');
+  ok('and the toast says so', /still clocked in since/.test(await p.textContent('#toast')),
+     await p.textContent('#toast'));
+
+  /* An ancient one is a different thing entirely, and must not start accruing money from a
+     start three months back. */
+  await p.close();
+  p = await boot(null);
+  const g = join(TMP, 'stale.json');
+  writeFileSync(g, JSON.stringify({ app:'wisewage', version:1, savedAt:new Date().toISOString(),
+    cfg: seeded.cfg, sessions: seeded.sessions, absences: [],
+    activeStart: +new Date('2026-04-01T15:00:00Z'), configured: true }));
+  await p.setInputFiles('#restoreFile', g); await p.waitForTimeout(700);
+  ok('a punch from April is not restarted', (await p.evaluate(()=>state.activeStart)) === null,
+     String(await p.evaluate(()=>state.activeStart)));
+  ok('and it says why rather than saying nothing',
+     /too long ago to trust/.test(await p.textContent('#toast')), await p.textContent('#toast'));
+  ok('pointing at the log for the real fix',
+     /from the log/.test(await p.textContent('#toast')), await p.textContent('#toast'));
+  ok('the shifts still restored either way',
+     (await p.locator('#logBody tbody tr[data-row]').count())>0);
+}
+
 console.log(`\n${fails===0?'✅':'❌'}  backup/restore: ${fails} failure(s)\n`);
 await b.close(); srv.close(); process.exit(fails?1:0);

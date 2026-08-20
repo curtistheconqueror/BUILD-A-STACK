@@ -8067,9 +8067,26 @@ function restoreFrom(text){
   if (d.ui) state.ui = d.ui;
   if (d.calc) state.calc = d.calc;
   if (d.calCal) state.calCal = d.calCal;
-  state.activeStart = null; state.activeAdj = null;   // never restore a running clock from a file
+  /* A running clock used to be dropped on every restore, on the reasoning that a file might
+     be old and a stale punch would start accruing money from an ancient start. That is right
+     about a six-month-old file and wrong about the case that actually happens: moving to a
+     new phone or a new address mid-shift, with a backup taken minutes ago. Dropping it there
+     silently loses the shift you are standing in.
+
+     So it is judged rather than assumed, using the same rule that already decides whether a
+     punch looks forgotten. A clock that would not trip that guard is a clock that is
+     genuinely still running, and it comes back. */
+  var wasRunning = (d.jobs && d.jobs[0] && d.jobs[0].activeStart) || d.activeStart || null;
+  var keep = wasRunning && !forgottenShift(wasRunning, Date.now(), state.cfg);
+  state.activeStart = keep ? wasRunning : null;
+  state.activeAdj = keep ? ((d.jobs && d.jobs[0] && d.jobs[0].activeAdj) || d.activeAdj || null) : null;
+  var dropped = !!wasRunning && !keep;
   save(); applyTheme(); renderThemeControls(); applyCols(); applyCfgGroups(); applyChart(); syncControls(); applyStage(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
-  toast('Restored ' + clean.length + ' shifts at ' + money(state.cfg.rate) + '/hr.');
+  toast('Restored ' + clean.length + ' shifts at ' + money(state.cfg.rate) + '/hr.'
+      + (keep ? ' You are still clocked in since ' + ptime(state.activeStart) + '.' : '')
+      + (dropped ? ' The file had a clock running since ' + fdate(new Date(wasRunning))
+                 + ' — too long ago to trust, so it was not restarted. Add it from the log if it was real.'
+                 : ''));
 }
 
 /* ============================ wiring ============================ */
