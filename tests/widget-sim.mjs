@@ -36,7 +36,7 @@ const ids = ['wcard','wstatus','wmoney','wsub','wpunch','wexpand','noStore','toa
   'eMode','eDate','eHours','fHours','fIn','fOut','eIn','eOut','ePreview','eErr',
   'eSave','eCancel','logActions','addShift','exportCsv','clearPeriod','clearConfirm',
   'clearYes','clearNo','cRate','cMult','cMode','cWeekStart','cWeekThr','cPeriodThr',
-  'cAnchor','cLen','cPayOff','cSound','backup','restore','restoreFile','wipe',
+  'cAnchor','cLen','cPayOff','cSound','backup','restore','restoreFile','wipe','sRestore',
   'sRate','sLen','sPay','sMode','sPreview','sErr','sSave'];
 const els = {};
 ids.forEach(id => els[id] = makeEl(id));

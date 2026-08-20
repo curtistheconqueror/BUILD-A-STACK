@@ -918,6 +918,15 @@
   <section class="card hide" id="setup">
     <h2>Set up your clock</h2>
     <p class="slead">Two minutes now and it runs itself from here. Everything stays in this browser — nothing is sent anywhere.</p>
+    <!-- Somebody arriving with a backup is not setting up, they are moving in. Because everything
+         lives in this browser, changing phone or address looks exactly like a first run, and the
+         restore button lives in settings, which is hidden until setup is finished. Without this
+         they would have to answer a page of questions the restore then overwrites — and anyone
+         who did not know that would sit and retype a year of history by hand. -->
+    <div class="confirm" id="setupRestore" style="margin-bottom:14px">
+      <span>Moved from another phone or address? Bring your history across instead.</span>
+      <button class="mini" id="sRestore">⇧ Restore from a backup</button>
+    </div>
     <div class="sgrid">
       <!-- Asked first because it sets sensible answers to several questions below. Optional:
            skipping it leaves every default exactly as it was. -->
@@ -2186,7 +2195,6 @@
       <div class="actions" style="justify-content:flex-start;margin-top:12px">
         <button class="mini" id="backup">⇩ Save a backup</button>
         <button class="mini" id="restore">⇧ Restore from backup</button>
-        <input type="file" id="restoreFile" accept="application/json,.json" class="hide">
         <button class="mini danger" id="wipe">Erase all data</button>
       </div>
         </div>
@@ -2196,6 +2204,11 @@
 
   <div class="foot">Single file · no server · works offline · data lives in this browser only.</div>
 </div>
+
+<!-- Deliberately outside every section. Both restore buttons open this one input, and one of
+     them lives on the setup screen while settings is hidden — a file input inside a
+     display:none ancestor cannot be relied on to open a picker when clicked from script. -->
+<input type="file" id="restoreFile" accept="application/json,.json" class="hide">
 
 <div class="toast" id="toast"></div>
 
@@ -9292,6 +9305,9 @@ document.getElementById('cfgUndoBtn').onclick = function(){
 
 document.getElementById('backup').onclick = backup;
 document.getElementById('restore').onclick = function(){ document.getElementById('restoreFile').click(); };
+/* Same file input, same restore path — the setup screen only needed a door to it, not a
+   second implementation that could drift from the first. */
+document.getElementById('sRestore').onclick = function(){ document.getElementById('restoreFile').click(); };
 document.getElementById('restoreFile').onchange = function(e){
   var f = e.target.files && e.target.files[0];
   if (!f) return;

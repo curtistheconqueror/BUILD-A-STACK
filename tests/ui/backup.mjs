@@ -95,6 +95,37 @@ ok('absences restored', (await p.evaluate(()=>state.absences.length))===2,
    String(await p.evaluate(()=>JSON.stringify(state.absences))));
 ok('vacation restored', (await p.evaluate(()=>(state.cfg.vacations||[]).length))===1);
 
+/* The tests above drive #restoreFile straight, which is not a path any person has — it skips
+   the button entirely. So it went unnoticed that there WAS no button to reach on a first run:
+   restore lives in settings, and applyStage() hides settings until setup is finished. Somebody
+   moving to a new phone had to answer a page of questions the restore then threw away. This
+   section clicks what a thumb can actually reach. */
+console.log('\n━━ Somebody moving in from another phone can reach restore ━━');
+await p.close();
+p = await boot(null);
+ok('a fresh copy opens at setup', await p.isVisible('#setup'));
+ok('and offers restore right there', await p.isVisible('#sRestore'));
+{
+  const txt = await p.textContent('#setupRestore');
+  ok('worded for moving, not for setting up', /moved|another phone|address/i.test(txt), txt);
+}
+{
+  /* The input sits outside every section on purpose. Were it still inside #cfg, this click
+     would reach a display:none ancestor and no picker would open — silently, on a phone. */
+  const chooser = await Promise.all([
+    p.waitForEvent('filechooser', {timeout:4000}),
+    p.click('#sRestore'),
+  ]).then(r=>r[0]).catch(()=>null);
+  ok('tapping it opens a file picker', !!chooser);
+  if (chooser) await chooser.setFiles(file);
+  await p.waitForTimeout(600); await openAll(p);
+}
+ok('setup gives way to the app', !(await p.isVisible('#setup')));
+ok('the history came across', (await p.locator('#logBody tbody tr[data-row]').count())===2,
+   String(await p.locator('#logBody tbody tr[data-row]').count()));
+ok('at the right rate', (await p.textContent('#liveline')).includes('$38.00'), await p.textContent('#liveline'));
+ok('and settings is reachable now', await p.isVisible('#cfg'));
+
 console.log('\nSurvives a reload after restore');
 await p.reload(); await p.waitForTimeout(400); await openAll(p);
 ok('still configured', !(await p.isVisible('#setup')));
