@@ -534,6 +534,45 @@
     border-radius:8px;padding:6px 4px;font:inherit;font-size:12.4px;font-weight:700;cursor:pointer;
     -webkit-tap-highlight-color:transparent}
   .autodays button.on{border-color:var(--acc);color:var(--acc);background:rgba(53,208,224,.12)}
+  /* the ? that opens help, and the sheet it opens */
+  /* The tap target is a real 44px, because a 22px one is the size the app refuses to ship
+     everywhere else and a thumb does not care that this button is only help. The ring drawn
+     inside it stays small so it reads as a quiet mark next to a heading rather than a
+     button competing with one. Negative margins keep the extra bulk out of the layout, so
+     adding it to a crowded row — the clock strip especially — does not push anything. */
+  .helpq{flex:none;position:relative;width:44px;height:44px;margin:-11px -11px -11px 0;
+    padding:0;border:0;background:transparent;color:var(--muted);
+    font:700 12.5px/1 inherit;cursor:pointer;align-self:center;
+    display:inline-flex;align-items:center;justify-content:center}
+  .helpq::before{content:'';position:absolute;width:22px;height:22px;border-radius:50%;
+    border:1px solid var(--border)}
+  .helpq:hover,.helpq:focus-visible{color:var(--acc)}
+  .helpq:hover::before,.helpq:focus-visible::before{border-color:var(--acc)}
+  .helpsheet{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.55);
+    display:flex;align-items:flex-end;justify-content:center;padding:0}
+  .helpsheet.on{display:flex}
+  .helpcard{position:relative;width:100%;max-width:640px;max-height:88vh;overflow-y:auto;
+    background:var(--card);border:1px solid var(--border);border-radius:16px 16px 0 0;
+    padding:18px 18px calc(18px + env(safe-area-inset-bottom)) 18px;
+    -webkit-overflow-scrolling:touch}
+  @media(min-width:700px){
+    .helpsheet{align-items:center;padding:20px}
+    .helpcard{border-radius:16px}
+  }
+  .helpx{position:absolute;top:12px;right:12px;width:34px;height:34px;border-radius:50%;
+    border:1px solid var(--border);background:var(--card2,transparent);color:var(--ink);
+    font-size:15px;cursor:pointer}
+  .helpbody h3{margin:2px 44px 12px 0;font-size:17px;color:var(--acc)}
+  .helpbody p{margin:0 0 11px;font-size:14px;line-height:1.55;color:var(--ink)}
+  .helpbody dl{margin:0 0 11px}
+  .helpbody dt{font-weight:700;font-size:13.6px;color:var(--ink);margin-top:9px}
+  .helpbody dd{margin:2px 0 0;font-size:13.6px;line-height:1.5;color:var(--muted)}
+  .helpbody .hwarn{border-left:3px solid var(--warn);padding:8px 0 8px 11px;
+    background:rgba(255,180,84,.08);border-radius:0 8px 8px 0}
+  .helpidx{margin-top:16px;padding-top:13px;border-top:1px solid var(--border);
+    display:flex;flex-wrap:wrap;gap:6px}
+  .helpidxlbl{width:100%;color:var(--muted);font-size:11.6px;letter-spacing:.06em;
+    text-transform:uppercase;margin-bottom:3px}
   /* ticking holidays during setup: two columns on a phone, one per line if it is narrow */
   .holpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 12px;margin-top:9px}
   .holtick{display:grid;grid-template-columns:auto 1fr;gap:4px 9px;align-items:center;
@@ -1006,7 +1045,7 @@
         <input type="time" id="sSchedStart"></div>
       <div class="f"><label for="sSchedEnd">And when does it end?</label>
         <input type="time" id="sSchedEnd"></div>
-      <div class="f"><label for="sLunch">Unpaid lunch per shift</label>
+      <div class="f"><label for="sLunch">Unpaid lunch per shift<button class="helpq" type="button" data-help="lunch" aria-label="What is this?">?</button></label>
         <select id="sLunch">
           <option value="0">None — all time paid</option>
           <option value="30">30 minutes</option>
@@ -1018,7 +1057,7 @@
          say "the eleven federal ones", which is what the Postal Service and most federal
          employers observe, and no way to say "ours adds Good Friday". A preset sets the list
          and then every one of them can be ticked off individually. -->
-    <div class="f" style="margin-top:18px"><label for="sHolPreset">Which paid holidays does your job give?</label>
+    <div class="f" style="margin-top:18px"><label for="sHolPreset">Which paid holidays does your job give?<button class="helpq" type="button" data-help="holidays" aria-label="What is this?">?</button></label>
       <div class="note">Start from a set, then tick to match your contract exactly. Everything
       here is editable in Settings later, and you can add any holiday this list does not name.</div>
       <select id="sHolPreset">
@@ -1155,6 +1194,9 @@
       <div class="frow">
         <button class="btn go" id="forgotFix"></button>
         <button class="mini" id="forgotKeep">No, it is still running</button>
+        <!-- The one moment somebody is most likely to want an explanation is while being
+             asked a question about their own pay, so the door is here and not only in the index. -->
+        <button class="mini" type="button" data-help="forgot">Why am I being asked?</button>
       </div>
     </div>
     <div class="permoney" id="permoney">$0.00</div>
@@ -1265,7 +1307,7 @@
 
   <!-- ================= NET SETUP ================= -->
   <section class="card hide" id="netsetup">
-    <h2>Your deductions</h2>
+    <h2>Your deductions<button class="helpq" type="button" data-help="net" aria-label="What is this?">?</button></h2>
     <p class="slead">Answer once and the clock shows what you actually keep. Copy the numbers straight
     off a recent paystub — everything stays on this device. If a figure differs from your stub,
     type the stub's dollar amount in its override box and that wins.</p>
@@ -2245,6 +2287,18 @@
      them lives on the setup screen while settings is hidden — a file input inside a
      display:none ancestor cannot be relied on to open a picker when clicked from script. -->
 <input type="file" id="restoreFile" accept="application/json,.json" class="hide">
+
+<!-- The help sheet. One of these for the whole app: every ? opens it, and it lists every
+     other topic underneath, so it is context-sensitive when you tap into it and a manual
+     when you browse it. Inline help under each section was the alternative and was
+     rejected — it duplicates the words, cannot be searched, and lengthens the screen for
+     people who already know what a pay period is. -->
+<div class="helpsheet hide" id="helpSheet" role="dialog" aria-modal="true" aria-labelledby="helpHeading">
+  <div class="helpcard">
+    <button class="helpx" id="helpClose" aria-label="Close help">✕</button>
+    <div class="helpbody" id="helpBody"></div>
+  </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -4504,6 +4558,182 @@ function forgottenShift(activeStart, nowMs, cfg, sessions){
 }
 
 /* ==ENGINE-END== */
+
+/* ============================ help ============================
+   The words, kept as data so the sheet, the section buttons and the index all read the
+   same source. Plumbing is further down; this is only the copy.
+
+   Deliberately outside the engine fence: it is prose, not pay maths. */
+var HELP = {
+
+  clock: { title: 'The clock', body:
+    '<p>Punch in when you start, punch out when you finish. The money on screen is what you have ' +
+    'earned <em>so far in this shift</em>, at your real rate, moving in real time.</p>' +
+    '<p>It knows about your unpaid lunch, your overtime rule and any premium you are owed, so the ' +
+    'figure is what the shift is actually worth rather than hours times rate.</p>' +
+    '<p>Forget to punch out and it will ask rather than assume — see <b>Forgetting to clock out</b>.</p>' },
+
+  earnings: { title: 'Earnings', body:
+    '<p>Three figures: today, this week and the pay period so far. Each splits into ordinary hours ' +
+    'and overtime, because the two are worth different money and a single total hides which is ' +
+    'which.</p>' +
+    '<p>Everything is computed from the shift log, so correcting a punch corrects all of it at once.</p>' },
+
+  calc: { title: 'The quick calculator', body:
+    '<p>A scratch pad for “what would that be worth?” — hours in, money out, without touching ' +
+    'the log.</p>' +
+    '<p>You say how many hours of each kind — ordinary, overtime, double time — and it values ' +
+    'them at your rate and your multiplier. It does not work out which hours are overtime for ' +
+    'you; that is the part you decide.</p>' +
+    '<p>Useful for checking a shift somebody is offering you before you take it.</p>' },
+
+  units: { title: 'Work counted rather than clocked', body:
+    '<p>For pay by the piece, the mile, the delivery or the visit rather than by the hour. There is ' +
+    'no punch and no shift log — you record how many, and the app values it.</p>' +
+    '<p>A base salary sits underneath. The per-unit rate is a bonus on everything past a ' +
+    'threshold — below it the base is the whole of it, so a slow week still pays what it is ' +
+    'supposed to.</p>' },
+
+  premiums: { title: 'Premiums and differentials', body:
+    '<p>Extra on top of your rate for <em>when</em> you worked rather than how long — a night ' +
+    'differential, a weekend rate, a shift premium.</p>' +
+    '<p>Set the window and the extra, and it is applied to the hours that fall inside it ' +
+    'automatically. Overtime is worked out on the correct base, so a premium hour in overtime is ' +
+    'not quietly paid at the plain rate.</p>' },
+
+  otmode: { title: 'Which overtime rule you are on', body:
+    '<p>This is the single most expensive setting in the app, and the rules are not interchangeable. ' +
+    'Pick the one your contract actually uses — if you are not sure, the wording is usually under ' +
+    '“hours of work” or “overtime” in your agreement.</p>' +
+    '<dl>' +
+    '<dt>After 40 hours a week</dt><dd>The federal default, and what most US employers do. ' +
+    'Nothing you do in a single day matters; only the week’s total.</dd>' +
+    '<dt>After 80 hours a pay period</dt><dd>One running total across the whole period rather than ' +
+    'resetting weekly.</dd>' +
+    '<dt>After 8 hours in a shift</dt><dd>Counted from when you clock in. A shift running past ' +
+    'midnight keeps counting — it does not start over.</dd>' +
+    '<dt>After 8 hours in a day</dt><dd>Resets at midnight, so a shift crossing it starts again. ' +
+    'The difference from the rule above only shows up on overnight work, where it matters a lot.</dd>' +
+    '<dt>After 8 in a shift <i>or</i> 40 in the week</dt><dd>The usual union rule. Both count at once ' +
+    'and no hour is ever counted twice, so you always get whichever pays more.</dd>' +
+    '<dt>After 8 in a day <i>or</i> 80 in the period</dt><dd>The hospital rule (FLSA §7(j)). Only ' +
+    'lawful for hospitals and residential care, and only by agreement made in advance.</dd>' +
+    '</dl>' +
+    '<p class="hwarn">Worth checking if you work long days: on a per-shift rule, going over 40 in the ' +
+    'week earns you nothing extra. On the combined rule it does. That is real money, and it is the ' +
+    'kind of thing a payslip will not tell you is missing.</p>' },
+
+  anchor: { title: 'The date your pay period started', body:
+    '<p>Not today, and not your payday — the first day of the period you are being paid for <em>now</em>. ' +
+    'Everything else counts forward from it, so if the period boundaries look wrong later, this is the ' +
+    'setting to fix.</p>' +
+    '<p>A fortnightly period repeats from this date forever, so it only has to be right once. ' +
+    'Your payday is set separately, as the number of days after the period ends that the money lands.</p>' },
+
+  makeup: { title: 'Making up a missed day', body:
+    '<p>Only asked on the two day-based rules, because the weekly and period rules already handle a ' +
+    'missed day by themselves.</p>' +
+    '<p><b>Make up the hours first</b> means a short day earlier in the week can be made up later ' +
+    'before overtime starts. <b>Every day stands on its own</b> means each day is judged alone — ' +
+    'this is the California pattern, and it is more generous.</p>' },
+
+  holidays: { title: 'Paid holidays', body:
+    '<p>Start from a set and then tick to match your contract exactly. Nothing here is assumed: ' +
+    'the six most common are a starting point, not a claim about your job.</p>' +
+    '<p><b>All 11 US federal holidays</b> is what the Postal Service and most federal employers ' +
+    'observe. Plenty of contracts add their own — Good Friday and the day after Thanksgiving are ' +
+    'the most common, and both are in the list.</p>' +
+    '<p>A holiday can pay flat, count toward overtime, or both, and you can set whether one landing ' +
+    'on a day you were not scheduled still pays. All of that is in Settings, per holiday.</p>' },
+
+  banks: { title: 'Paid days off you are given', body:
+    '<p>Days you <em>spend</em>, as opposed to holidays that arrive on a date. Sick days, personal ' +
+    'days, floating holidays, bereavement — whatever your contract calls them, in your words.</p>' +
+    '<p>Nothing is here until you add it. The app does not know how many sick days you get, and a ' +
+    'number it guessed would be one you had to catch.</p>' +
+    '<p><b>Already used this year</b> matters more than it looks. Almost nobody installs a pay app ' +
+    'on 1 January, and “5 of 5 left” in August is not optimism — it is wrong about the one thing ' +
+    'these exist to tell you.</p>' +
+    '<p>Two settings per allowance: whether it <b>counts toward overtime</b> (a paid day that pushes ' +
+    'you past 40 for the week), and whether it is <b>owed back</b> — a sick day you are expected to ' +
+    'make up, as against approved time off that leaves you owing nothing.</p>' },
+
+  lunch: { title: 'Unpaid lunch', body:
+    '<p>Deducted from every shift automatically, and never counted toward overtime. The clock pauses ' +
+    'for it mid-shift, and shifts already in the log are corrected when you change it.</p>' +
+    '<p>The separate “extra” figure is only for lunch time hiding in hours the log cannot see — a ' +
+    'year-so-far carry-in typed off a payslip. Logged shifts are already handled.</p>' },
+
+  net: { title: 'Deductions and take-home', body:
+    '<p>Gross is what you earned. Net is what lands. The gap is deductions, and <em>when</em> each one ' +
+    'comes out changes the answer.</p>' +
+    '<dl>' +
+    '<dt>Before every tax</dt><dd>Health insurance, usually. Reduces income tax <em>and</em> Social ' +
+    'Security and Medicare.</dd>' +
+    '<dt>Before income tax only</dt><dd>A 401k, usually. Reduces federal and state tax but <b>not</b> ' +
+    'Social Security or Medicare — you still pay FICA on money you put into a 401k.</dd>' +
+    '<dt>After tax</dt><dd>Union dues, garnishments, loan repayments. Taken from what is left.</dd>' +
+    '</dl>' +
+    '<p class="hwarn">This distinction is worth getting right. Entering a 401k as “before every tax” ' +
+    'under-withholds Social Security and Medicare. Put $400 a period into a 401k and that is about ' +
+    '$31 a period unaccounted for, every period. Your payslip is the authority; copy what it does.</p>' +
+    '<p>A deduction can be a fixed amount or a percentage of gross. A percentage keeps up on its own ' +
+    'when your hours or your rate change.</p>' },
+
+  ote: { title: 'The overtime outlook', body:
+    '<p>A projection of where the year ends up, built from the overtime you have actually recorded — ' +
+    'not from a target and not from this period alone.</p>' +
+    '<p>It refuses to answer until it has enough periods to be honest. A guess shown too early is ' +
+    'just a lie with a percent sign, and the range it eventually shows is deliberately wide because ' +
+    'overtime is not steady.</p>' +
+    '<p>You can seed it from old payslips or a W-2 — one line per month — so it has something to ' +
+    'reason from before you have banked a year in the app.</p>' },
+
+  ytd: { title: 'Year to date', body:
+    '<p>What you have earned this calendar year, in this app, plus whatever you told it you had ' +
+    'already earned before you installed it.</p>' +
+    '<p>That carry-in is the point: without it, the year-to-date figure is only as old as the app, ' +
+    'which makes it useless for checking a payslip. Take the year-to-date gross off your most recent ' +
+    'stub and enter it with the date it covers up to.</p>' },
+
+  forgot: { title: 'Forgetting to clock out', body:
+    '<p>If the clock has been running far longer than any shift you have ever worked, the app asks ' +
+    'rather than assuming — it will not rewrite a punch on your behalf.</p>' +
+    '<p>It measures against <em>your own record</em>, not your rostered finish. Staying late is ' +
+    'ordinary, and something that fires every time you do would be something you learned to dismiss ' +
+    'unread. So the question only comes up past the longest shift in your history, and the time it ' +
+    'offers is your typical finish — not the roster, which would throw away real overtime.</p>' +
+    '<p>Either answer is fine, and a shift is always editable in the log afterwards.</p>' },
+
+  progress: { title: 'Pay period progress', body:
+    '<p>How far through the period you are, and how far from the overtime threshold. The bar keeps ' +
+    'going past the threshold rather than pinning at full, so you can see how deep into overtime ' +
+    'you are, not just that you got there.</p>' },
+
+  extra: { title: 'Decimal time conversion', body:
+    '<p>Payroll counts in decimal hours; clocks count in minutes. 7 hours 45 minutes is 7.75, and ' +
+    '7 hours 30 is 7.5 — the two most commonly mistyped numbers on an overtime sheet.</p>' +
+    '<p>Useful for checking what somebody else wrote down against what you actually worked.</p>' },
+
+  log: { title: 'The shift log', body:
+    '<p>Every punch this period, editable. Add one you missed, correct a time, or delete one that ' +
+    'should not be there — a three-second mis-tap, for instance.</p>' +
+    '<p>Everything else in the app is computed from this list, so correcting the log corrects the ' +
+    'money, the overtime and the year-to-date together.</p>' },
+
+  jobs: { title: 'More than one job', body:
+    '<p>Each job keeps its own rate, schedule, overtime rule, holidays and differentials — a job is ' +
+    'a complete setup rather than a few overrides. Switching jobs switches all of it.</p>' },
+
+  backup: { title: 'Backups', body:
+    '<p>Everything lives in this browser and nothing is sent anywhere, which is the point — and it ' +
+    'also means clearing your browser data, or losing the phone, loses the lot.</p>' +
+    '<p>Save a backup before changing phone or address, and restore it on the other side. A backup ' +
+    'is a plain file; you can keep it anywhere you keep anything else.</p>' +
+    '<p class="hwarn">Take the backup at the moment you move, not last week. A file from a fortnight ' +
+    'ago restores a fortnight-old app.</p>' }
+};
+
 
 /* ============================ state ============================ */
 
@@ -9357,6 +9587,96 @@ document.getElementById('sMakeUp').addEventListener('click', function(e){
   setupMakeUp = b.dataset.mu === '1';
   paintSetupMakeUp(); previewSetup();
 });
+/* ============================ help ============================
+   One corpus, many doors. A ? in each section header and beside the setup questions that
+   are not self-evident; every one of them opens the same sheet, which also lists every
+   other topic. Inline help under each section was the alternative and was rejected: it
+   duplicates the words, cannot be searched, and lengthens the screen for people who
+   already know what a pay period is.
+
+   HELP lives up in the file with the rest of the copy. This part is only the plumbing. */
+
+/* Which topic each section header opens. A section absent from here simply gets no ?,
+   which is the right default — a heading that needs explaining should be named better. */
+var HELP_FOR = {
+  hero: 'clock', totals: 'earnings', period: 'anchor', progress: 'progress',
+  log: 'log', banks: 'banks', extra: 'extra', ytd: 'ytd', ote: 'ote',
+  calc: 'calc', salary: 'jobs', units: 'units',
+  gPay: 'otmode', gPeriod: 'anchor', gSched: 'makeup', gOff: 'banks',
+  gPrem: 'premiums', gData: 'backup', gJobs: 'jobs'
+};
+
+/* Sections whose header is not a plain h2. */
+var HELP_HEAD = { hero: '.hstrip' };
+
+var helpOpenedFrom = null;      // so Escape and the close button can put focus back
+
+function helpTopicHtml(key){
+  var t = HELP[key];
+  if (!t) return '';
+  return '<h3 id="helpHeading">' + esc(t.title) + '</h3>' + t.body;
+}
+function helpIndexHtml(current){
+  return '<div class="helpidx"><div class="helpidxlbl">Everything else</div>'
+    + Object.keys(HELP).filter(function(k){ return k !== current; }).map(function(k){
+        return '<button class="mini" data-helpgo="' + k + '">' + esc(HELP[k].title) + '</button>';
+      }).join('') + '</div>';
+}
+function openHelp(key, from){
+  if (!HELP[key]) key = Object.keys(HELP)[0];
+  helpOpenedFrom = from || null;
+  el('helpBody').innerHTML = helpTopicHtml(key) + helpIndexHtml(key);
+  el('helpSheet').classList.add('on');
+  show('helpSheet', true);
+  el('helpClose').focus();
+}
+function closeHelp(){
+  el('helpSheet').classList.remove('on');
+  show('helpSheet', false);
+  if (helpOpenedFrom && helpOpenedFrom.focus) helpOpenedFrom.focus();
+  helpOpenedFrom = null;
+}
+
+/* The buttons are injected rather than written into the markup twenty times, so a section
+   added later cannot quietly miss out, and the ? cannot drift from the topic list. */
+(function fitHelpButtons(){
+  Object.keys(HELP_FOR).forEach(function(id){
+    var sec = document.getElementById(id);
+    if (!sec) return;
+    /* The clock has no h2 — it is a strip with a chevron — so it names its own header. */
+    var head = HELP_HEAD[id] ? sec.querySelector(HELP_HEAD[id])
+             : sec.tagName === 'DETAILS' ? sec.querySelector('summary')
+             : sec.querySelector(':scope > h2');
+    if (!head || head.querySelector('.helpq')) return;
+    var b = document.createElement('button');
+    b.className = 'helpq';
+    b.type = 'button';
+    b.dataset.help = HELP_FOR[id];
+    b.textContent = '?';
+    b.setAttribute('aria-label', 'What is this?');
+    head.appendChild(b);
+  });
+})();
+
+/* Section headers toggle the fold on click, so without this the ? would open help and
+   collapse the section out from under it. */
+document.addEventListener('click', function(e){
+  var q = e.target.closest('[data-help]');
+  if (q){
+    e.preventDefault();
+    e.stopPropagation();
+    openHelp(q.dataset.help, q);
+    return;
+  }
+  var go = e.target.closest('[data-helpgo]');
+  if (go){ openHelp(go.dataset.helpgo, helpOpenedFrom); return; }
+  if (e.target.closest('#helpClose') || e.target.id === 'helpSheet') closeHelp();
+}, true);
+
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape' && el('helpSheet').classList.contains('on')) closeHelp();
+});
+
 document.getElementById('sSave').onclick = saveSetup;
 document.getElementById('sWorkDays').addEventListener('click', function(e){
   var b = e.target.closest('button'); if (!b) return;
