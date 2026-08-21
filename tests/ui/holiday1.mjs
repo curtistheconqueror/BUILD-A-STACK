@@ -183,13 +183,29 @@ await p.locator('#cHolList button[data-hdel]').last().click(); await p.waitForTi
 ok('removing takes one away', (await p.locator('#cHolList .holrow').count())===6,
    String(await p.locator('#cHolList .holrow').count()));
 
-console.log('\n━━ Putting it back ━━');
-await p.click('#cHolReset'); await p.waitForTimeout(400);
-ok('the standard six return', (await p.locator('#cHolList .holrow').count())===6);
+console.log('\n━━ Putting it back from a standard set ━━');
+await p.selectOption('#cHolPreset','common'); await p.waitForTimeout(400);
+ok('the six most common return', (await p.locator('#cHolList .holrow').count())===6);
 ok('with their names', (await p.textContent('#cHolList')).includes("New Year's Day"));
 ok('and all paying flat, none toward overtime',
    (await p.locator('#cHolList .hotf').allTextContents()).every(t=>t.trim()!=='OT'),
    (await p.locator('#cHolList .hotf').allTextContents()).join('|'));
+
+/* Six-or-nothing was the old choice, and it could not express what the Postal Service and
+   most federal employers observe. */
+console.log('\n━━ The federal set, which six-or-nothing could not say ━━');
+await p.selectOption('#cHolPreset','fed'); await p.waitForTimeout(400);
+ok('eleven holidays', (await p.locator('#cHolList .holrow').count())===11,
+   String(await p.locator('#cHolList .holrow').count()));
+{
+  const names = await p.textContent('#cHolList');
+  ok('including Juneteenth', names.includes('Juneteenth'));
+  ok('and MLK Day', names.includes('Martin Luther King'));
+  ok('and Veterans Day', names.includes('Veterans Day'));
+}
+await p.selectOption('#cHolPreset','none'); await p.waitForTimeout(400);
+ok('and it can be cleared to none', (await p.locator('#cHolList .holrow').count())===0);
+await p.selectOption('#cHolPreset','common'); await p.waitForTimeout(400);
 
 console.log('\n━━ The holiday settings ━━');
 ok('a holiday is worth 8 h by default', (await p.inputValue('#cHolHours'))==='8', await p.inputValue('#cHolHours'));

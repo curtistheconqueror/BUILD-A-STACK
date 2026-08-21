@@ -534,6 +534,27 @@
     border-radius:8px;padding:6px 4px;font:inherit;font-size:12.4px;font-weight:700;cursor:pointer;
     -webkit-tap-highlight-color:transparent}
   .autodays button.on{border-color:var(--acc);color:var(--acc);background:rgba(53,208,224,.12)}
+  /* ticking holidays during setup: two columns on a phone, one per line if it is narrow */
+  .holpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 12px;margin-top:9px}
+  .holtick{display:grid;grid-template-columns:auto 1fr;gap:4px 9px;align-items:center;
+    padding:7px 9px;border:1px solid var(--border);border-radius:9px;cursor:pointer;
+    background:var(--card2, transparent)}
+  .holtick.on{border-color:var(--acc);background:rgba(53,208,224,.10)}
+  .holtick input{width:17px;height:17px;accent-color:var(--acc);cursor:pointer;grid-row:span 2}
+  .holtick .htname{font-weight:700;color:var(--ink);font-size:13.2px}
+  .holtick .htwhen{color:var(--muted);font-size:11.8px;grid-column:2}
+  /* an allowance being named and counted during setup */
+  .bankrow{display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:end;
+    padding:9px 0;border-top:1px solid var(--border)}
+  .bankrow .bnm{min-width:0;font-weight:700}
+  .bankrow .bqty{display:flex;flex-direction:column;gap:3px}
+  .bankrow .bqty span{color:var(--muted);font-size:11.4px}
+  .bankrow .bqty input{width:66px;text-align:center}
+  @media(max-width:430px){
+    .bankrow{grid-template-columns:1fr auto auto;grid-template-areas:'nm nm del' 'ct us .'}
+    .bankrow .bnm{grid-area:nm}
+    .bankrow [data-bdel]{grid-area:del}
+  }
   /* the editable holiday list */
   .holrow{display:grid;grid-template-columns:auto 1fr auto auto auto;gap:9px;align-items:center;
     padding:9px 0;border-top:1px solid var(--border);font-size:13.2px}
@@ -991,26 +1012,37 @@
           <option value="30">30 minutes</option>
           <option value="60">1 hour</option>
         </select></div>
-      <div class="f"><label for="sHolOn">Paid holidays</label>
-        <select id="sHolOn">
-          <option value="1">The usual six US holidays</option>
-          <option value="0">None — I'll add my own later</option>
-        </select></div>
     </div>
 
-    <div class="f" style="margin-top:18px"><label>Paid days off you are given each year</label>
-      <div class="note">Days you spend rather than days that arrive. Leave a count at zero if
-      your job does not give them — all of this is editable in Settings afterwards.</div>
+    <!-- Holidays used to be a two-option switch: the usual six, or none. There was no way to
+         say "the eleven federal ones", which is what the Postal Service and most federal
+         employers observe, and no way to say "ours adds Good Friday". A preset sets the list
+         and then every one of them can be ticked off individually. -->
+    <div class="f" style="margin-top:18px"><label for="sHolPreset">Which paid holidays does your job give?</label>
+      <div class="note">Start from a set, then tick to match your contract exactly. Everything
+      here is editable in Settings later, and you can add any holiday this list does not name.</div>
+      <select id="sHolPreset">
+        <option value="common">The six most common</option>
+        <option value="fed">All 11 US federal holidays</option>
+        <option value="none">None</option>
+      </select>
     </div>
-    <div class="sgrid">
-      <div class="f"><label for="sFloat">Floating / personal days a year</label>
-        <input type="number" id="sFloat" min="0" max="99" step="1" value="0"></div>
-      <div class="f"><label for="sFloatUsed">…of those, already used this year</label>
-        <input type="number" id="sFloatUsed" min="0" max="99" step="1" value="0"></div>
-      <div class="f"><label for="sSick">Paid sick days a year</label>
-        <input type="number" id="sSick" min="0" max="99" step="1" value="0"></div>
-      <div class="f"><label for="sSickUsed">…of those, already used this year</label>
-        <input type="number" id="sSickUsed" min="0" max="99" step="1" value="0"></div>
+    <div class="holpick" id="sHolPick"></div>
+
+    <!-- Allowances used to be two hardcoded rows — floating/personal and sick — with five
+         sick days pre-filled. Nobody was asked; they were told. Now nothing exists until it
+         is added, and it is named by the person who has it. -->
+    <div class="f" style="margin-top:18px"><label>Paid days off you are given each year</label>
+      <div class="note">Days you spend rather than days that arrive — sick days, personal days,
+      floating holidays, whatever your contract calls them. Add only what you actually get. If
+      your job gives something with a name of its own, add it and rename it: a Pace bus operator
+      would add a <i>vacation random day</i>, and it would say so on their screen.</div>
+    </div>
+    <div id="sBankList"></div>
+    <div class="actions" style="justify-content:flex-start;margin-top:8px">
+      <select id="sBankAdd" style="max-width:240px"></select>
+    </div>
+    <div class="sgrid" style="margin-top:12px">
       <div class="f"><label for="sOffHours">Hours each one is worth</label>
         <input type="number" id="sOffHours" min="0" max="24" step="0.5" value="8"></div>
     </div>
@@ -2019,8 +2051,16 @@
       <div id="cHolList" style="margin-top:12px"></div>
       <div class="actions" style="justify-content:flex-start;margin-top:10px">
         <button class="mini" id="cHolAdd">+ Add a holiday</button>
-        <button class="mini" id="cHolReset">↺ Back to the standard six</button>
+        <select id="cHolPreset" style="max-width:240px">
+          <option value="">Use a standard set…</option>
+          <option value="common">The six most common</option>
+          <option value="fed">All 11 US federal holidays</option>
+          <option value="none">None — clear the list</option>
+        </select>
       </div>
+      <div class="note" style="margin-top:6px">A standard set replaces whatever is listed now.
+      Federal is what the Postal Service and most federal employers observe. Anything your
+      contract adds — Good Friday, the day after Thanksgiving, your own — you add above.</div>
       <div class="f" style="margin-top:18px"><label>Paid days off you are given</label>
         <div class="note">Allowances you spend rather than days that arrive — floating
         holidays, sick days, personal days, whatever your contract calls them. Set how many
@@ -2029,14 +2069,10 @@
       </div>
       <div id="cBankList"></div>
       <div class="actions" style="justify-content:flex-start;margin-top:10px">
-        <select id="cBankAdd" style="max-width:220px">
-          <option value="">+ Add an allowance…</option>
-          <option value="float">Floating holiday</option>
-          <option value="sick">Sick day</option>
-          <option value="vrd">Vacation random day</option>
-          <option value="personal">Personal day</option>
-        </select>
-        <button class="mini" id="cBankReset">↺ Back to the defaults</button>
+        <!-- Options are built from BANK_KINDS at boot so the list here cannot drift from the
+             list the code actually knows about. -->
+        <select id="cBankAdd" style="max-width:240px"></select>
+        <button class="mini danger" id="cBankReset">↺ Remove all</button>
       </div>
       <div class="f" style="margin-top:18px"><label>Vacation</label>
         <div class="note">A block of dates rather than days you spend one at a time. Every day
@@ -2230,31 +2266,92 @@ var HOUR_MS = 3600000, DAY_MS = 86400000;
    Months and weekdays are zero-based, matching Date. `paid` is what the day is worth
    when you do not work it; `ot` is whether those hours count toward the overtime
    threshold. Both live per holiday because contracts do not treat them all alike. */
-function HOLIDAY_DEFAULTS(){
+/* Every holiday the app knows how to name, and which of the common sets it belongs to.
+   `fed` marks the eleven US federal holidays — the set the Postal Service and most federal
+   employers observe, and a set this app previously had no way to express at all: the only
+   choices were six or none.
+
+   The four non-federal entries are here because they are among the most commonly bargained
+   holidays in the country, and two of them cannot be written as a date. The day after
+   Thanksgiving moves with Thanksgiving; Good Friday follows a lunar reckoning. A catalog
+   built only from fixed dates would have silently omitted both.
+
+   Nothing here is switched on by anybody's default. This is a list to choose from. */
+var THANKSGIVING_RULE = { kind: 'nth', month: 10, dow: 4, n: 4 };
+function HOLIDAY_CATALOG(){
   return [
-    { id: 'newyear', name: "New Year's Day",    rule: { kind: 'md',  month: 0,  day: 1 },            on: true, ot: false , makeUp: false },
-    { id: 'memorial',name: 'Memorial Day',      rule: { kind: 'nth', month: 4,  dow: 1, n: -1 },     on: true, ot: false , makeUp: false },
-    { id: 'july4',   name: 'Independence Day',  rule: { kind: 'md',  month: 6,  day: 4 },            on: true, ot: false , makeUp: false },
-    { id: 'labor',   name: 'Labor Day',         rule: { kind: 'nth', month: 8,  dow: 1, n: 1 },      on: true, ot: false , makeUp: false },
-    { id: 'thanks',  name: 'Thanksgiving Day',  rule: { kind: 'nth', month: 10, dow: 4, n: 4 },      on: true, ot: false , makeUp: false },
-    { id: 'xmas',    name: 'Christmas Day',     rule: { kind: 'md',  month: 11, day: 25 },           on: true, ot: false , makeUp: false }
+    { id: 'newyear',    name: "New Year's Day",              fed: true,  common: true,  rule: { kind: 'md',  month: 0,  day: 1 } },
+    { id: 'mlk',        name: 'Martin Luther King Jr. Day',  fed: true,  common: false, rule: { kind: 'nth', month: 0,  dow: 1, n: 3 } },
+    { id: 'presidents', name: "Presidents' Day",             fed: true,  common: false, rule: { kind: 'nth', month: 1,  dow: 1, n: 3 } },
+    { id: 'goodfri',    name: 'Good Friday',                 fed: false, common: false, rule: { kind: 'easter', days: -2 } },
+    { id: 'eastermon',  name: 'Easter Monday',               fed: false, common: false, rule: { kind: 'easter', days: 1 } },
+    { id: 'memorial',   name: 'Memorial Day',                fed: true,  common: true,  rule: { kind: 'nth', month: 4,  dow: 1, n: -1 } },
+    { id: 'juneteenth', name: 'Juneteenth',                  fed: true,  common: false, rule: { kind: 'md',  month: 5,  day: 19 } },
+    { id: 'july4',      name: 'Independence Day',            fed: true,  common: true,  rule: { kind: 'md',  month: 6,  day: 4 } },
+    { id: 'labor',      name: 'Labor Day',                   fed: true,  common: true,  rule: { kind: 'nth', month: 8,  dow: 1, n: 1 } },
+    { id: 'columbus',   name: 'Columbus / Indigenous Peoples’ Day', fed: true, common: false, rule: { kind: 'nth', month: 9, dow: 1, n: 2 } },
+    { id: 'veterans',   name: 'Veterans Day',                fed: true,  common: false, rule: { kind: 'md',  month: 10, day: 11 } },
+    { id: 'thanks',     name: 'Thanksgiving Day',            fed: true,  common: true,  rule: THANKSGIVING_RULE },
+    { id: 'dayafter',   name: 'Day after Thanksgiving',      fed: false, common: false, rule: { kind: 'offset', from: THANKSGIVING_RULE, days: 1, fromName: 'Thanksgiving' } },
+    { id: 'xmaseve',    name: 'Christmas Eve',               fed: false, common: false, rule: { kind: 'md',  month: 11, day: 24 } },
+    { id: 'xmas',       name: 'Christmas Day',               fed: true,  common: true,  rule: { kind: 'md',  month: 11, day: 25 } },
+    { id: 'nyeve',      name: "New Year's Eve",              fed: false, common: false, rule: { kind: 'md',  month: 11, day: 31 } }
   ];
 }
+
+/* Turn a set of catalog ids into holidays this config can hold. */
+function holidaysFromCatalog(ids){
+  var want = {};
+  (ids || []).forEach(function(id){ want[id] = 1; });
+  return HOLIDAY_CATALOG().filter(function(h){ return want[h.id]; }).map(function(h){
+    return { id: h.id, name: h.name, rule: h.rule, on: true, ot: false, makeUp: false };
+  });
+}
+function holidayPresetIds(which){
+  return HOLIDAY_CATALOG().filter(function(h){
+    return which === 'fed' ? h.fed : which === 'common' ? h.common : false;
+  }).map(function(h){ return h.id; });
+}
+/* Kept as the name of a preset rather than as a default anybody is given. */
+function HOLIDAY_DEFAULTS(){ return holidaysFromCatalog(holidayPresetIds('common')); }
 
 /* The named slots exist so a bank is not four anonymous tokens: knowing you still have
    your birthday but have spent MLK is the point of tracking them at all. A bank with no
    slots — sick days — is a plain count. */
-function BANK_DEFAULTS(){
-  return [
-    /* No floating holidays here on purpose. Plenty of contracts do not have them at all,
-       and an allowance the app invents is one somebody has to notice and delete. They are
-       one tap away under "Add an allowance" for the contracts that do. */
-    { id: 'sick',  name: 'Sick day',        count: 5, hours: 8, ot: false, makeUp: true,  slots: [] },
-    /* Vacation random days: a block of vacation you split up however you like, paid flat.
-       Approved time off, so unlike a sick day it leaves you owing nothing. */
-    { id: 'vrd',   name: 'Vacation random day', count: 5, hours: 8, ot: false, makeUp: false, slots: [] }
-  ];
-}
+/* Empty, on purpose, and this is the whole point of the change.
+
+   This used to hand everybody five sick days and five "vacation random days". Neither
+   number came from anywhere: the five was invented, and "vacation random day" is Pace
+   bus-operator vocabulary that was appearing on every user's screen. An allowance the app
+   invents is worse than one it omits — an omission is visibly missing, whereas an invented
+   five reads as a fact somebody has to notice is wrong and delete. Somebody with three sick
+   days would have been told they had five, in a screen whose entire job is being accurate
+   about what you are owed.
+
+   Allowances are named and counted by the person who has them, in setup or in Settings.
+   BANK_KINDS below offers examples to start from — including the Pace one, which is a fine
+   thing to pick and a terrible thing to assume. */
+function BANK_DEFAULTS(){ return []; }
+
+/* Examples to start from, not a menu of everything that exists — the name is editable the
+   moment it is added, and "Something else" exists so nobody has to squeeze their contract
+   into a word on this list. 'vrd' is the Pace bus-operator term; it stays because a Pace
+   operator should find it waiting, and it is not a default because nobody else has one.
+
+   Counts are 0 so that adding an allowance never tells you how many you have. The app does
+   not know, and a number it guesses is one you have to catch. */
+var BANK_KINDS = {
+  sick:     { name: 'Sick day',                count: 0, ot: false, makeUp: true  },
+  personal: { name: 'Personal day',            count: 0, ot: false, makeUp: false },
+  float:    { name: 'Floating holiday',        count: 0, ot: true,  makeUp: false },
+  vacation: { name: 'Vacation day',            count: 0, ot: false, makeUp: false },
+  vrd:      { name: 'Vacation random day',     count: 0, ot: false, makeUp: false },
+  bereave:  { name: 'Bereavement day',         count: 0, ot: false, makeUp: false },
+  jury:     { name: 'Jury duty day',           count: 0, ot: false, makeUp: false },
+  birthday: { name: 'Birthday',                count: 0, ot: false, makeUp: false },
+  comp:     { name: 'Comp / earned day off',   count: 0, ot: false, makeUp: false },
+  other:    { name: 'Paid day off',            count: 0, ot: false, makeUp: false }
+};
 
 var DEFAULTS = {
   rate: 0,
@@ -3162,11 +3259,39 @@ function nthDow(y, month, dow, n){
   return d.getMonth() === month ? d : null;
 }
 
+/* Easter Sunday, by the anonymous Gregorian computus. It is here because Good Friday is
+   one of the most commonly bargained holidays in the country and it cannot be written as
+   a date or as a weekday-of-month — it is the Friday before a lunar reckoning. A catalog
+   without it looks complete precisely because you cannot see what is missing. */
+function easterSunday(y){
+  var a = y % 19, b = Math.floor(y / 100), c = y % 100;
+  var d = Math.floor(b / 4), e = b % 4;
+  var f = Math.floor((b + 8) / 25);
+  var g = Math.floor((b - f + 1) / 3);
+  var h = (19 * a + b - d - g + 15) % 30;
+  var i = Math.floor(c / 4), k = c % 4;
+  var l = (32 + 2 * e + 2 * i - h - k) % 7;
+  var m = Math.floor((a + 11 * h + 22 * l) / 451);
+  var mo = Math.floor((h + l - 7 * m + 114) / 31);        // 3 = March, 4 = April
+  var da = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(y, mo - 1, da);
+}
+
 /* When a given holiday falls in a given year. Null if its rule cannot produce a date
    that year — a one-off pinned to another year, or an nth weekday that does not exist. */
-function holidayDate(h, y){
+function holidayDate(h, y, depth){
   var r = h && h.rule;
   if (!r) return null;
+  if (r.kind === 'easter') return addDays(easterSunday(y), +r.days || 0);
+  /* 'offset' hangs one holiday off another rule, because the day after Thanksgiving is
+     not a date anybody can write down — it is Thanksgiving plus one, and it moves. Nesting
+     stops at one level: a rule able to point at another offset can point at itself, and a
+     saved config is user data that may have been hand-edited. */
+  if (r.kind === 'offset'){
+    if (depth) return null;
+    var base = holidayDate({ rule: r.from }, y, 1);
+    return base ? addDays(base, +r.days || 0) : null;
+  }
   if (r.kind === 'md')  return new Date(y, r.month, r.day);
   if (r.kind === 'nth') return nthDow(y, r.month, r.dow, r.n);
   if (r.kind === 'on'){
@@ -4957,6 +5082,19 @@ function holidayRuleText(h){
   if (r.kind === 'md')  return MON_FULL_LIST[r.month] + ' ' + r.day;
   if (r.kind === 'nth') return NTH_WORD[String(r.n)] + ' ' + DOW_FULL_LIST[r.dow] + ' of ' + MON_FULL_LIST[r.month];
   if (r.kind === 'on')  return fdateY(ymd(r.date));
+  if (r.kind === 'easter'){
+    var n = +r.days || 0;
+    return n === 0 ? 'Easter Sunday'
+         : n === -2 ? 'the Friday before Easter'
+         : n === 1 ? 'the Monday after Easter'
+         : Math.abs(n) + ' day' + (Math.abs(n) === 1 ? '' : 's') + (n < 0 ? ' before' : ' after') + ' Easter';
+  }
+  if (r.kind === 'offset'){
+    var d2 = +r.days || 0, base = holidayRuleText({ rule: r.from });
+    if (!d2) return base;
+    return Math.abs(d2) + ' day' + (Math.abs(d2) === 1 ? '' : 's')
+         + (d2 < 0 ? ' before ' : ' after ') + (r.fromName || base);
+  }
   return '—';
 }
 
@@ -6443,26 +6581,21 @@ function readSetup(){
     return { error: 'Set the time your shift usually starts and ends.' };
   if (!setupDays.some(Boolean)) return { error: 'Pick at least one day you work.' };
 
-  /* The allowances a person actually has. Zero means the job does not give them, so the
-     bank is left out entirely rather than shown as an empty row. */
   var hours = parseFloat(el('sOffHours').value);
   if (!isFinite(hours) || hours < 0 || hours > 24) hours = 8;
-  var nFloat = Math.max(0, Math.min(99, parseInt(el('sFloat').value, 10) || 0));
-  var nSick  = Math.max(0, Math.min(99, parseInt(el('sSick').value, 10) || 0));
-  /* Almost nobody installs a pay app on 1 January. Asked here rather than left to be
-     discovered, because "5 of 5 left" in August is not optimism, it is wrong — and it is
-     wrong about the single thing these allowances exist to tell you. The money side of the
-     same problem is the year-to-date carry-in; this is its twin for days. */
+  /* Whatever the person actually added, in their own words. Nothing is here that they did
+     not put here — an allowance with a count of zero is dropped rather than carried through
+     as a row saying you have none of something you never claimed to have.
+
+     Almost nobody installs a pay app on 1 January, so each one also carries what has already
+     been spent this year: "5 of 5 left" in August is not optimism, it is wrong, and it is
+     wrong about the single thing these allowances exist to tell you. */
   var yr = new Date().getFullYear();
-  var uFloat = Math.max(0, Math.min(nFloat, parseInt(el('sFloatUsed').value, 10) || 0));
-  var uSick  = Math.max(0, Math.min(nSick,  parseInt(el('sSickUsed').value, 10) || 0));
-  var banks = [];
-  if (nFloat) banks.push({ id: 'float', name: 'Floating holiday', count: nFloat,
-                           hours: hours, ot: true, slots: [],
-                           usedBefore: uFloat, usedYear: yr });
-  if (nSick)  banks.push({ id: 'sick',  name: 'Sick day', count: nSick,
-                           hours: hours, ot: false, slots: [],
-                           usedBefore: uSick, usedYear: yr });
+  var banks = setupBanks.filter(function(b){ return b.count > 0; }).map(function(b){
+    return { id: b.id, name: b.name, count: b.count, hours: hours,
+             ot: !!b.ot, makeUp: !!b.makeUp, slots: [],
+             usedBefore: Math.max(0, Math.min(b.count, b.used || 0)), usedYear: yr };
+  });
 
   return {
     rate: rate, periodAnchor: anchor,
@@ -6474,7 +6607,7 @@ function readSetup(){
     workDays: setupDays.slice(),
     schedStart: ss, schedEnd: se,
     lunchMins: parseInt(el('sLunch').value, 10) || 0,
-    holidays: el('sHolOn').value === '1' ? HOLIDAY_DEFAULTS() : [],
+    holidays: holidaysFromCatalog(setupHolidays),
     holidayHours: hours,
     banks: banks,
     daysOff: []
@@ -6499,6 +6632,39 @@ function paintSetupDays(){
   [].forEach.call(document.querySelectorAll('#sWorkDays button'), function(b){
     b.classList.toggle('on', !!setupDays[+b.dataset.w]);
   });
+}
+
+/* ---- holidays and allowances during setup ----------------------------------------
+   Held as plain arrays rather than written straight into cfg, because setup is a form
+   somebody is still filling in: nothing is committed until they tap Start tracking. */
+var setupHolidays = holidayPresetIds('common');
+function paintSetupHolidays(){
+  var chosen = {};
+  setupHolidays.forEach(function(id){ chosen[id] = 1; });
+  var y = new Date().getFullYear();
+  el('sHolPick').innerHTML = HOLIDAY_CATALOG().map(function(h){
+    var d = holidayDate(h, y);
+    return '<label class="holtick' + (chosen[h.id] ? ' on' : '') + '">'
+      + '<input type="checkbox" data-hpick="' + h.id + '"' + (chosen[h.id] ? ' checked' : '') + '>'
+      + '<span class="htname">' + esc(h.name) + '</span>'
+      + '<span class="htwhen">' + (d ? fdate(d) : holidayRuleText(h)) + '</span>'
+      + '</label>';
+  }).join('');
+}
+
+var setupBanks = [];
+function paintSetupBanks(){
+  var box = el('sBankList');
+  box.innerHTML = setupBanks.length ? setupBanks.map(function(b, i){
+    return '<div class="bankrow">'
+      + '<input class="bnm" type="text" value="' + esc(b.name) + '" data-bnm="' + i + '" aria-label="What this allowance is called">'
+      + '<label class="bqty"><span>a year</span>'
+      + '<input type="number" min="0" max="99" step="1" value="' + b.count + '" data-bct="' + i + '"></label>'
+      + '<label class="bqty"><span>used</span>'
+      + '<input type="number" min="0" max="99" step="1" value="' + b.used + '" data-bus="' + i + '"></label>'
+      + '<button class="mini danger" data-bdel="' + i + '" aria-label="Remove ' + esc(b.name) + '">✕</button>'
+      + '</div>';
+  }).join('') : '<div class="note">Nothing added. If your job gives none, that is a complete answer — leave it empty.</div>';
 }
 function previewSetup(){
   var r = readSetup(), box = document.getElementById('sPreview');
@@ -6559,6 +6725,8 @@ function applyStage(){
     if (!el('sSchedStart').value) el('sSchedStart').value = '09:00';
     if (!el('sSchedEnd').value) el('sSchedEnd').value = '17:00';
     paintSetupDays();
+    paintSetupHolidays();
+    paintSetupBanks();
     previewSetup();
   }
 }
@@ -8388,12 +8556,16 @@ document.getElementById('cVacList').addEventListener('click', function(e){
     toast('Vacation removed.');
   }
 });
-var BANK_KINDS = {
-  float:    { name: 'Floating holiday',     count: 1, ot: true,  makeUp: false },
-  sick:     { name: 'Sick day',             count: 5, ot: false, makeUp: true  },
-  vrd:      { name: 'Vacation random day',  count: 5, ot: false, makeUp: false },
-  personal: { name: 'Personal day',         count: 1, ot: false, makeUp: false }
-};
+/* Built from BANK_KINDS rather than written out in the markup, so a kind added to the code
+   cannot go missing from the menu. */
+(function fillBankAdd(){
+  var s = document.getElementById('cBankAdd');
+  s.innerHTML = '<option value="">+ Add an allowance…</option>'
+    + Object.keys(BANK_KINDS).map(function(k){
+        return '<option value="' + k + '">' + esc(BANK_KINDS[k].name)
+             + (k === 'other' ? ' (name it yourself)' : '') + '</option>';
+      }).join('');
+})();
 document.getElementById('cBankAdd').onchange = function(e){
   var k = BANK_KINDS[e.target.value];
   e.target.value = '';
@@ -8406,16 +8578,20 @@ document.getElementById('cBankAdd').onchange = function(e){
   toast(k.name + ' added — set how many you get and how many are already spent.');
 };
 document.getElementById('cBankReset').onclick = function(){
-  state.cfg.banks = BANK_DEFAULTS();
+  state.cfg.banks = [];
   save(); renderBankCfg(); renderBanks(); render();
-  toast('Allowances back to the defaults.');
+  toast('All allowances removed.');
 };
 
 document.getElementById('cHolAdd').onclick = function(){ openHolEditor(-1); };
-document.getElementById('cHolReset').onclick = function(){
-  state.cfg.holidays = HOLIDAY_DEFAULTS();
+document.getElementById('cHolPreset').onchange = function(e){
+  var which = e.target.value;
+  e.target.value = '';
+  if (!which) return;
+  state.cfg.holidays = which === 'none' ? [] : holidaysFromCatalog(holidayPresetIds(which));
   save(); renderHolidayList(); drawCal(true); render();
-  toast('Back to the standard six.');
+  toast(which === 'none' ? 'Holidays cleared.'
+      : state.cfg.holidays.length + ' holidays set — edit or add to match your contract.');
 };
 document.getElementById('hKind').onchange = syncHolKind;
 ['hName','hMonth','hDay','hNth','hDow','hDate','hOt'].forEach(function(id){
@@ -9188,10 +9364,59 @@ document.getElementById('sWorkDays').addEventListener('click', function(e){
   setupDays[i] = !setupDays[i];
   paintSetupDays(); previewSetup();
 });
-['sSchedStart','sSchedEnd','sLunch','sHolOn','sFloat','sSick','sFloatUsed','sSickUsed','sOffHours'].forEach(function(id){
+['sSchedStart','sSchedEnd','sLunch','sOffHours'].forEach(function(id){
   var e2 = document.getElementById(id);
   e2.addEventListener('input', previewSetup);
   e2.addEventListener('change', previewSetup);
+});
+
+/* A preset sets the ticks; the ticks are then the truth. Choosing "all 11 federal" and
+   then unticking Columbus Day has to leave the other ten alone, so the preset writes the
+   list once and never reads back from it. */
+document.getElementById('sHolPreset').onchange = function(e){
+  setupHolidays = e.target.value === 'none' ? [] : holidayPresetIds(e.target.value);
+  paintSetupHolidays(); previewSetup();
+};
+document.getElementById('sHolPick').addEventListener('change', function(e){
+  var cb = e.target.closest('[data-hpick]'); if (!cb) return;
+  var id = cb.dataset.hpick;
+  setupHolidays = cb.checked ? setupHolidays.concat([id])
+                             : setupHolidays.filter(function(x){ return x !== id; });
+  paintSetupHolidays(); previewSetup();
+});
+
+(function fillSetupBankAdd(){
+  var s = document.getElementById('sBankAdd');
+  s.innerHTML = '<option value="">+ Add a paid day off…</option>'
+    + Object.keys(BANK_KINDS).map(function(k){
+        return '<option value="' + k + '">' + esc(BANK_KINDS[k].name)
+             + (k === 'other' ? ' (name it yourself)' : '') + '</option>';
+      }).join('');
+})();
+document.getElementById('sBankAdd').onchange = function(e){
+  var k = BANK_KINDS[e.target.value];
+  e.target.value = '';
+  if (!k) return;
+  setupBanks.push({ id: uid(), name: k.name, count: 0, used: 0, ot: k.ot, makeUp: k.makeUp });
+  paintSetupBanks(); previewSetup();
+};
+document.getElementById('sBankList').addEventListener('input', function(e){
+  var t = e.target, i;
+  if ((i = t.dataset.bnm) != null && setupBanks[i]) setupBanks[i].name = t.value;
+  else if ((i = t.dataset.bct) != null && setupBanks[i]){
+    setupBanks[i].count = Math.max(0, Math.min(99, parseInt(t.value, 10) || 0));
+    /* Spending more than you were given is not a state the app should be able to hold. */
+    if (setupBanks[i].used > setupBanks[i].count) setupBanks[i].used = setupBanks[i].count;
+  }
+  else if ((i = t.dataset.bus) != null && setupBanks[i])
+    setupBanks[i].used = Math.max(0, Math.min(setupBanks[i].count, parseInt(t.value, 10) || 0));
+  else return;
+  previewSetup();
+});
+document.getElementById('sBankList').addEventListener('click', function(e){
+  var b = e.target.closest('[data-bdel]'); if (!b) return;
+  setupBanks.splice(+b.dataset.bdel, 1);
+  paintSetupBanks(); previewSetup();
 });
 
 document.getElementById('exportCsv').onclick = exportCsv;

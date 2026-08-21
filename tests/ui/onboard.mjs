@@ -45,10 +45,36 @@ ok('the setup screen is showing', await p.isVisible('#setup'));
 ok('and the clock is not', !(await p.isVisible('#hero')));
 for (const [id,label] of [['sRate','hourly rate'],['sAnchor','period start'],['sLen','period length'],
      ['sPay','payday'],['sSchedStart','shift start'],['sSchedEnd','shift end'],['sLunch','lunch'],
-     ['sHolOn','paid holidays'],['sFloat','floating days'],['sSick','sick days'],['sOffHours','hours each']]){
+     ['sHolPreset','paid holidays'],['sBankAdd','paid days off'],['sOffHours','hours each']]){
   ok(`it asks about ${label}`, await p.isVisible('#'+id), id);
 }
 ok('and which days you work', (await p.locator('#sWorkDays button').count())===7);
+
+/* Holidays used to be six-or-nothing, which could not express what the Postal Service and
+   most federal employers observe, and allowances were two hardcoded rows with five sick
+   days already filled in. Nobody was asked; they were told. */
+console.log('\n━━ Holidays are offered rather than assumed ━━');
+ok('every holiday it knows is offered to tick',
+   (await p.locator('#sHolPick .holtick').count())
+     === (await p.evaluate(() => HOLIDAY_CATALOG().length)),
+   String(await p.locator('#sHolPick .holtick').count()));
+ok('the six most common start ticked',
+   (await p.locator('#sHolPick input:checked').count()) === 6,
+   String(await p.locator('#sHolPick input:checked').count()));
+await p.selectOption('#sHolPreset','fed'); await p.waitForTimeout(300);
+ok('the federal set ticks eleven',
+   (await p.locator('#sHolPick input:checked').count()) === 11,
+   String(await p.locator('#sHolPick input:checked').count()));
+/* A preset seeds the ticks; the ticks are then the truth. Unticking one must not disturb
+   the other ten. */
+await p.locator('#sHolPick input[data-hpick="columbus"]').uncheck(); await p.waitForTimeout(250);
+ok('unticking one leaves the other ten alone',
+   (await p.locator('#sHolPick input:checked').count()) === 10,
+   String(await p.locator('#sHolPick input:checked').count()));
+ok('and it shows when each one lands',
+   /Nov/.test(await p.textContent('#sHolPick')), (await p.textContent('#sHolPick')).slice(0,120));
+await p.selectOption('#sHolPreset','none'); await p.waitForTimeout(300);
+ok('and none is a complete answer', (await p.locator('#sHolPick input:checked').count()) === 0);
 
 console.log('\n━━ The make-up question is asked of the rules it applies to, and only those ━━');
 ok('not asked of the weekly rule', !(await p.isVisible('#sMakeUpWrap')));
@@ -81,8 +107,12 @@ ok('still on the setup screen', await p.isVisible('#setup'));
 console.log('\n━━ Answering as somebody with a different job ━━');
 await p.fill('#sSchedStart','07:00'); await p.fill('#sSchedEnd','15:30');
 await p.selectOption('#sLunch','0');
-await p.selectOption('#sHolOn','0');
-await p.fill('#sFloat','2'); await p.fill('#sSick','10'); await p.fill('#sOffHours','8.5');
+await p.selectOption('#sHolPreset','none'); await p.waitForTimeout(200);
+await p.selectOption('#sBankAdd','float'); await p.waitForTimeout(200);
+await p.selectOption('#sBankAdd','sick');  await p.waitForTimeout(200);
+await p.locator('#sBankList .bankrow').nth(0).locator('[data-bct]').fill('2');
+await p.locator('#sBankList .bankrow').nth(1).locator('[data-bct]').fill('10');
+await p.fill('#sOffHours','8.5');
 // Mon–Fri, not Sun
 await p.click('#sWorkDays button[data-w="0"]'); await p.waitForTimeout(150);
 await p.click('#sWorkDays button[data-w="5"]'); await p.waitForTimeout(300);
@@ -237,10 +267,18 @@ console.log('\n━━ What the answer stores ━━');
   await w.close();
 }
 
-console.log('\n━━ Putting the defaults back ━━');
+/* "Back to the defaults" used to restore five sick days and five Pace vacation random days
+   — numbers nobody had asked for. There are no defaults to go back to now, so the control
+   says what it actually does. */
+console.log('\n━━ Clearing the allowances ━━');
 await p.click('#cBankReset'); await p.waitForTimeout(450);
 const back = await p.evaluate(()=>[...document.querySelectorAll('#cBankList input[data-bf="count"]')].map(x=>x.value));
-ok('five sick and five vacation days again', JSON.stringify(back)==='["5","5"]', JSON.stringify(back));
+ok('removing them leaves nothing invented in their place', JSON.stringify(back)==='[]', JSON.stringify(back));
+ok('and the button says remove rather than reset',
+   /remove/i.test(await p.textContent('#cBankReset')), await p.textContent('#cBankReset'));
+/* Put the two back so the reload check below still has something to find. */
+await p.selectOption('#cBankAdd','sick'); await p.waitForTimeout(250);
+await p.selectOption('#cBankAdd','vrd');  await p.waitForTimeout(250);
 
 console.log('\n━━ The scheduled shift is one value in two places ━━');
 await p.fill('#cSchedStart2','06:30'); await p.locator('#cSchedStart2').blur(); await p.waitForTimeout(450);

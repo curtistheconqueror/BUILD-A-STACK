@@ -28,9 +28,10 @@ const E = new Function(m[1] + `
   return { DEFAULTS, periodInfo, weekInfo, splitSession, buildLedger,
            sumRange, sumSession, bucketHoursAt, plannedStopAt, quantize, HOUR_MS,
            HOLIDAY_DEFAULTS, nthDow, holidayDate, holidaysInYear, holidayOn,
+           HOLIDAY_CATALOG, holidaysFromCatalog, holidayPresetIds, easterSunday,
            isWorkDay, anyWorkDay, adjacentWorkDay, dkey,
            workedOn, holidayEligibility, holidayYears, holidayCredits, holidayOutlook,
-           BANK_DEFAULTS, bankById, daysOffUsed, bankLeft, bankSlots, dayOffName,
+           BANK_DEFAULTS, BANK_KINDS, bankById, daysOffUsed, bankLeft, bankSlots, dayOffName,
            bankUsedBefore, bankUsed,
            bankCredits, daysOffOutlook, periodHistory, timeCardRows, timeCardTotals,
            extraTime, chartHours, otThresholdOf, otBucketKey, sumSessionRange,
@@ -1555,24 +1556,98 @@ group('Robustness');
 }
 
 
+/* ---------------- the holiday catalog ---------------- */
+{
+  const iso = d => d ? `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` : 'null';
+  const cat = E.HOLIDAY_CATALOG();
+  const by = id => cat.find(h => h.id === id);
+
+  /* Easter is here because Good Friday cannot be written as a date or as a weekday of a
+     month. Checked against the published Gregorian tables rather than against itself. */
+  const easters = { 2020:'2020-04-12', 2023:'2023-04-09', 2024:'2024-03-31', 2025:'2025-04-20',
+                    2026:'2026-04-05', 2027:'2027-03-28', 2038:'2038-04-25', 2049:'2049-04-18',
+                    1943:'1943-04-25', 2076:'2076-04-19' };
+  ok('Easter matches the published tables',
+     Object.keys(easters).every(y => iso(E.easterSunday(+y)) === easters[y]),
+     Object.keys(easters).map(y => y + ':' + iso(E.easterSunday(+y))).join(' '));
+
+  let dowBad = 0, lo = '99-99', hi = '00-00';
+  for (let y = 1700; y < 2400; y++){
+    const e = E.easterSunday(y);
+    if (e.getDay() !== 0) dowBad++;
+    const md = `${String(e.getMonth()+1).padStart(2,'0')}-${String(e.getDate()).padStart(2,'0')}`;
+    if (md < lo) lo = md;
+    if (md > hi) hi = md;
+  }
+  ok('Easter is a Sunday in all 700 years checked', dowBad === 0, String(dowBad));
+  ok('and never leaves its Mar 22 – Apr 25 bounds', lo >= '03-22' && hi <= '04-25', lo + ' .. ' + hi);
+  ok('Good Friday 2026 is April 3', iso(E.holidayDate(by('goodfri'), 2026)) === '2026-04-03',
+     iso(E.holidayDate(by('goodfri'), 2026)));
+
+  /* The day after Thanksgiving is not a date anyone can write down — it moves with
+     Thanksgiving, and a catalog of fixed dates would have had to leave it out. */
+  ok('the day after Thanksgiving 2026 is Nov 27',
+     iso(E.holidayDate(by('dayafter'), 2026)) === '2026-11-27', iso(E.holidayDate(by('dayafter'), 2026)));
+  let offBad = 0;
+  for (let y = 2000; y < 2040; y++){
+    const t = E.holidayDate(by('thanks'), y), a = E.holidayDate(by('dayafter'), y);
+    if (t.getDay() !== 4 || a.getDay() !== 5) offBad++;
+    if ((a - t) !== 86400000) offBad++;
+  }
+  ok('and it follows Thanksgiving for 40 years running', offBad === 0, String(offBad));
+
+  /* A saved config is user data and may have been hand-edited, so a rule that points at
+     itself has to end rather than recurse. */
+  const evil = { rule: { kind: 'offset', days: 1 } };
+  evil.rule.from = evil.rule;
+  ok('a self-referencing rule returns null rather than hanging', E.holidayDate(evil, 2026) === null);
+
+  ok('the federal preset is the eleven federal holidays',
+     E.holidayPresetIds('fed').length === 11, String(E.holidayPresetIds('fed').length));
+  ok('and includes Juneteenth, which the old six could not express',
+     E.holidayPresetIds('fed').includes('juneteenth'));
+  ok('the common preset is still six', E.holidayPresetIds('common').length === 6,
+     String(E.holidayPresetIds('common').length));
+  ok('every catalog entry resolves in every year 2020-2040', (() => {
+    for (let y = 2020; y <= 2040; y++) if (cat.some(h => !E.holidayDate(h, y))) return false;
+    return true;
+  })());
+  ok('a preset builds holidays this config can hold',
+     E.holidaysFromCatalog(E.holidayPresetIds('fed')).every(h => h.on === true && h.ot === false && h.rule),
+     JSON.stringify(E.holidaysFromCatalog(['xmas'])));
+  ok('an unknown id is dropped rather than invented',
+     E.holidaysFromCatalog(['xmas', 'nope']).length === 1);
+}
+
 /* ---------------- floaters and sick days ---------------- */
 {
+  /* Nothing ships at all. The app used to hand everybody five sick days and five Pace
+     "vacation random days"; neither number came from anywhere. An invented allowance is
+     worse than an omitted one — an omission is visibly missing, whereas an invented five
+     reads as a fact somebody has to notice is wrong. */
   const B = E.BANK_DEFAULTS();
-  /* No floating holidays ship. Plenty of contracts do not have them, and an allowance the
-     app invents is one somebody has to notice and delete — they are an add-on now. */
-  ok('no floating holiday is assumed', !E.bankById({ banks: B }, 'float'),
-     B.map(b => b.id).join(','));
-  const sk = E.bankById({ banks: B }, 'sick');
-  ok('sick days still ship', sk.count === 5, sk.count);
-  ok('worth 8 h',            sk.hours === 8);
-  ok('and not counting toward overtime', sk.ot === false);
+  ok('no allowance is assumed at all', B.length === 0, JSON.stringify(B));
+  ok('so nothing has to be noticed and deleted', !E.bankById({ banks: B }, 'sick'));
 
-  /* Floaters remain a first-class bank when someone adds one — everything below still has
-     to work for them. */
+  /* Every kind offered as a starting point begins at zero, so choosing one never tells
+     somebody how many they have. */
+  const KINDS = E.BANK_KINDS;
+  ok('the offered kinds are reachable from the engine', !!KINDS && Object.keys(KINDS).length > 4,
+     String(KINDS && Object.keys(KINDS).length));
+  ok('every offered kind starts at zero',
+     Object.keys(KINDS).every(k => !KINDS[k].count),
+     JSON.stringify(Object.keys(KINDS).map(k => [k, KINDS[k].count])));
+  ok('and the Pace one is offered rather than assumed', !!KINDS.vrd && !B.some(b => b.id === 'vrd'));
+
+  /* Banks the person adds are first-class — everything below still has to work for them. */
+  const SICK = { id: 'sick', name: 'Sick day', count: 5, hours: 8, ot: false,
+                 makeUp: true, slots: [] };
+  const VRD  = { id: 'vrd', name: 'Vacation random day', count: 5, hours: 8, ot: false,
+                 makeUp: false, slots: [] };
   const FL = { id: 'float', name: 'Floating holiday', count: 3, hours: 8, ot: true,
                makeUp: false, slots: ['MLK Day','Birthday','Anniversary'] };
   const cfg3 = { ...E.DEFAULTS, rate: 38, periodAnchor: '2026-01-04',
-                 banks: [FL].concat(B),
+                 banks: [FL, SICK, VRD],
                  workDays: [true,true,true,true,true,false,false], daysOff: [] };
 
   ok('a fresh year has all three floaters', E.bankLeft(cfg3, 'float', 2026) === 3);
@@ -1583,7 +1658,7 @@ group('Robustness');
      wrong about the one thing the allowance exists to tell you. */
   const carried = { ...cfg3, banks: [
     { ...FL, usedBefore: 2, usedYear: 2026 },
-    { ...sk, usedBefore: 3, usedYear: 2026 }
+    { ...SICK, usedBefore: 3, usedYear: 2026 }
   ]};
   ok('a carry-in is subtracted', E.bankLeft(carried, 'float', 2026) === 1,
      String(E.bankLeft(carried, 'float', 2026)));
@@ -1608,7 +1683,7 @@ group('Robustness');
      String(E.bankLeft(carried, 'sick', 2025)));
 
   /* Nonsense never produces a negative allowance or a phantom one. */
-  const silly = { ...cfg3, banks: [{ ...sk, usedBefore: 99, usedYear: 2026 }] };
+  const silly = { ...cfg3, banks: [{ ...SICK, usedBefore: 99, usedYear: 2026 }] };
   ok('a carry-in bigger than the allowance floors at zero',
      E.bankLeft(silly, 'sick', 2026) === 0, String(E.bankLeft(silly, 'sick', 2026)));
   ok('and never reports more used than exist',
@@ -2541,18 +2616,13 @@ group('Robustness');
   ok('and none of them has to be made up',
      E.HOLIDAY_DEFAULTS().every(h => E.bankOwes({ ot: h.ot, makeUp: h.makeUp }) === false));
 
-  /* What actually ships: five sick, five VRDs, and NO floating holiday — plenty of
-     contracts have none, and an invented allowance is one somebody has to notice. */
+  /* What actually ships: nothing. See the BANK_DEFAULTS block above for why. */
   const B = E.BANK_DEFAULTS();
-  ok('two banks ship', B.length === 2, B.map(b => b.id).join(','));
-  ok('no floating holiday among them', !B.some(b => b.id === 'float'), B.map(b => b.id).join(','));
-  ok('five sick days', B[0].id === 'sick' && B[0].count === 5, JSON.stringify(B[0]));
-  ok('and five vacation random days', B[1].id === 'vrd' && B[1].count === 5, JSON.stringify(B[1]));
+  ok('no banks ship', B.length === 0, B.map(b => b.id).join(','));
   ok('a sick day earns no overtime credit and is owed back',
-     B[0].ot === false && E.bankOwes(B[0]) === true);
-  ok('a VRD earns none but is owed nothing', B[1].ot === false && E.bankOwes(B[1]) === false);
-  ok('nothing ships pre-spent', B.every(b => !b.usedBefore),
-     JSON.stringify(B.map(b => b.usedBefore)));
+     E.bankOwes({ ot: false, makeUp: true }) === true);
+  ok('a VRD earns none but is owed nothing',
+     E.bankOwes({ ot: false, makeUp: false }) === false);
   ok('an allowance saved before the two were told apart keeps its old meaning',
      E.bankOwes({ ot: false }) === true && E.bankOwes({ ot: true }) === false);
 

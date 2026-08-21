@@ -61,22 +61,34 @@ const st  = p => p.evaluate(k => JSON.parse(localStorage.getItem(k)), KEY);
 const openCfg = async p => { await p.evaluate(() =>
   document.querySelectorAll('#cfg details').forEach(d => d.open = true)); await p.waitForTimeout(300); };
 
-console.log('\n━━ Nothing is assumed about floating holidays ━━');
+console.log('\n━━ Nothing is assumed about any allowance ━━');
 let p = await boot(undefined, NOW);                 // a genuinely fresh install
 ok('setup is showing', await p.isVisible('#setup'));
-ok('floating days start at zero', (await p.inputValue('#sFloat')) === '0',
-   await p.inputValue('#sFloat'));
-ok('and so do sick days', (await p.inputValue('#sSick')) === '0', await p.inputValue('#sSick'));
-ok('the defaults ship no floating holiday',
-   !(await p.evaluate(() => BANK_DEFAULTS().some(x => x.id === 'float'))),
+/* The app used to hand everybody five sick days and five Pace "vacation random days".
+   Neither number came from anywhere, and an invented allowance reads as a fact somebody
+   has to notice is wrong — in a screen whose whole job is being right about what you are owed. */
+ok('no allowance ships at all',
+   (await p.evaluate(() => BANK_DEFAULTS().length)) === 0,
    await p.evaluate(() => BANK_DEFAULTS().map(x => x.id).join(',')));
+ok('the list starts empty rather than pre-filled',
+   (await p.locator('#sBankList .bankrow').count()) === 0);
+ok('and says so instead of showing blank rows',
+   /nothing added/i.test(await txt(p, '#sBankList')), await txt(p, '#sBankList'));
 
-console.log('\n━━ Setup asks what has already been spent ━━');
-ok('there is a used field for floaters', await p.isVisible('#sFloatUsed'));
-ok('and one for sick days', await p.isVisible('#sSickUsed'));
+console.log('\n━━ You add what you actually have, and name it ━━');
 await p.fill('#sRate','37.78'); await p.fill('#sAnchor','2026-08-09');
-await p.fill('#sFloat','3'); await p.fill('#sFloatUsed','2');
-await p.fill('#sSick','5');  await p.fill('#sSickUsed','3');
+await p.selectOption('#sBankAdd','float'); await p.waitForTimeout(200);
+await p.selectOption('#sBankAdd','sick');  await p.waitForTimeout(200);
+ok('two rows appear', (await p.locator('#sBankList .bankrow').count()) === 2,
+   String(await p.locator('#sBankList .bankrow').count()));
+ok('each starting at zero, not at a guess',
+   (await p.locator('#sBankList [data-bct]').first().inputValue()) === '0');
+
+const row = i => p.locator('#sBankList .bankrow').nth(i);
+await row(0).locator('[data-bct]').fill('3');
+await row(0).locator('[data-bus]').fill('2');
+await row(1).locator('[data-bct]').fill('5');
+await row(1).locator('[data-bus]').fill('3');
 await p.waitForTimeout(400);
 const preview = (await txt(p, '#sPreview')).replace(/\s+/g,' ');
 ok('the preview shows what is left, not what the contract gives',
@@ -107,8 +119,12 @@ ok('stamped with the year', (await st(p)).jobs[0].cfg.banks[0].usedYear === 2026
    String((await st(p)).jobs[0].cfg.banks[0].usedYear));
 
 console.log('\n━━ A carry-in stacks with days the app watches ━━');
-await p.evaluate(() => { state.cfg.daysOff = [{ id:'d1', bank:'sick', slot:null,
-                                                date:'2026-08-10' }];
+/* Banks added by hand carry an opaque id, the same as ones added in Settings — two rows
+   both called "Personal day" have to stay distinct. So book against the id the bank
+   actually has rather than against the word it happens to be named after. */
+await p.evaluate(() => {
+  const sick = state.cfg.banks.find(b => /sick/i.test(b.name));
+  state.cfg.daysOff = [{ id:'d1', bank: sick.id, slot:null, date:'2026-08-10' }];
   save(); lastHeavySig=''; renderBanks(); render(); });
 await p.waitForTimeout(500);
 ok('three carried plus one booked leaves one', /1 of 5 left/.test(await txt(p, '#bankBody')),

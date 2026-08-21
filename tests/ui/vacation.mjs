@@ -136,20 +136,29 @@ const d = await p.evaluate(()=>{
 console.log('       ' + JSON.stringify(d.banks));
 ok('six holidays', d.hols.length===6, String(d.hols.length));
 ok('none earning overtime credit', d.hols.every(h=>h.ot===false), JSON.stringify(d.hols));
-/* No floating holiday ships: plenty of contracts have none, and an allowance the app
-   invents is one somebody has to notice and delete. It is one tap away under Add. */
-ok('no floating holiday is assumed', !d.banks.some(x=>x.id==='float'),
+/* No allowance ships at all. This used to hand everybody five sick days and five Pace
+   "vacation random days" — numbers that came from nowhere. An invented allowance is worse
+   than an omitted one: an omission is visibly missing, an invented five reads as a fact. */
+ok('nothing is assumed about allowances', d.banks.length===0,
    d.banks.map(x=>x.id).join(','));
-ok('five sick days', d.banks[0].id==='sick' && d.banks[0].count===5, JSON.stringify(d.banks[0]));
-ok('five vacation random days', d.banks[1].id==='vrd' && d.banks[1].count===5, JSON.stringify(d.banks[1]));
-ok('the sick day is the one you owe back', d.banks[0].makeUp===true, JSON.stringify(d.banks[0]));
-ok('the VRD is not', d.banks[1].makeUp===false, JSON.stringify(d.banks[1]));
-/* Named slots still work — added a floater and check it arrives nameable. */
-await p.selectOption('#cBankAdd','float'); await p.waitForTimeout(600);
-ok('a floating holiday can be added back',
-   (await p.locator('#cBankList .bankcfg').count())===3,
-   String(await p.locator('#cBankList .bankcfg').count()));
-ok('and both questions are asked per allowance',
+/* Each kind is still first-class once added, and each still asks its two questions. */
+for (const [i,kind] of [[1,'sick'],[2,'vrd'],[3,'float']]){
+  await p.selectOption('#cBankAdd',kind); await p.waitForTimeout(500);
+  ok(`a ${kind} allowance can be added`,
+     (await p.locator('#cBankList .bankcfg').count())===i,
+     String(await p.locator('#cBankList .bankcfg').count()));
+}
+{
+  const added = await p.evaluate(()=>state.cfg.banks.map(x=>
+    ({name:x.name,count:x.count,ot:x.ot,makeUp:x.makeUp})));
+  ok('each starts at zero rather than at a guess', added.every(x=>x.count===0),
+     JSON.stringify(added.map(x=>x.count)));
+  ok('the sick day is the one you owe back', added[0].makeUp===true, JSON.stringify(added[0]));
+  ok('the VRD is not', added[1].makeUp===false, JSON.stringify(added[1]));
+  ok('and the floater is the one that earns overtime credit', added[2].ot===true,
+     JSON.stringify(added[2]));
+}
+ok('both questions are asked per allowance',
    (await p.locator('#cBankList select[data-bf="makeUp"]').count())===3);
 ok('as is the already-used one',
    (await p.locator('#cBankList input[data-bf="usedBefore"]').count())===3);
