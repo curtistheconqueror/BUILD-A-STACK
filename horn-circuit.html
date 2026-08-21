@@ -25,7 +25,7 @@
     margin: 0; font-size: clamp(13px, 3.6vw, 19px); font-weight: 800;
     letter-spacing: .12em; color: #e6e8ee; white-space: nowrap; flex: 0 1 auto; min-width: 0;
   }
-  .chips { display: flex; gap: 7px; flex: 0 0 auto; }
+  .chips { display: flex; gap: 7px; flex: 1 1 auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
   .chip {
     font: 700 11.5px/1 system-ui, sans-serif; letter-spacing: .05em;
     color: #aeb4c2; background: #14151a; border: 1px solid #34353e;
@@ -211,6 +211,20 @@
   .pb-note { color: #aeb4c2; flex: 1 1 220px; min-width: 0; }
   #probePts { display: none; }
   .probe #probePts { display: block; }
+
+  /* ---------- resting potential (voltage sitting, waiting — no current moving) ---------- */
+  #potBar {
+    display: none; align-items: baseline; gap: 8px; flex-wrap: wrap;
+    margin-top: 9px; padding: 9px 11px; border: 1px solid #6e5c20;
+    border-radius: 10px; background: #1c1608; font-size: 12.5px; line-height: 1.45;
+  }
+  .pot #potBar { display: flex; }
+  #potBar .pb-name { color: #ffd24a; }
+  @keyframes potpulse { 0%, 100% { opacity: .22; } 50% { opacity: .8; } }
+  .flow.pot {
+    opacity: .5; stroke-dasharray: 2 11; animation: potpulse 2.6s ease-in-out infinite;
+    filter: drop-shadow(0 0 5px currentColor);
+  }
   .tp { cursor: pointer; animation: tppulse 1.7s ease-in-out infinite; }
   @keyframes tppulse { 0%,100% { opacity: .95; } 50% { opacity: .45; } }
   .tp-ring { fill: rgba(63,210,255,.08); stroke: #3fd2ff; stroke-width: 2.5; stroke-dasharray: 5 5; }
@@ -251,8 +265,9 @@
     .snd-hi .wv-hi.wv1, .snd-hi .wv-hi.wv2, .snd-hi .wv-hi.wv3,
     .snd-lo .wv-lo.wv1, .snd-lo .wv-lo.wv2, .snd-lo .wv-lo.wv3,
     .spin #hatchGrp, .spin #rollerSpokes, .spin #wheelIcon,
-    .live #spark, .live #clickTxt, .mk.shown, .hlrelay #relayEmph, .tp { animation: none; }
+    .live #spark, .live #clickTxt, .mk.shown, .hlrelay #relayEmph, .tp, .flow.pot { animation: none; }
     .live #spark, .live #clickTxt, .flow.lit { opacity: 1; }
+    .flow.pot { opacity: .55; }
   }
 </style>
 
@@ -265,6 +280,7 @@
           <button class="chip" id="soundBtn" aria-pressed="true">🔊 SOUND</button>
           <button class="chip" id="spinBtn" aria-pressed="false">↻ WHEEL</button>
           <button class="chip" id="probeBtn" aria-pressed="false">🔦 PROBE</button>
+          <button class="chip" id="potBtn" aria-pressed="false">⚡ POTENTIAL</button>
         </div>
       </div>
       <button id="hornBtn" aria-pressed="false">🖐 PRESS HORN</button>
@@ -272,6 +288,10 @@
         <span class="pb-name" id="pbName">PROBE</span>
         <span class="pb-val" id="pbVal">—</span>
         <span class="pb-note" id="pbNote">Tap a glowing test point on the diagram to take a reading.</span>
+      </div>
+      <div id="potBar">
+        <span class="pb-name">⚡ POTENTIAL</span>
+        <span class="pb-note" id="potNote">Voltage already sits in part of this circuit before you press anything — toggle on to see exactly how far it reaches.</span>
       </div>
     </div>
   </header>
@@ -525,7 +545,7 @@
       </g>
       <circle cx="660" cy="2160" r="7" fill="#6b7280"/>
       <circle id="spark" cx="564" cy="2190" r="8" fill="#ffe9a8"/>
-      <text id="clickTxt" x="612" y="2128" text-anchor="middle" font-size="21" font-weight="800" fill="#ffd24a">CLICK!</text>
+      <text id="clickTxt" x="655" y="2260" text-anchor="middle" font-size="21" font-weight="800" fill="#ffd24a">CLICK!</text>
 
       <!-- terminals -->
       <g fill="#14151a" stroke="#6b7280" stroke-width="2.5">
@@ -746,6 +766,7 @@
         <li>Each horn returns its current to <span class="kc g">ground</span> two ways: through its <b>mounting bracket</b> on the frame, and through its <b>redundant ground wire</b>. The frame carries it all back to the battery's negative post.</li>
       </ol>
       <p class="fine">Diagram is schematic — the geometry is simplified, but the circuit order matches the real setup: button → slip-ring contact → relay → twin horns, with the horns switched on the power side and permanently grounded.</p>
+      <p class="fine">Before you press anything, part of this circuit is already electrically hot — full battery voltage sitting and waiting at an open switch, with zero current moving and no work being done. That's <b style="color:#e6e8ee">potential</b>, not <b style="color:#e6e8ee">current</b> — a meter would read 12 V there, even though nothing is "happening." Toggle <b>⚡ POTENTIAL</b> above to see exactly how far that resting voltage reaches before the button (or a fault) stops it.</p>
     </div>
 
     <div class="card">
@@ -940,6 +961,7 @@
   /* ---- activation ---- */
   function energize() {
     honking = true;
+    updatePotential();                       // waiting voltage hands off to real current flow
     app.classList.add('used', 'on');
     app.classList.remove('fuse-blown', 'hlrelay');
     app.classList.toggle('coil-hot', F.relayClicks);
@@ -988,9 +1010,11 @@
     hornBtn.setAttribute('aria-pressed', 'false');
     litZones([]); showMarks([]); stopSound();
     updateButton();
+    updatePotential();                       // back at rest — waiting voltage returns, if toggled on
   }
   function applyStuck() {
     honking = true;
+    updatePotential();                       // this fault has no resting phase — already latched
     app.classList.add('used', 'live', 'coil-hot');
     app.classList.remove('on');            // relay latched without the button
     litZones(F.control.concat(F.power));
@@ -1020,6 +1044,7 @@
     app.setAttribute('data-fault', F.id);
     updateHUD();
     if (F.autoOn) applyStuck(); else updateButton();
+    updatePotential();                       // re-evaluate against the new fault (e.g. ctrl-open truncation)
   }
   faultSel.addEventListener('change', function () { selectFault(faultSel.value); });
 
@@ -1117,6 +1142,43 @@
     if (!on && guided) { coachHint('Probe mode stays on during a guided diagnosis.'); return; }
     app.classList.toggle('probe', on);
     probeBtn.setAttribute('aria-pressed', String(on));
+  });
+
+  /* ==================== resting potential — voltage waiting, nothing moving ====================
+     Everything up to an OPEN switch sits at full battery voltage even with the circuit at rest:
+     battery -> fuse -> relay 86 (through the coil, no drop, since no current is flowing yet) and
+     on up the trigger wire to the button ring; and separately battery -> fuse -> relay 30. Nothing
+     downstream of either open switch (the button gap, the relay armature) carries any potential
+     until it closes. This is deliberately independent of the fault-current logic in litZones(). */
+  var potOn = false, potBtn = $('potBtn');
+  var ctrlTrigEl = flows['ctrl-trig'][0];
+  var CTRL_TRIG_FULL = ctrlTrigEl.getAttribute('d');
+  var CTRL_TRIG_TO_ROLLER = 'M 510 2230 V 2240 H 220 V 880 H 350 V 782';   // dead-ends at the open roller/plate contact
+
+  function updatePotential() {
+    var show = potOn && !honking;
+    flows['coil-feed'][0].classList.toggle('pot', show);
+    flows['pwr-feed'][0].classList.toggle('pot', show);
+    var openHere = show && F.id === 'ctrl-open';
+    ctrlTrigEl.setAttribute('d', openHere ? CTRL_TRIG_TO_ROLLER : CTRL_TRIG_FULL);
+    ctrlTrigEl.classList.toggle('pot', show);
+    $('potNote').textContent = !potOn
+      ? 'Voltage already sits in part of this circuit before you press anything — toggle on to see exactly how far it reaches.'
+      : honking
+        ? (F.autoOn
+            ? 'This fault has no resting phase — the trigger is already shorted, so current started flowing the instant you selected it.'
+            : 'Now flowing — that waiting voltage became real current the instant the circuit closed.')
+        : openHere
+          ? 'Hot only as far as the roller — the open slip-ring contact means voltage never reaches the button ring.'
+          : 'Hot and waiting: battery → fuse → relay coil → trigger wire, all the way to the open button, plus battery → fuse → the relay’s other input. No current is flowing — nothing is grounded yet — so nothing is doing work. Press the horn and watch it become real current flow.';
+  }
+  potBtn.addEventListener('click', function () {
+    var on = !potOn;
+    if (on && guided) { coachHint('Resting-voltage view is off during a guided diagnosis — it would give the mystery away.'); return; }
+    potOn = on;
+    app.classList.toggle('pot', potOn);
+    potBtn.setAttribute('aria-pressed', String(potOn));
+    updatePotential();
   });
 
   /* ==================== guided diagnosis — mystery fault coach ==================== */
@@ -1271,6 +1333,7 @@
     app.classList.add('guided', 'mystery', 'probe');
     app.classList.remove('revealed');
     probeBtn.setAttribute('aria-pressed', 'true');
+    if (potOn) { potOn = false; app.classList.remove('pot'); potBtn.setAttribute('aria-pressed', 'false'); }   // would give the mystery away
     selectFault(fid);
     gStep = F.autoOn ? 0 : -1;
     coachHint('');

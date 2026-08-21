@@ -61,6 +61,10 @@ A **🔦 probe** toggle turns the diagram into a bench with a virtual test light
 
 **🎯 Guided diagnosis** deals a mystery fault (markers hidden), states only the symptom, and coaches the probe sequence step by step — click first, then bisect the remaining half — logging each reading until you're asked to call the fix. Answer right and the diagram reveals the fault; a dice button deals the next mystery.
 
+### Resting potential
+
+An **⚡ potential** toggle shows the voltage that's already sitting in part of the circuit before you ever press the button — a slow ambient pulse, distinct from the marching-dash current-flow animation, since nothing is actually moving yet. Everything up to an *open* switch is electrically hot at rest: battery → fuse → the relay coil → the trigger wire, all the way up through the slip ring to the button's contact ring, plus battery → fuse → the relay's other input — while everything past that switch (the relay's output side, the horns) carries no potential at all until it closes. The glow is fault-aware — in the control-open scenario it stops exactly at the broken slip-ring contact instead of reaching the button — and hands off to the real current-flow animation the instant you press. Locked out during guided diagnosis, since it would give the mystery away.
+
 ## Roadmap
 
 - **Phase A — Learn (glossary)**
