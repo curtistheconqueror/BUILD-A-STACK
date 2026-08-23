@@ -15,6 +15,13 @@
   ],
   "shortcuts": [
     {
+      "name": "Punch In or Out",
+      "short_name": "Punch",
+      "description": "Clock in if you are out, clock out if you are in",
+      "url": "./?widget=1&action=toggle",
+      "icons": [{ "src": "./icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
       "name": "Clock In",
       "short_name": "Clock In",
       "description": "Start tracking time",

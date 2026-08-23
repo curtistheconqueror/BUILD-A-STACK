@@ -10520,6 +10520,66 @@ try {
   }
 } catch(e){}
 
+/* ============================ shortcut actions ============================
+   A Shortcut, a Back Tap, a Siri phrase and an Android long-press menu all do the one
+   thing: open a URL. These are the URLs.
+
+     ?action=clockin      ?action=clockout      ?action=toggle
+     add &widget=1 for the compact card instead of the whole app
+
+   Two things the first version got wrong.
+
+   It lived inside widget mode, so ?action=clockin did nothing without ?widget=1. iOS
+   ignores the manifest's shortcut menu completely, so a Shortcut opening a URL is the only
+   route in on an iPhone — and one aimed at the full app could not punch at all.
+
+   And it left the action in the address bar, so reloading ran it again. Clocking in twice
+   is harmless because clockIn() guards itself, but a stale ?action=clockout tab reloaded
+   after a genuine clock-in ends the shift you are standing in. The action is now stripped
+   the moment it is read, before anything acts on it, which also makes a page resumed from
+   the back-forward cache safe. */
+function runShortcutAction(after){
+  var m = location.search.match(/[?&]action=([a-z]+)/i);
+  if (!m) return null;
+  var action = m[1].toLowerCase();
+
+  /* Stripped first and unconditionally: every way out of here, including a throw, has to
+     leave a URL that cannot fire a second time. */
+  try {
+    var q = location.search.replace(/([?&])action=[a-z]+/i, '$1')
+                           .replace(/[?&]$/, '').replace(/\?&/, '?');
+    if (q === '?') q = '';
+    history.replaceState(null, '', location.pathname + q + location.hash);
+  } catch (e) {}
+
+  if (!state.configured) return 'setup';
+
+  var was = !!state.activeStart;
+  /* One button that does whichever is right is the useful shape for a Lock Screen, where
+     there is room for one. */
+  if (action === 'toggle') action = was ? 'clockout' : 'clockin';
+
+  var did = null;
+  if (action === 'clockin'){
+    if (was) did = 'already-in';
+    else { clockIn(); did = 'in'; }
+  } else if (action === 'clockout'){
+    if (!was) did = 'already-out';
+    /* In the full app a forgotten punch still gets questioned rather than banked silently
+       — arriving by Shortcut is no reason to lose three hours. The widget has nowhere to
+       show that banner, so it punches straight through, as it always has. */
+    else if (after){ clockOut(); did = 'out'; }
+    else { clockOutChecked(); did = 'out'; }
+  } else {
+    return null;                                  // an action nobody implemented
+  }
+
+  if (did === 'already-in')  toast('Already clocked in since ' + ptime(state.activeStart) + '.');
+  if (did === 'already-out') toast('Not clocked in — nothing to end.');
+  if (after) after();
+  return did;
+}
+
 /* ============================ widget mode ============================ */
 (function(){
   var isWidget = /[?&]widget=1/.test(location.search);
@@ -10612,11 +10672,13 @@ try {
   widgetRender();
   setInterval(widgetRender, 1000);
 
-  /* Shortcut actions: clock in / clock out from the home-screen long-press menu. */
-  var action = (location.search.match(/[?&]action=(\w+)/) || [])[1];
-  if (action === 'clockin' && !state.activeStart) clockIn();
-  if (action === 'clockout' && state.activeStart) clockOut();
-  if (action){ save(); widgetRender(); }
+  runShortcutAction(widgetRender);
+})();
+
+/* Not in widget mode, the same links still have to work: on iOS the manifest's shortcut
+   menu is ignored entirely, so a Shortcut opening the full app is the only way in. */
+(function(){
+  if (!/[?&]widget=1/.test(location.search)) runShortcutAction(null);
 })();
 </script>
 </body>
