@@ -200,6 +200,48 @@ ok('the button is a real tap target', m.btn>=40, `${m.btn}px`);
 ok('rows are readable', m.row>=40, `${m.row}px`);
 ok('and the amount is on screen', m.amtVisible);
 
+console.log('\n━━ By pay month lists the cheques, not just the total ━━');
+/* It used to name the paydays on one line with no amounts — "paydays Wed Sep 2 and Wed
+   Sep 16" — which says when money arrives but not how much arrives on each. That is the
+   question a calendar month is being asked. */
+{
+  const p2 = await boot(ctx, {...base, sessions: WORK, ui:{mon:true}}, T(8,24,12));
+  await p2.evaluate(()=>{ uiOpen().mon = true; save(); lastHeavySig=''; render(); });
+  await p2.waitForTimeout(500);
+  const rows = await p2.evaluate(()=>[...document.querySelectorAll('#monList .monrow')].map(r=>({
+    month: r.querySelector('.m').textContent.trim(),
+    total: r.querySelector('.amt').textContent.trim(),
+    count: r.querySelector('.subr').textContent.trim(),
+    cheques: [...r.querySelectorAll('.chq')].map(c=>({
+      date: c.querySelector('.cd').textContent.trim(),
+      amt:  c.querySelector('.ca').textContent.trim(),
+      paid: c.classList.contains('paid') })) })));
+  const num = v => parseFloat(String(v).replace(/[^0-9.]/g,''));
+  ok('there are months to show', rows.length>0, String(rows.length));
+  ok('every month breaks into at least one cheque',
+     rows.every(r=>r.cheques.length>0),
+     rows.map(r=>r.month+':'+r.cheques.length).join(' '));
+  /* The invariant worth guarding: the lines have to add up to the figure above them. */
+  const off = rows.filter(r=>Math.abs(r.cheques.reduce((a,c)=>a+num(c.amt),0)-num(r.total))>0.01);
+  ok('and the cheques sum to the month total', off.length===0,
+     off.map(r=>r.month+' '+r.total).join(' | '));
+  ok('each cheque carries its own date and amount',
+     rows.every(r=>r.cheques.every(c=>/\w/.test(c.date) && /\d/.test(c.amt))),
+     JSON.stringify(rows[0]&&rows[0].cheques));
+  ok('the count agrees with the lines drawn',
+     rows.every(r=>r.cheques.length===1 ? /one payday/.test(r.count)
+                                        : r.count.indexOf(String(r.cheques.length))===0),
+     rows.map(r=>r.count+'/'+r.cheques.length).join(' '));
+  /* A cheque already in the bank should not look like one still coming. */
+  const anyPaid = rows.some(r=>r.cheques.some(c=>c.paid));
+  ok('a cheque already paid is marked as such', anyPaid,
+     JSON.stringify(rows.map(r=>r.cheques.map(c=>c.paid))));
+  ok('the old one-line payday string is gone',
+     !/paydays\s+\w{3}\s/.test(await p2.textContent('#monList')),
+     (await p2.textContent('#monList')).slice(0,90));
+  await p2.close();
+}
+
 console.log(`\n${fails===0?'✅':'❌'}  ${fails===0?'all passed':fails+' failed'}`);
 await b.close(); srv.close();
 process.exit(fails===0?0:1);
