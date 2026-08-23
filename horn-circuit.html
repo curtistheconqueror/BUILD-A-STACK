@@ -353,6 +353,7 @@
           <line x1="-5" y1="16" x2="5" y2="16"/>
         </g>
         <clipPath id="plateClip"><rect x="312" y="770" width="176" height="24" rx="3"/></clipPath>
+        <clipPath id="relayClip"><rect x="460" y="2080" width="280" height="240" rx="12"/></clipPath>
       </defs>
 
       <!-- ================= SECTION 1 : STEERING WHEEL ================= -->
@@ -510,11 +511,16 @@
       <text x="400" y="1906" text-anchor="middle" font-size="16" fill="#6b7280">bolts the column to the frame = ground</text>
 
       <!-- ================= SECTION 3 : RELAY & POWER ================= -->
-      <rect x="370" y="1988" width="60" height="4" rx="2" fill="#8a6a22"/>
-
       <!-- relay box -->
       <text x="600" y="2064" text-anchor="middle" font-size="22" font-weight="800" letter-spacing="3" fill="#aeb4c2">HORN RELAY</text>
       <rect x="460" y="2080" width="280" height="240" rx="12" fill="#20212acc" stroke="#3d3e48" stroke-width="3"/>
+      <!-- control vs. load side, shaded directly on the relay body so the correlation is spatial,
+           not a caption above it -->
+      <g clip-path="url(#relayClip)">
+        <rect x="460" y="2080" width="86" height="240" fill="#3fd2ff" opacity=".08"/>
+        <rect x="546" y="2080" width="194" height="240" fill="#ff8a3d" opacity=".07"/>
+      </g>
+      <line x1="546" y1="2080" x2="546" y2="2320" stroke="#4a4f5c" stroke-width="1.5" stroke-dasharray="3 4" opacity=".7"/>
       <rect id="relayEmph" x="450" y="2070" width="300" height="260" rx="14" fill="none" stroke="#54e07a" stroke-width="3"/>
       <text id="routerTag" x="732" y="2106" text-anchor="end" font-size="15" font-weight="800" fill="#54e07a">✔ POWER ROUTER OK</text>
 
@@ -560,7 +566,7 @@
         <text x="446" y="2112" text-anchor="end">coil feed</text>
         <text x="576" y="2352">battery</text>
         <text x="676" y="2352">to horns</text>
-        <text x="544" y="2166" font-size="15" fill="#6b7280">coil</text>
+        <text x="544" y="2148" text-anchor="end" font-size="15" fill="#6b7280">coil</text>
         <text x="648" y="2214" font-size="15" fill="#6b7280" text-anchor="end">armature</text>
       </g>
 
@@ -740,8 +746,6 @@
            These labels sit where wires run. Drawn last so the text is always fully legible
            and the wire simply passes behind the letters (rather than a plate breaking it). -->
       <g id="topLabels">
-        <text x="400" y="1974" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2.5" fill="#e6e8ee">3 · HORN RELAY &amp; POWER</text>
-        <text x="400" y="2016" text-anchor="middle" font-size="15" fill="#8b91a0">the relay is the boundary — <tspan fill="#3fd2ff" font-weight="700">◄ control side (coil)</tspan> · <tspan fill="#ff8a3d" font-weight="700">load side (contacts) ►</tspan></text>
         <text x="406" y="2270" text-anchor="end" font-size="16" fill="#8b91a0">up to horn button</text>
         <text x="400" y="2810" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2.5" fill="#e6e8ee">4 · TWIN HORNS — HIGH &amp; LOW NOTE</text>
       </g>
