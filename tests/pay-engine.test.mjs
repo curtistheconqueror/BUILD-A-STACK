@@ -36,6 +36,7 @@ const E = new Function(m[1] + `
            bankCredits, daysOffOutlook, periodHistory, timeCardRows, timeCardTotals,
            extraTime, chartHours, otThresholdOf, otBucketKey, sumSessionRange,
            payMonths, currentPayMonth, shiftDayMs, toMinute,
+           fmtSheetTime, sheetRows, sheetBlocks,
            skewMs, shopTime, phoneTime, shopSession,
            ABSENCE_KINDS, absenceKindName, schedHoursOn, schedEndMs, absenceHoursOn,
            workedPaidOn, scheduleGaps, makeUpOwed, makeUpBalance, applyMakeUp,
@@ -1555,6 +1556,70 @@ group('Robustness');
   ok('no holidays configured credits nothing', E.holidayCredits([wed, sun], { ...hcfg, holidays: [] }).length === 0);
 }
 
+
+/* ---------------- the paper time sheet ---------------- */
+{
+  const D = (d, h, mi=0) => +new Date(2026, 7, d, h, mi);
+  /* An overnight roster like a revenue-services one: in at midnight, out at 08:00. */
+  const overnight = [
+    { id:'a', start: D(16, 0), end: D(16, 8) },
+    { id:'b', start: D(17, 0), end: D(17, 8) },
+    { id:'c', start: D(19, 0), end: D(19, 8) },
+  ];
+
+  ok('midnight is written 2400, the way the paper is filled in',
+     E.fmtSheetTime(D(16, 0)) === '2400', E.fmtSheetTime(D(16, 0)));
+  ok('other times are four digits', E.fmtSheetTime(D(16, 7, 30)) === '0730', E.fmtSheetTime(D(16,7,30)));
+  ok('a null punch renders as nothing', E.fmtSheetTime(null) === '');
+
+  const rows = E.sheetRows(overnight, D(16, 0), D(23, 0));
+  ok('one row per day worked', rows.length === 3, String(rows.length));
+  ok('eight raw hours each', rows.every(r => r.hours === 8), JSON.stringify(rows.map(r=>r.hours)));
+
+  /* Signing out for a break and back in is still one line on the paper: first in, last out. */
+  const split = [
+    { id:'a', start: D(16, 7, 30), end: D(16, 11) },
+    { id:'b', start: D(16, 12),    end: D(16, 15, 30) },
+  ];
+  const one = E.sheetRows(split, D(16, 0), D(17, 0));
+  ok('two punches in a day make one row', one.length === 1, String(one.length));
+  ok('first in and last out', E.fmtSheetTime(one[0].inMs) === '0730' && E.fmtSheetTime(one[0].outMs) === '1530',
+     E.fmtSheetTime(one[0].inMs) + '-' + E.fmtSheetTime(one[0].outMs));
+  ok('and the gap does not count as premises time', one[0].hours === 7, String(one[0].hours));
+
+  /* A shift that runs past midnight stays on the day it started, one line, like the paper. */
+  const late = [{ id:'x', start: D(16, 14), end: D(17, 1) }];
+  const lr = E.sheetRows(late, D(16, 0), D(23, 0));
+  ok('an overnight run is one row on its starting day', lr.length === 1 && lr[0].dayMs === +new Date(2026,7,16),
+     JSON.stringify(lr.map(r => new Date(r.dayMs).getDate())));
+  ok('with the out time on the far side of midnight', E.fmtSheetTime(lr[0].outMs) === '0100',
+     E.fmtSheetTime(lr[0].outMs));
+
+  /* A fourteen-day period folds into two weekly blocks, every date present even unworked —
+     the form prints a line per day and a supervisor expects to see it. */
+  const blocks = E.sheetBlocks(overnight, +new Date(2026, 7, 16), 14);
+  ok('two blocks for a fortnight', blocks.length === 2, String(blocks.length));
+  ok('seven dates in each, worked or not',
+     blocks[0].days.length === 7 && blocks[1].days.length === 7);
+  ok('unworked days are present and blank',
+     blocks[0].days.filter(d => d.inMs == null).length === 4,
+     String(blocks[0].days.filter(d => d.inMs == null).length));
+  ok('the block total is the sum of its days', blocks[0].hours === 24, String(blocks[0].hours));
+  ok('and the second block is empty but still drawn', blocks[1].hours === 0 && blocks[1].days.length === 7);
+
+  /* A seven-day period is one block. */
+  ok('a weekly period folds into one block',
+     E.sheetBlocks(overnight, +new Date(2026, 7, 16), 7).length === 1);
+
+  /* A shift that began before the period is the previous sheet's row, not this one's. */
+  const straddle = [{ id:'p', start: D(15, 22), end: D(16, 6) }].concat(overnight);
+  const b2 = E.sheetBlocks(straddle, +new Date(2026, 7, 16), 14);
+  ok('a shift started before the period stays off this sheet',
+     b2[0].days[0].inMs === D(16, 0), E.fmtSheetTime(b2[0].days[0].inMs));
+
+  ok('an empty log is a sheet of blank dated lines',
+     E.sheetBlocks([], +new Date(2026, 7, 16), 14).every(b => b.hours === 0));
+}
 
 /* ---------------- the holiday catalog ---------------- */
 {

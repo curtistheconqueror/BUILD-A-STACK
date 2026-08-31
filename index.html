@@ -552,6 +552,34 @@
   .helpnotebody dl{margin:0 0 9px}
   .helpnotebody dt{font-weight:700;font-size:13px;color:var(--ink);margin-top:8px}
   .helpnotebody dd{margin:2px 0 0;font-size:13px;line-height:1.5;color:var(--muted)}
+  /* the paper time sheet */
+  #shSig{width:100%;max-width:420px;height:120px;border:1px dashed var(--border);border-radius:10px;
+    background:var(--card2,transparent);touch-action:none;display:block}
+  .shprev{width:100%;border-collapse:collapse;margin-top:10px;font-size:12.6px;
+    font-variant-numeric:tabular-nums}
+  .shprev caption{text-align:left;color:var(--muted);font-size:12px;padding:8px 0 4px;
+    letter-spacing:.04em}
+  .shprev th{color:var(--muted);font-size:10.8px;letter-spacing:.07em;text-transform:uppercase;
+    text-align:left;padding:4px 7px;border-bottom:1px solid var(--border)}
+  .shprev td{padding:5px 7px;border-bottom:1px solid var(--border);color:var(--ink)}
+  .shprev tr.blank td{color:var(--muted)}
+  .shprev td.num,.shprev th.num{text-align:right}
+  .shprev tfoot td{font-weight:700}
+  .shwrap{overflow-x:auto}
+  .shphotos{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}
+  .shphotos .ph{position:relative;width:74px;height:74px;border-radius:9px;overflow:hidden;
+    border:1px solid var(--border);padding:0;background:var(--card2,transparent);cursor:pointer}
+  .shphotos .ph img{width:100%;height:100%;object-fit:cover;display:block}
+  .shview{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.92);display:flex;
+    flex-direction:column;gap:14px;align-items:center;justify-content:center;cursor:pointer}
+  .shview img{max-width:96vw;max-height:84vh;object-fit:contain}
+  .shview button{min-height:44px}
+  /* printing: the sheet and nothing else */
+  #printSheet{background:#fff;color:#000}
+  @media print{
+    body > :not(#printSheet){ display:none !important }
+    #printSheet{ display:block !important; }
+  }
   /* ticking holidays during setup: two columns on a phone, one per line if it is narrow */
   .holpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 12px;margin-top:9px}
   .holtick{display:grid;grid-template-columns:auto 1fr;gap:4px 9px;align-items:center;
@@ -1607,6 +1635,60 @@
     </div>
   </section>
 
+  <!-- ================= CUSTOM DATA: THE PAPER TIME SHEET =================
+       For the employer that still wants a signed paper record. Everything on that form
+       except the signature is already in the log, so the sheet is generated, not copied
+       out by hand. -->
+  <section class="card col" id="sheet">
+    <h2>Custom data — time sheet<span class="colsum" id="sum_sheet"></span></h2>
+    <div class="colbody">
+      <div class="note">A daily sign-in sheet, filled in from the log. Punch (or add shifts to
+      the log) as normal; every row, name and initial is placed for you, and the finished
+      sheet prints or exports when it is due. Times here are premises time — first in to last
+      out, nothing deducted — because that is what a sign-in sheet legally records.</div>
+      <div class="sgrid" style="margin-top:12px">
+        <div class="f"><label for="shName">Name as it appears on the sheet</label>
+          <input type="text" id="shName" autocomplete="name" placeholder="Your name"></div>
+        <div class="f"><label for="shInit">Initials</label>
+          <input type="text" id="shInit" maxlength="5" placeholder="e.g. CW" style="max-width:110px"></div>
+        <div class="f"><label for="shDept">Department / division</label>
+          <input type="text" id="shDept" placeholder="e.g. South"></div>
+        <div class="f"><label for="shSect">Section</label>
+          <input type="text" id="shSect" placeholder="e.g. Revenue Services"></div>
+        <div class="f"><label for="shTitle">What the form is called</label>
+          <input type="text" id="shTitle" placeholder="DAILY TIME REPORT"></div>
+      </div>
+      <div class="f" style="margin-top:12px"><label for="shSig">Signature — sign once, stamped on every sheet</label>
+        <div class="note">Drawn here, kept in this browser like everything else. It only ever
+        lands on sheets you export yourself.</div>
+        <canvas id="shSig" width="640" height="180" aria-label="Draw your signature"></canvas>
+        <div class="actions" style="justify-content:flex-start;margin-top:7px">
+          <button class="mini" id="shSigClear">✕ Clear signature</button>
+          <span class="note" id="shSigState" style="align-self:center"></span>
+        </div>
+      </div>
+      <div class="f" style="margin-top:14px"><label for="shPick">Which period</label>
+        <select id="shPick" style="max-width:280px"></select></div>
+      <div id="shPrev"></div>
+      <div class="actions" style="justify-content:flex-start;margin-top:12px">
+        <button class="mini" id="shPrint">🖨 Print the sheet</button>
+        <button class="mini" id="shWord">⇩ Word (.doc)</button>
+        <button class="mini" id="shCsv">⇩ Excel (.csv)</button>
+      </div>
+      <div class="f" style="margin-top:16px"><label>Filed copies</label>
+        <div class="note">Photos of the signed paper after you hand it in, so the record you
+        submitted stays with the period it belongs to. They live on this device only — a
+        backup file never contains them.</div>
+        <div class="shphotos" id="shPhotos"></div>
+        <div class="actions" style="justify-content:flex-start;margin-top:8px">
+          <button class="mini" id="shPhotoAdd">📷 Add a photo</button>
+          <input type="file" id="shPhotoFile" accept="image/*" capture="environment" class="hide">
+        </div>
+      </div>
+    </div>
+  </section>
+
+
   <!-- ================= YEAR TO DATE ================= -->
   <section class="card col" id="ytd">
     <h2>Year to date <span id="ytdYear"></span><span class="colsum" id="sum_ytd"></span></h2>
@@ -2273,6 +2355,14 @@
      them lives on the setup screen while settings is hidden — a file input inside a
      display:none ancestor cannot be relied on to open a picker when clicked from script. -->
 <input type="file" id="restoreFile" accept="application/json,.json" class="hide">
+
+<!-- The one thing @media print shows. Filled at print time from the same renderer the
+     Word export uses, so paper and file can never say different things. -->
+<div class="hide" id="printSheet"></div>
+
+<!-- A filed photo, full screen. Tapping anywhere closes it. -->
+<div class="shview hide" id="shView"><img id="shViewImg" alt="Filed copy">
+  <button class="mini danger" id="shViewDel">✕ Delete this copy</button></div>
 
 <div class="toast" id="toast"></div>
 
@@ -4531,6 +4621,71 @@ function forgottenShift(activeStart, nowMs, cfg, sessions){
            overnight: +midnight(now) > day };
 }
 
+/* ============================ the paper time sheet ============================
+   Some employers still want a signed paper record — a daily sign-in/out sheet filled in by
+   hand, initialled per row, submitted every period. Even salaried people get handed one.
+   Everything on it except the signature is data this app already holds, so the sheet is
+   generated from the log rather than copied out of it by hand: the paper becomes output,
+   not a second book-keeping system that can disagree with the first.
+
+   These rows are premises time, not paid time. A sign-in sheet records when you were in
+   the building — its own instructions usually say it is not a record of hours worked — so
+   the spans here are raw first-in to last-out, with no lunch taken off. The paid figures
+   live everywhere else in this app; conflating the two would quietly misstate both. */
+
+/* Four-digit 24-hour time the way attendance paper writes it. Midnight goes down as 2400
+   rather than 0000 because that is how these sheets are actually filled in by hand. */
+function fmtSheetTime(ms){
+  if (ms == null) return '';
+  var d = new Date(ms), h = d.getHours(), mi = d.getMinutes();
+  if (h === 0 && mi === 0) return '2400';
+  return String(h).padStart(2, '0') + String(mi).padStart(2, '0');
+}
+
+/* One row per calendar day worked: first sign-in, last sign-out, raw hours in between.
+   A day belongs to the punch that started it, so an overnight run stays on one line the
+   way the paper keeps it — in 2400, out 0800, one row. */
+function sheetRows(sessions, fromMs, toMs){
+  var by = {};
+  (sessions || []).forEach(function(s){
+    if (!(s && s.end > s.start)) return;
+    if (s.start < fromMs || s.start >= toMs) return;
+    var day = +midnight(s.start);
+    var r = by[day] || (by[day] = { dayMs: day, inMs: s.start, outMs: s.end, hours: 0, n: 0 });
+    if (s.start < r.inMs) r.inMs = s.start;
+    if (s.end > r.outMs) r.outMs = s.end;
+    r.hours += (s.end - s.start) / HOUR_MS;
+    r.n++;
+  });
+  return Object.keys(by).map(function(k){ return by[k]; })
+    .sort(function(a, b){ return a.dayMs - b.dayMs; })
+    .map(function(r){ r.hours = Math.round(r.hours * 100) / 100; return r; });
+}
+
+/* The period cut into weekly blocks, every date listed whether worked or not — the paper
+   form prints a line per day and leaves the unworked ones blank, so the export has to as
+   well or the row a supervisor expects to see is simply missing. */
+function sheetBlocks(sessions, periodStartMs, periodDays){
+  var blocks = [];
+  for (var off = 0; off < periodDays; off += 7){
+    var from = +addDays(new Date(periodStartMs), off);
+    var days = Math.min(7, periodDays - off);
+    var to = +addDays(new Date(from), days);
+    var byDay = {};
+    sheetRows(sessions, from, to).forEach(function(r){ byDay[r.dayMs] = r; });
+    var list = [], total = 0;
+    for (var i = 0; i < days; i++){
+      var d = +addDays(new Date(from), i);
+      var row = byDay[d] || { dayMs: d, inMs: null, outMs: null, hours: 0, n: 0 };
+      total += row.hours;
+      list.push(row);
+    }
+    blocks.push({ from: from, to: +addDays(new Date(from), days - 1),
+                  days: list, hours: Math.round(total * 100) / 100 });
+  }
+  return blocks;
+}
+
 /* ==ENGINE-END== */
 
 /* ============================ help ============================
@@ -4659,6 +4814,12 @@ var HELP = {
     'On a weekly rule it fills and empties every week, inside a period that is still running.</p>' +
     '<p>Past the threshold the bar keeps going — the overflow is what you are earning at the ' +
     'higher rate.</p>' },
+
+  sheet: { title: 'Premises time, not paid time', body:
+    '<p>This sheet is a sign-in record: first in, last out, nothing deducted — these forms ' +
+    'usually say themselves that they are not a record of hours worked. So its hours will not ' +
+    'match the paid figures elsewhere in the app, and both are right.</p>' +
+    '<p>The decimal time card above is the opposite: paid time, for an overtime slip.</p>' },
 
   extra: { title: 'Two different “extra”s', body:
     '<p>This section converts hours to decimals for an overtime sheet. It changes nothing.</p>' +
@@ -5883,6 +6044,7 @@ function render(){
     renderPayMonths(ledger, now);
     renderPast(ledger, now);
     renderTimeCard(ledger, now);
+    renderSheet(now);
     renderWhatIf();
     renderExtra(period, active, now);
     renderColSums(ledger, period, now, active, netOn);
@@ -6908,6 +7070,7 @@ function saveSetup(){
 /* Show either the setup screen or the app, never both. */
 function applyStage(){
   var first = !state.configured;
+  syncSheetControls();
   show('setup', first);
   ['hero', 'period', 'totals', 'progress', 'log', 'cfg'].forEach(function(id){ show(id, !first); });
   if (first) show('netsetup', false);
@@ -6933,7 +7096,7 @@ function applyStage(){
    Every section folds independently; nothing opens anything else. All collapsed by
    default — the header line carries a live summary so a folded section still reads. */
 var COLS = ['hero', 'salary', 'units', 'totals', 'period', 'progress', 'log', 'banks',
-            'extra', 'ytd', 'ote', 'calc'];
+            'extra', 'sheet', 'ytd', 'ote', 'calc'];
 function uiOpen(){ return state.ui || (state.ui = { open: {} }); }
 function applyCols(){
   var o = uiOpen().open || {};
@@ -7891,7 +8054,7 @@ var PRESETS = {
 var SECTION_KEYS = [
   ['hero',    'Clock'],       ['totals',   'Earnings'],     ['period',  'Pay period'],
   ['progress','Progress'],    ['log',      'Shift log'],    ['banks',   'Floaters & sick'],
-  ['extra',   'Decimal time'],['ytd',      'Year to date'], ['calc',    'Calculator'],
+  ['extra',   'Decimal time'],['sheet',   'Time sheet'],   ['ytd',      'Year to date'], ['calc',    'Calculator'],
   ['salary',  'My contract'],
   ['ote',     'OT outlook'],
   ['units',   'Production'],
@@ -9569,7 +9732,7 @@ document.getElementById('sMakeUp').addEventListener('click', function(e){
 var HELP_FOR = {
   hero: 'clock', totals: 'earnings', period: 'anchor', progress: 'progress',
   log: 'log', banks: 'banks', extra: 'extra', ytd: 'ytd', ote: 'ote',
-  calc: 'calc', salary: 'jobs', units: 'units', netsetup: 'net',
+  calc: 'calc', salary: 'jobs', units: 'units', netsetup: 'net', sheet: 'sheet',
   gPay: 'otmode', gPeriod: 'anchor', gSched: 'makeup', gOff: 'banks',
   gPrem: 'premiums', gData: 'backup', gJobs: 'jobs'
 };
@@ -10024,7 +10187,7 @@ function applyProfession(){
   /* Never both. A surgeon has no punch to make and a bus operator has no wRVUs, so the two
      cards swap rather than stack — along with everything that only makes sense beside a
      clock: the shift log, the pay-period progress bar, the decimal time card. */
-  ['gPay', 'gSched', 'gPrem', 'hero', 'progress', 'log', 'extra', 'ote'].forEach(function(id){
+  ['gPay', 'gSched', 'gPrem', 'hero', 'progress', 'log', 'extra', 'sheet', 'ote'].forEach(function(id){
     var e = document.getElementById(id);
     if (e) e.classList.toggle('hide', !clocked);
   });
@@ -10544,6 +10707,361 @@ try {
     });
   }
 } catch(e){}
+
+/* ============================ custom data: the time sheet ============================ */
+
+/* Who the sheet says you are. Lives on the job's cfg so it travels with backups and stays
+   per-job — two employers, two sheets, two names on them if needs be. */
+function sheetCfg(){
+  return state.cfg.sheet || (state.cfg.sheet = {
+    name: '', init: '', dept: '', sect: '', title: '', sig: '' });
+}
+
+/* Declared as a function, not a var: applyStage calls syncSheetControls at boot, which
+   runs before this part of the file has executed. A hoisted function is whole at that
+   point; a hoisted var is undefined — and was, for one painful smoke test. */
+function SHEET_FIELDS(){
+  return [['shName','name'],['shInit','init'],['shDept','dept'],['shSect','sect'],['shTitle','title']];
+}
+function syncSheetControls(){
+  var sc = state.configured ? sheetCfg() : null;
+  SHEET_FIELDS().forEach(function(f){
+    var e = document.getElementById(f[0]);
+    if (e && sc && e.value !== (sc[f[1]] || '')) e.value = sc[f[1]] || '';
+  });
+  sheetSigRestore();
+  sheetPick = null;                 // job switch: back to the current period
+  lastSheetSig = '';
+  renderSheetPhotos();
+}
+SHEET_FIELDS().forEach(function(f){
+  document.getElementById(f[0]).addEventListener('input', function(e){
+    sheetCfg()[f[1]] = e.target.value;
+    save();
+  });
+});
+
+/* ---- the signature, drawn once ----
+   Stored as a small PNG on the job cfg, so it rides along in backups with the name it
+   belongs to. The ink is a fixed blue that reads on the dark app and on white paper both. */
+var shDrawing = false, shDrew = false;
+(function(){
+  var cv = document.getElementById('shSig'), cx = cv.getContext('2d');
+  function pos(e){
+    var r = cv.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * (cv.width / r.width),
+             y: (e.clientY - r.top) * (cv.height / r.height) };
+  }
+  cv.addEventListener('pointerdown', function(e){
+    e.preventDefault(); cv.setPointerCapture(e.pointerId);
+    shDrawing = true; shDrew = true;
+    var p = pos(e);
+    cx.strokeStyle = '#2f4bd0'; cx.lineWidth = 3.4; cx.lineCap = 'round'; cx.lineJoin = 'round';
+    cx.beginPath(); cx.moveTo(p.x, p.y); cx.lineTo(p.x + .1, p.y + .1); cx.stroke();
+  });
+  cv.addEventListener('pointermove', function(e){
+    if (!shDrawing) return;
+    var p = pos(e); cx.lineTo(p.x, p.y); cx.stroke();
+  });
+  function up(){
+    if (!shDrawing) return;
+    shDrawing = false;
+    sheetCfg().sig = cv.toDataURL('image/png');
+    save(); sheetSigState();
+  }
+  cv.addEventListener('pointerup', up);
+  cv.addEventListener('pointercancel', up);
+})();
+function sheetSigState(){
+  el('shSigState').textContent = sheetCfg().sig ? 'Signed — this goes on every exported sheet.' : 'Not signed yet.';
+}
+function sheetSigRestore(){
+  var cv = document.getElementById('shSig'), cx = cv.getContext('2d');
+  cx.clearRect(0, 0, cv.width, cv.height);
+  var sig = state.configured && sheetCfg().sig;
+  if (sig){
+    var img = new Image();
+    img.onload = function(){ cx.drawImage(img, 0, 0, cv.width, cv.height); };
+    img.src = sig;
+  }
+  if (state.configured) sheetSigState();
+}
+document.getElementById('shSigClear').onclick = function(){
+  sheetCfg().sig = '';
+  save(); sheetSigRestore();
+};
+
+/* ---- which period the sheet covers ---- */
+var sheetPick = null, lastSheetSig = '';
+function sheetPeriodChoices(nowMs){
+  var out = [], cur = periodInfo(nowMs, state.cfg);
+  for (var i = 0; i < 8; i++){
+    var st = +addDays(cur.start, -i * state.cfg.periodLengthDays);
+    var p = periodInfo(st, state.cfg);
+    out.push({ start: +p.start, label: fdate(p.start) + ' → ' + fdateY(p.lastDay) + (i === 0 ? ' (current)' : '') });
+  }
+  return out;
+}
+document.getElementById('shPick').onchange = function(e){
+  sheetPick = +e.target.value || null;
+  lastSheetSig = '';
+  renderSheet(Date.now());
+  renderSheetPhotos();
+};
+
+function renderSheet(now){
+  var box = el('shPrev');
+  if (!box) return;
+  /* Same visibility rule applyProfession applies, restated here because this also runs on
+     the unconfigured first visit, where the profession has not been asked yet. */
+  var on = state.configured && jobModel() === 'clock';
+  show('sheet', on);
+  if (!on) return;
+  var choices = sheetPeriodChoices(now);
+  if (sheetPick == null) sheetPick = choices[0].start;
+  var pickEl = el('shPick');
+  var key = choices.map(function(c){ return c.start; }).join(',');
+  if (pickEl.dataset.key !== key){
+    pickEl.dataset.key = key;
+    pickEl.innerHTML = choices.map(function(c){
+      return '<option value="' + c.start + '">' + c.label + '</option>';
+    }).join('');
+  }
+  pickEl.value = String(sheetPick);
+
+  var sc = sheetCfg();
+  var sig = state.activeJob + '|' + sheetPick + '|' + dataVer + '|' + sc.init + '|' + sc.name;
+  if (sig === lastSheetSig) return;
+  lastSheetSig = sig;
+
+  var blocks = sheetBlocks(jobSessions(), sheetPick, state.cfg.periodLengthDays);
+  var total = 0;
+  box.innerHTML = '<div class="shwrap">' + blocks.map(function(b){
+    total += b.hours;
+    return '<table class="shprev"><caption>' + fdate(new Date(b.from)) + ' – ' + fdateY(new Date(b.to)) + '</caption>'
+      + '<thead><tr><th>Date</th><th>In</th><th>Out</th><th class="num">Hours</th><th>Init.</th></tr></thead><tbody>'
+      + b.days.map(function(d){
+          var worked = d.inMs != null;
+          return '<tr' + (worked ? '' : ' class="blank"') + '><td>' + fdate(new Date(d.dayMs)) + '</td>'
+            + '<td>' + fmtSheetTime(d.inMs) + '</td><td>' + fmtSheetTime(d.outMs) + '</td>'
+            + '<td class="num">' + (worked ? d.hours.toFixed(2) : '') + '</td>'
+            + '<td>' + (worked ? esc(sc.init || '') : '') + '</td></tr>';
+        }).join('')
+      + '</tbody><tfoot><tr><td colspan="3">Week total</td><td class="num">' + b.hours.toFixed(2) + '</td><td></td></tr></tfoot></table>';
+  }).join('') + '</div>';
+  var sum = el('sum_sheet');
+  if (sum) sum.textContent = total.toFixed(2) + ' h on the sheet';
+}
+
+/* ---- the finished document, one builder for paper and for Word ----
+   Print and export both come from here, so the copy handed in and the file kept can never
+   disagree. Plain bordered tables and inline-ish CSS, because Word reads that dialect. */
+function sheetDocParts(){
+  var sc = sheetCfg();
+  var blocks = sheetBlocks(jobSessions(), sheetPick, state.cfg.periodLengthDays);
+  var from = blocks[0] ? blocks[0].from : sheetPick;
+  var to = blocks.length ? blocks[blocks.length - 1].to : sheetPick;
+  var css = '.shdoc{font-family:Arial,Helvetica,sans-serif;color:#000;padding:24px}'
+    + '.shdoc h1{font-size:20px;letter-spacing:2px;text-align:center;margin:0 0 18px}'
+    + '.shdoc .hd{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:12px}'
+    + '.shdoc .hd td{padding:3px 6px}'
+    + '.shdoc .hd .u{border-bottom:1px solid #000;min-width:180px}'
+    + '.shdoc table.tt{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px}'
+    + '.shdoc table.tt th,.shdoc table.tt td{border:1px solid #000;padding:4px 6px;text-align:left;height:15px}'
+    + '.shdoc table.tt th{font-size:10px;letter-spacing:1px}'
+    + '.shdoc .wk{font-weight:bold;background:#eee}'
+    + '.shdoc .tot td{font-weight:bold}'
+    + '.shdoc .sig{margin-top:22px;font-size:12px}'
+    + '.shdoc .sig img{height:52px;vertical-align:middle}'
+    + '.shdoc .num{text-align:right}';
+  function usDate(ms){
+    var d = new Date(ms);
+    return String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0') + '/' + d.getFullYear();
+  }
+  var body = '<div class="shdoc">'
+    + '<h1>' + esc(sc.title || 'DAILY TIME REPORT') + '</h1>'
+    + '<table class="hd"><tr>'
+    + '<td>DEPARTMENT/DIVISION:</td><td class="u">' + esc(sc.dept || '') + '</td>'
+    + '<td>DATE:</td><td class="u">' + usDate(from) + ' – ' + usDate(to) + '</td></tr>'
+    + '<tr><td>SECTION:</td><td class="u">' + esc(sc.sect || '') + '</td>'
+    + '<td>APPROVAL:</td><td class="u"></td></tr></table>'
+    + blocks.map(function(b){
+        return '<table class="tt">'
+          + '<tr><th>NAME</th><th>INITIALS</th><th>TIME-IN</th><th>INITIALS</th><th>TIME-OUT</th><th>REMARKS</th></tr>'
+          + '<tr class="wk"><td colspan="6">' + usDate(b.from) + ' – ' + usDate(b.to) + '</td></tr>'
+          + b.days.map(function(d){
+              var w = d.inMs != null;
+              return '<tr>'
+                + '<td>' + (w ? esc(sc.name || '') : '') + '</td>'
+                + '<td>' + (w ? esc(sc.init || '') : '') + '</td>'
+                + '<td>' + fmtSheetTime(d.inMs) + '</td>'
+                + '<td>' + (w ? esc(sc.init || '') : '') + '</td>'
+                + '<td>' + fmtSheetTime(d.outMs) + '</td>'
+                + '<td>' + usDate(d.dayMs) + '</td></tr>';
+            }).join('')
+          + '<tr class="tot"><td colspan="5">Total premises hours this week</td><td class="num">' + b.hours.toFixed(2) + '</td></tr>'
+          + '</table>';
+      }).join('')
+    + '<div class="sig">Signature: '
+    + (sc.sig ? '<img src="' + sc.sig + '" alt="signature">' : '_______________________')
+    + ' &nbsp;&nbsp; ' + esc(sc.name || '') + ' &nbsp;&nbsp; generated ' + usDate(Date.now())
+    + '</div></div>';
+  return { css: css, body: body, from: from, to: to };
+}
+
+document.getElementById('shPrint').onclick = function(){
+  var d = sheetDocParts();
+  var ps = document.getElementById('printSheet');
+  ps.innerHTML = '<style>' + d.css + '</style>' + d.body;
+  try { window.print(); }
+  catch(e){ toast('Printing is not available here — use the Word export instead.'); }
+};
+document.getElementById('shWord').onclick = function(){
+  var d = sheetDocParts();
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' + d.css + '</style></head><body>'
+    + d.body + '</body></html>';
+  download('time-report-' + dateInput(new Date(d.from)) + '.doc', html, 'application/msword')
+    || toast('Could not save the file on this browser.');
+};
+document.getElementById('shCsv').onclick = function(){
+  var sc = sheetCfg();
+  var blocks = sheetBlocks(jobSessions(), sheetPick, state.cfg.periodLengthDays);
+  var lines = ['Date,Time in,Time out,Hours,Initials,Name'];
+  blocks.forEach(function(b){
+    b.days.forEach(function(d){
+      var w = d.inMs != null;
+      lines.push([dateInput(new Date(d.dayMs)), fmtSheetTime(d.inMs), fmtSheetTime(d.outMs),
+                  w ? d.hours.toFixed(2) : '', w ? (sc.init || '') : '', w ? (sc.name || '') : '']
+        .map(function(v){ return /[",]/.test(v) ? '"' + String(v).replace(/"/g, '""') + '"' : v; }).join(','));
+    });
+    lines.push(',,Week total,' + b.hours.toFixed(2) + ',,');
+  });
+  download('time-report-' + dateInput(new Date(sheetPick)) + '.csv', lines.join('\n'), 'text/csv')
+    || toast('Could not save the file on this browser.');
+};
+
+/* ---- filed copies ----
+   Photos live in IndexedDB, not localStorage, and not in backups. Two reasons, both firm:
+   a paystub-sized photo in the same 5 MB store as the shift history could fill it and make
+   every save fail — the photos would cost the data they document. And a backup is a file
+   people mail to themselves; a photograph of a signed legal record does not belong inside
+   it by surprise. The trade is stated in the UI: photos are device-only. */
+var SHEET_PHOTO_CAP = 60;
+function fdbOpen(){
+  return new Promise(function(res, rej){
+    var q = indexedDB.open('wisewage-files', 1);
+    q.onupgradeneeded = function(){
+      var db = q.result;
+      if (!db.objectStoreNames.contains('photos')) db.createObjectStore('photos', { keyPath: 'id' });
+    };
+    q.onsuccess = function(){ res(q.result); };
+    q.onerror = function(){ rej(q.error); };
+  });
+}
+function fdbReq(mode, fn){
+  return fdbOpen().then(function(db){
+    return new Promise(function(res, rej){
+      var tx = db.transaction('photos', mode), st = tx.objectStore('photos');
+      var out = fn(st);
+      tx.oncomplete = function(){ db.close(); res(out && out.result !== undefined ? out.result : out); };
+      tx.onerror = function(){ db.close(); rej(tx.error); };
+    });
+  });
+}
+function photoList(job){
+  return fdbReq('readonly', function(st){
+    var got = [];
+    st.openCursor().onsuccess = function(e){
+      var c = e.target.result;
+      if (!c) return;
+      if (c.value.job === job) got.push({ id: c.value.id, ref: c.value.ref, ts: c.value.ts, thumb: c.value.thumb });
+      c.continue();
+    };
+    return got;
+  });
+}
+function photoGet(id){ return fdbReq('readonly', function(st){ return st.get(id); }); }
+function photoPut(rec){ return fdbReq('readwrite', function(st){ st.put(rec); }); }
+function photoDel(id){ return fdbReq('readwrite', function(st){ st.delete(id); }); }
+
+document.getElementById('shPhotoAdd').onclick = function(){ document.getElementById('shPhotoFile').click(); };
+document.getElementById('shPhotoFile').onchange = function(e){
+  var f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  var job = state.activeJob;
+  photoList(job).then(function(list){
+    if (list.length >= SHEET_PHOTO_CAP){
+      toast('That is ' + SHEET_PHOTO_CAP + ' photos — delete some before adding more.');
+      return;
+    }
+    var url = URL.createObjectURL(f), img = new Image();
+    img.onload = function(){
+      URL.revokeObjectURL(url);
+      /* Downscaled on the way in. A 12-megapixel original is detail nobody needs to read a
+         time sheet and quota somebody does need. */
+      var scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+      var cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      var tv = document.createElement('canvas');
+      var ts = 220 / Math.max(img.width, img.height);
+      tv.width = Math.round(img.width * ts); tv.height = Math.round(img.height * ts);
+      tv.getContext('2d').drawImage(img, 0, 0, tv.width, tv.height);
+      cv.toBlob(function(blob){
+        if (!blob){ toast('That image could not be read.'); return; }
+        photoPut({ id: uid(), job: job, ref: sheetPick, ts: Date.now(),
+                   thumb: tv.toDataURL('image/jpeg', 0.6), blob: blob })
+          .then(renderSheetPhotos)
+          .catch(function(){ toast('No room to store the photo — the device refused it.'); });
+      }, 'image/jpeg', 0.72);
+    };
+    img.onerror = function(){ URL.revokeObjectURL(url); toast('That file is not an image this browser can read.'); };
+    img.src = url;
+  }).catch(function(){ toast('Photo storage is not available in this browser.'); });
+};
+
+function renderSheetPhotos(){
+  var box = document.getElementById('shPhotos');
+  if (!box || !state.configured) return;
+  photoList(state.activeJob).then(function(list){
+    var mine = list.filter(function(r){ return sheetPick == null || r.ref === sheetPick; })
+                   .sort(function(a, b){ return b.ts - a.ts; });
+    box.innerHTML = mine.length ? mine.map(function(r){
+      return '<button class="ph" data-phv="' + r.id + '" aria-label="View filed copy">'
+        + '<img src="' + r.thumb + '" alt=""></button>';
+    }).join('') : '<div class="note">None for this period.</div>';
+  }).catch(function(){ box.innerHTML = '<div class="note">Photo storage is not available in this browser.</div>'; });
+}
+/* Delete lives in the viewer, not as a tiny badge on the thumbnail — a 22px control would
+   dodge the 44px rule this app holds every other button to, and a destructive tap target
+   is the last one that should be hard to hit accurately. */
+var shViewing = null;
+document.getElementById('shPhotos').addEventListener('click', function(e){
+  var v = e.target.closest('[data-phv]');
+  if (!v) return;
+  photoGet(v.dataset.phv).then(function(rec){
+    if (!rec) return;
+    shViewing = rec.id;
+    var img = document.getElementById('shViewImg');
+    img.src = URL.createObjectURL(rec.blob);
+    show('shView', true);
+  });
+});
+function shViewClose(){
+  var img = document.getElementById('shViewImg');
+  try { URL.revokeObjectURL(img.src); } catch(e){}
+  img.src = '';
+  shViewing = null;
+  show('shView', false);
+}
+document.getElementById('shView').onclick = shViewClose;
+document.getElementById('shViewDel').onclick = function(e){
+  e.stopPropagation();
+  var id = shViewing;
+  shViewClose();
+  if (id) photoDel(id).then(renderSheetPhotos);
+};
 
 /* ============================ shortcut actions ============================
    A Shortcut, a Back Tap, a Siri phrase and an Android long-press menu all do the one

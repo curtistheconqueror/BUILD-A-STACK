@@ -102,7 +102,10 @@ console.log('\n━━ Each note answers "how is this not that" ━━');
     clock:'today', earnings:'week', calc:'overtime', units:'threshold',
     premiums:'differential', otmode:'week', anchor:'payday', makeup:'allowance',
     banks:'holiday', net:'medicare', ote:'progress', ytd:'log',
-    progress:'threshold', extra:'lunch', log:'period', jobs:'job', backup:'csv'
+    progress:'threshold', extra:'lunch', log:'period', jobs:'job', backup:'csv',
+    /* The paper time sheet records premises time; its neighbour is the decimal card's
+       paid time, and confusing the two misstates both. */
+    sheet:'decimal'
   };
   const missing = topics.filter(t=>CONTRASTS[t.k] &&
     !t.text.toLowerCase().includes(CONTRASTS[t.k])).map(t=>t.k);
