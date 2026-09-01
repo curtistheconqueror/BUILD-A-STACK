@@ -1,0 +1,1379 @@
+<title>Bus Horn Circuit</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { background: #000 !important; }
+  body {
+    margin: 0;
+    color: #d7dae2;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  #app { min-height: 100vh; background: #000; }
+  main { max-width: 860px; margin: 0 auto; padding: 0 10px 48px; }
+
+  /* ---------- sticky control bar ---------- */
+  header.bar {
+    position: sticky; top: 0; z-index: 20;
+    background: rgba(0,0,0,.84);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    border-bottom: 1px solid #23242b;
+    padding: 10px 12px 12px;
+  }
+  .bar-inner { max-width: 860px; margin: 0 auto; }
+  .row1 { display: flex; align-items: center; justify-content: space-between; gap: 8px 10px; margin-bottom: 9px; flex-wrap: wrap; }
+  h1 {
+    margin: 0; font-size: clamp(13px, 3.6vw, 19px); font-weight: 800;
+    letter-spacing: .12em; color: #e6e8ee; white-space: nowrap; flex: 0 1 auto; min-width: 0;
+  }
+  .chips { display: flex; gap: 7px; flex: 1 1 auto; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+  .chip {
+    font: 700 11.5px/1 system-ui, sans-serif; letter-spacing: .05em;
+    color: #aeb4c2; background: #14151a; border: 1px solid #34353e;
+    border-radius: 999px; padding: 8px 10px; cursor: pointer;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+    white-space: nowrap;
+  }
+  .chip[aria-pressed="true"] { color: #ffe9a8; border-color: #8a6a22; background: #201a0c; }
+  #hornBtn {
+    display: block; width: 100%; padding: 13px 10px;
+    font: 800 clamp(14px, 4vw, 17px)/1.15 system-ui, sans-serif;
+    letter-spacing: .06em; text-align: center;
+    color: #ffb3b3; background: linear-gradient(180deg, #34090b, #55110f);
+    border: 1px solid #7a2020; border-radius: 14px; cursor: pointer;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+    transition: background .15s, color .15s, box-shadow .15s;
+  }
+  #hornBtn:focus-visible, .chip:focus-visible, .fsel:focus-visible { outline: 2px solid #3fd2ff; outline-offset: 2px; }
+  .on #hornBtn {
+    color: #1c0d00; background: linear-gradient(180deg, #ffd24a, #ff8a3d);
+    border-color: #ffd24a; box-shadow: 0 0 26px rgba(255,150,50,.55);
+  }
+  /* button colouring by outcome */
+  #app[data-fault="stuck-on"] #hornBtn,
+  .fuse-blown #hornBtn {
+    color: #1c0d00; background: linear-gradient(180deg, #ffd24a, #ff8a3d); border-color: #ffd24a;
+  }
+
+  /* ---------- diagnostic bench ---------- */
+  .bench { max-width: 860px; margin: 12px auto 0; padding: 0 10px; }
+  .bench-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .bench-lbl { font: 800 11px/1 system-ui; letter-spacing: .14em; color: #8b91a0; }
+  .fsel {
+    flex: 1 1 240px; min-width: 0; background: #14151a; color: #e6e8ee;
+    border: 1px solid #34353e; border-radius: 10px; padding: 10px 12px;
+    font: 600 14px/1.1 system-ui; -webkit-appearance: none; appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, #8b91a0 50%), linear-gradient(135deg, #8b91a0 50%, transparent 50%);
+    background-position: calc(100% - 18px) 18px, calc(100% - 12px) 18px; background-size: 6px 6px, 6px 6px; background-repeat: no-repeat;
+    cursor: pointer;
+  }
+  .sides { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0 0; }
+  .sidepill { font: 700 11px/1.3 system-ui; letter-spacing: .02em; padding: 6px 10px; border-radius: 8px; border: 1px solid; }
+  .sidepill.ctrl { color: #8fe4ff; border-color: #245b6e; background: #0b1a20; }
+  .sidepill.load { color: #ffc08f; border-color: #6e4a24; background: #20140b; }
+  .diag { margin: 12px 0 0; border: 1px solid #24252c; border-radius: 12px; background: #0d0e12; overflow: hidden; }
+  .drow { display: grid; grid-template-columns: 84px 1fr; gap: 10px; padding: 9px 12px; border-top: 1px solid #191a1f; }
+  .drow:first-child { border-top: none; }
+  .dk { color: #8b91a0; font-weight: 700; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; align-self: start; padding-top: 3px; }
+  .dv { color: #c4c9d4; line-height: 1.45; font-size: 13px; }
+  .zone.control { color: #8fe4ff; font-weight: 700; }
+  .zone.load { color: #ffc08f; font-weight: 700; }
+  .zone.ok { color: #9be8b4; font-weight: 700; }
+
+  /* ---------- legend ---------- */
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 6px 14px;
+    padding: 14px 4px 4px; font-size: 12px; color: #8b91a0;
+  }
+  .legend b { font-weight: 600; color: #aeb4c2; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
+
+  svg { display: block; width: 100%; height: auto; }
+  svg text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .hit { cursor: pointer; touch-action: manipulation; }
+
+  /* ---------- wires & current ---------- */
+  .wire { fill: none; stroke-width: 5; stroke-linejoin: round; stroke-linecap: round; }
+  .flow {
+    fill: none; stroke-width: 5; stroke-linejoin: round; stroke-linecap: round;
+    stroke-dasharray: 12 16; opacity: 0; transition: opacity .12s;
+  }
+  .fy { stroke: #ffd24a; color: #ffd24a; }
+  .fc { stroke: #3fd2ff; color: #3fd2ff; }
+  .fg { stroke: #54e07a; color: #54e07a; }
+  .fo { stroke: #ff8a3d; color: #ff8a3d; }
+  @keyframes flow { to { stroke-dashoffset: -56; } }
+  .flow.lit { opacity: 1; animation: flow .95s linear infinite; filter: drop-shadow(0 0 6px currentColor); }
+
+  /* ---------- horn button press ---------- */
+  #pressGrp { transition: transform .12s ease-in; }
+  .on #pressGrp { transform: translateY(34px); }
+  #springMain { transform-box: fill-box; transform-origin: 50% 100%; transition: transform .12s ease-in; }
+  .on #springMain { transform: scaleY(.4); }
+  .ctrlDot { fill: #3fd2ff; opacity: 0; transition: opacity .1s; }
+  .on .ctrlDot { opacity: 1; filter: drop-shadow(0 0 8px #3fd2ff); }
+  #gapLbl { transition: opacity .1s; }
+  #contactLbl { opacity: 0; transition: opacity .1s; }
+  .on #gapLbl { opacity: 0; }
+  .on #contactLbl { opacity: 1; }
+
+  /* ---------- hint ---------- */
+  @keyframes pulse { 0%,100% { opacity: .85; } 50% { opacity: .25; } }
+  #hint { animation: pulse 1.9s ease-in-out infinite; }
+  .used #hint { display: none; }
+
+  /* ---------- relay ---------- */
+  #coilWind path { stroke: #7a6a3a; transition: stroke .15s; }
+  .coil-hot #coilWind path { stroke: #ffd24a; }
+  .coil-hot #coilWind { filter: drop-shadow(0 0 7px rgba(255,210,74,.6)); }
+  #blade { transform: rotate(14deg); transform-origin: 660px 2160px; transition: transform .07s ease-in; }
+  .live #blade { transform: rotate(0deg); }
+  #spark { opacity: 0; transform-box: fill-box; transform-origin: center; }
+  @keyframes sparkPop { 0% { opacity: 1; transform: scale(.5); } 60% { opacity: .9; transform: scale(1.8); } 100% { opacity: 0; transform: scale(2.4); } }
+  .live #spark { animation: sparkPop .5s ease-out both; }
+  #clickTxt { opacity: 0; transform-box: fill-box; transform-origin: center; }
+  @keyframes clickPop { 0% { opacity: 0; transform: scale(.6); } 20% { opacity: 1; transform: scale(1.15); } 75% { opacity: 1; } 100% { opacity: 0; transform: scale(1); } }
+  .live #clickTxt { animation: clickPop .9s ease-out both; }
+  /* relay "power router OK" emphasis */
+  #relayEmph, #routerTag { opacity: 0; transition: opacity .2s; }
+  .hlrelay #relayEmph, .hlrelay #routerTag { opacity: 1; }
+  .hlrelay #relayEmph { filter: drop-shadow(0 0 10px rgba(84,224,122,.6)); animation: mkpulse 1.5s ease-in-out infinite; }
+
+  /* ---------- grounds ---------- */
+  .gsym { color: #2c6e44; transition: color .15s; }
+  .gsym.hot { color: #54e07a; filter: drop-shadow(0 0 6px #54e07a); }
+  .ringTerm { transition: filter .15s; }
+  .ringTerm.hot { filter: drop-shadow(0 0 6px #54e07a); }
+  #gndArrow { opacity: 0; transition: opacity .12s; }
+  #gndArrow.shown { opacity: 1; filter: drop-shadow(0 0 6px #54e07a); }
+
+  /* ---------- horns ---------- */
+  .hornBody { transform-box: fill-box; transform-origin: center; }
+  @keyframes shake { 0%,100% { transform: translate(0,0); } 50% { transform: translate(1.6px,0); } }
+  .snd-hi #hornHi, .snd-lo #hornLo { filter: drop-shadow(0 0 14px rgba(255,200,80,.35)); animation: shake .07s linear infinite; }
+  .wv { fill: none; stroke: #ffe9a8; stroke-width: 4; stroke-linecap: round; opacity: 0; }
+  @keyframes wv { 0% { opacity: 0; } 20% { opacity: .95; } 70% { opacity: .25; } 100% { opacity: 0; } }
+  .snd-hi .wv-hi.wv1 { animation: wv 1.2s linear infinite; }
+  .snd-hi .wv-hi.wv2 { animation: wv 1.2s linear infinite .18s; }
+  .snd-hi .wv-hi.wv3 { animation: wv 1.2s linear infinite .36s; }
+  .snd-lo .wv-lo.wv1 { animation: wv 1.2s linear infinite; }
+  .snd-lo .wv-lo.wv2 { animation: wv 1.2s linear infinite .18s; }
+  .snd-lo .wv-lo.wv3 { animation: wv 1.2s linear infinite .36s; }
+
+  /* ---------- fault markers ---------- */
+  .mk { opacity: 0; transition: opacity .18s; }
+  .mk.shown { opacity: 1; animation: mkpulse 1.3s ease-in-out infinite; }
+  @keyframes mkpulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+  .mk rect { fill: #2a0f0d; stroke: #ff5a4d; stroke-width: 2; }
+  .mk text { fill: #ffc4bd; font-weight: 700; }
+  .mkptr { stroke: #ff5a4d; stroke-width: 2; }
+  #mkFuseX line { stroke: #ff5a4d; stroke-width: 5; stroke-linecap: round; }
+
+  /* ---------- steering rotation demo ---------- */
+  @keyframes hatch { to { transform: translateX(-28px); } }
+  .spin #hatchGrp { animation: hatch .5s linear infinite; }
+  @keyframes rspin { to { transform: rotate(360deg); } }
+  .spin #rollerSpokes { animation: rspin .7s linear infinite; transform-origin: 350px 816px; }
+  @keyframes steer { from { transform: rotate(-38deg); } to { transform: rotate(38deg); } }
+  .spin #wheelIcon { animation: steer 2.6s ease-in-out infinite alternate; transform-origin: 120px 1150px; }
+
+  /* ---------- cards ---------- */
+  .card { background: #101116; border: 1px solid #24252c; border-radius: 16px; padding: 18px 20px 8px; margin-top: 22px; }
+  .card h2 { margin: 0 0 4px; font-size: 15px; letter-spacing: .12em; color: #e6e8ee; }
+  .card ol { margin: 10px 0 14px; padding-left: 22px; }
+  .card li { margin: 9px 0; line-height: 1.5; font-size: 14px; color: #b9bec9; }
+  .card li::marker { color: #8a6a22; font-weight: 700; }
+  .lead { font-size: 13.5px; line-height: 1.55; color: #b9bec9; margin: 10px 0; }
+  .fine { font-size: 12px; color: #6b7280; line-height: 1.5; padding: 8px 0 6px; }
+  .kc { font-weight: 700; }
+  .kc.y { color: #ffd24a; } .kc.c { color: #3fd2ff; } .kc.g { color: #54e07a; } .kc.o { color: #ff8a3d; }
+  .tw { overflow-x: auto; margin: 8px 0 4px; }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #1e1f26; vertical-align: top; line-height: 1.4; }
+  th { color: #8b91a0; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; font-weight: 700; }
+  td b { color: #e6e8ee; }
+  td.sd { font-weight: 700; white-space: nowrap; }
+  td.sd.control { color: #8fe4ff; } td.sd.load { color: #ffc08f; }
+  .mklegend { font-size: 12.5px; color: #8b91a0; line-height: 1.9; padding-top: 6px; }
+  .mchip { font-weight: 700; padding: 2px 8px; border-radius: 6px; border: 1px solid #6e4a24; background: #20140b; color: #ffc4bd; white-space: nowrap; }
+
+  /* ---------- probe mode (virtual test light) ---------- */
+  .hide { display: none !important; }
+  #probeBar {
+    display: none; align-items: baseline; gap: 8px; flex-wrap: wrap;
+    margin-top: 9px; padding: 9px 11px; border: 1px solid #245b6e;
+    border-radius: 10px; background: #0b1a20; font-size: 12.5px; line-height: 1.45;
+  }
+  .probe #probeBar { display: flex; }
+  .pb-name { font-weight: 800; color: #8fe4ff; letter-spacing: .04em; white-space: nowrap; }
+  .pb-val { font-weight: 800; padding: 2px 9px; border-radius: 999px; border: 1px solid #34353e; color: #aeb4c2; white-space: nowrap; }
+  .pb-val.ok { color: #9be8b4; border-color: #2c6e44; background: #0d1f15; }
+  .pb-val.bad { color: #ffb3b3; border-color: #7a2020; background: #200d0d; }
+  .pb-note { color: #aeb4c2; flex: 1 1 220px; min-width: 0; }
+  #probePts { display: none; }
+  .probe #probePts { display: block; }
+
+  /* ---------- resting potential (voltage sitting, waiting — no current moving) ---------- */
+  #potBar {
+    display: none; align-items: baseline; gap: 8px; flex-wrap: wrap;
+    margin-top: 9px; padding: 9px 11px; border: 1px solid #6e5c20;
+    border-radius: 10px; background: #1c1608; font-size: 12.5px; line-height: 1.45;
+  }
+  .pot #potBar { display: flex; }
+  #potBar .pb-name { color: #ffd24a; }
+  @keyframes potpulse { 0%, 100% { opacity: .22; } 50% { opacity: .8; } }
+  .flow.pot {
+    opacity: .5; stroke-dasharray: 2 11; animation: potpulse 2.6s ease-in-out infinite;
+    filter: drop-shadow(0 0 5px currentColor);
+  }
+  .tp { cursor: pointer; animation: tppulse 1.7s ease-in-out infinite; }
+  @keyframes tppulse { 0%,100% { opacity: .95; } 50% { opacity: .45; } }
+  .tp-ring { fill: rgba(63,210,255,.08); stroke: #3fd2ff; stroke-width: 2.5; stroke-dasharray: 5 5; }
+  .tp-x { stroke: #3fd2ff; stroke-width: 2; }
+  .tp.sel { animation: none; }
+  .tp.sel .tp-ring { stroke: #ffd24a; fill: rgba(255,210,74,.15); stroke-dasharray: none; filter: drop-shadow(0 0 8px #ffd24a); }
+  .tp.sel .tp-x { stroke: #ffd24a; }
+
+  /* ---------- guided diagnosis ---------- */
+  #coach { display: none; margin: 12px 0 0; border: 1px solid #274a5e; border-radius: 12px; background: #0a141c; padding: 14px 16px; }
+  .guided #coach { display: block; }
+  .guided .bench-top { display: none; }
+  .guided .diag { display: none; }
+  .guided.revealed .diag { display: block; }
+  .mystery .mk { display: none !important; }
+  .mystery #relayEmph, .mystery #routerTag { opacity: 0 !important; }
+  .c-sym { font-weight: 800; color: #8fe4ff; font-size: 14px; line-height: 1.45; }
+  .c-open { color: #aeb4c2; font-size: 13px; line-height: 1.55; margin-top: 8px; }
+  .c-log { margin-top: 9px; font-size: 12.5px; color: #9be8b4; line-height: 1.75; }
+  .c-log:empty, .c-hint:empty { display: none; }
+  .c-step { margin-top: 9px; font-weight: 700; color: #ffd24a; font-size: 13.5px; line-height: 1.5; }
+  .c-hint { color: #ffb3b3; font-size: 12.5px; margin-top: 6px; line-height: 1.4; }
+  .c-qt { margin-top: 10px; font-weight: 700; color: #e6e8ee; font-size: 13.5px; line-height: 1.5; }
+  .c-opts { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .c-opts button {
+    text-align: left; background: #14151a; border: 1px solid #34353e; color: #c4c9d4;
+    border-radius: 10px; padding: 10px 12px; font: 600 13px/1.4 system-ui, sans-serif;
+    cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+  }
+  .c-opts button:focus-visible { outline: 2px solid #3fd2ff; outline-offset: 2px; }
+  .c-opts button.bad { border-color: #7a2020; color: #ffb3b3; }
+  .c-opts button.good { border-color: #2c6e44; color: #9be8b4; background: #0d1f15; }
+  .c-done { margin-top: 10px; color: #9be8b4; font-size: 13px; line-height: 1.6; border-top: 1px solid #1c2b26; padding-top: 10px; }
+  .c-ctl { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .flow.lit, #hint, .snd-hi #hornHi, .snd-lo #hornLo,
+    .snd-hi .wv-hi.wv1, .snd-hi .wv-hi.wv2, .snd-hi .wv-hi.wv3,
+    .snd-lo .wv-lo.wv1, .snd-lo .wv-lo.wv2, .snd-lo .wv-lo.wv3,
+    .spin #hatchGrp, .spin #rollerSpokes, .spin #wheelIcon,
+    .live #spark, .live #clickTxt, .mk.shown, .hlrelay #relayEmph, .tp, .flow.pot { animation: none; }
+    .live #spark, .live #clickTxt, .flow.lit { opacity: 1; }
+    .flow.pot { opacity: .55; }
+  }
+</style>
+
+<div id="app" data-fault="none">
+  <header class="bar">
+    <div class="bar-inner">
+      <div class="row1">
+        <h1>🚌 BUS HORN CIRCUIT</h1>
+        <div class="chips">
+          <button class="chip" id="soundBtn" aria-pressed="true">🔊 SOUND</button>
+          <button class="chip" id="spinBtn" aria-pressed="false">↻ WHEEL</button>
+          <button class="chip" id="probeBtn" aria-pressed="false">🔦 PROBE</button>
+          <button class="chip" id="potBtn" aria-pressed="false">⚡ POTENTIAL</button>
+        </div>
+      </div>
+      <button id="hornBtn" aria-pressed="false">🖐 PRESS HORN</button>
+      <div id="probeBar">
+        <span class="pb-name" id="pbName">PROBE</span>
+        <span class="pb-val" id="pbVal">—</span>
+        <span class="pb-note" id="pbNote">Tap a glowing test point on the diagram to take a reading.</span>
+      </div>
+      <div id="potBar">
+        <span class="pb-name">⚡ POTENTIAL</span>
+        <span class="pb-note" id="potNote">Voltage already sits in part of this circuit before you press anything — toggle on to see exactly how far it reaches.</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="bench">
+      <div class="bench-top">
+        <span class="bench-lbl">SCENARIO</span>
+        <select id="faultSel" class="fsel" aria-label="Circuit scenario"></select>
+        <button class="chip" id="guideBtn">🎯 GUIDED</button>
+      </div>
+      <div class="sides">
+        <span class="sidepill ctrl">CONTROL SIDE ▲ &nbsp;coil · button · slip-ring</span>
+        <span class="sidepill load">LOAD SIDE ▼ &nbsp;contacts · horns</span>
+      </div>
+      <div class="diag">
+        <div class="drow"><span class="dk">Symptom</span><span class="dv" id="dSym">—</span></div>
+        <div class="drow"><span class="dk">Rules out</span><span class="dv" id="dRule">—</span></div>
+        <div class="drow"><span class="dk">Fault zone</span><span class="dv zone ok" id="dZone">—</span></div>
+        <div class="drow"><span class="dk">Likely fix</span><span class="dv" id="dFix">—</span></div>
+      </div>
+      <div id="coach">
+        <div class="c-sym" id="cSym"></div>
+        <div class="c-open" id="cOpen"></div>
+        <div class="c-log" id="cLog"></div>
+        <div class="c-step" id="cStep"></div>
+        <div class="c-hint" id="cHint"></div>
+        <div id="cQ" class="hide">
+          <div class="c-qt" id="cQt"></div>
+          <div class="c-opts" id="cOpts"></div>
+        </div>
+        <div id="cDone" class="c-done hide"></div>
+        <div class="c-ctl">
+          <button class="chip" id="gNew">🎲 NEW MYSTERY</button>
+          <button class="chip" id="gExit">✕ EXIT GUIDED</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="legend">
+      <span><span class="dot" style="background:#ffd24a"></span><b>battery feed</b> (hot at all times)</span>
+      <span><span class="dot" style="background:#3fd2ff"></span><b>horn-button circuit</b> (small current)</span>
+      <span><span class="dot" style="background:#54e07a"></span><b>ground return</b></span>
+      <span><span class="dot" style="background:#ff8a3d"></span><b>horn power</b> (after relay)</span>
+    </div>
+
+    <svg viewBox="0 0 800 3730" role="img" aria-label="Interactive bus horn circuit with fault scenarios: steering-wheel horn button, steering column slip-ring contact, horn relay, and twin horns">
+      <defs>
+        <linearGradient id="brassV" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#a8842e"/><stop offset=".45" stop-color="#e8c258"/><stop offset="1" stop-color="#8a6a22"/>
+        </linearGradient>
+        <linearGradient id="brassH" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#8a6a22"/><stop offset=".5" stop-color="#e8c258"/><stop offset="1" stop-color="#8a6a22"/>
+        </linearGradient>
+        <g id="gsym" stroke="currentColor" stroke-width="4" stroke-linecap="round">
+          <line x1="0" y1="-12" x2="0" y2="0"/>
+          <line x1="-16" y1="0" x2="16" y2="0"/>
+          <line x1="-10" y1="8" x2="10" y2="8"/>
+          <line x1="-5" y1="16" x2="5" y2="16"/>
+        </g>
+        <clipPath id="plateClip"><rect x="312" y="770" width="176" height="24" rx="3"/></clipPath>
+        <clipPath id="relayClip"><rect x="460" y="2080" width="280" height="240" rx="12"/></clipPath>
+      </defs>
+
+      <!-- ================= SECTION 1 : STEERING WHEEL ================= -->
+      <text x="400" y="120" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2.5" fill="#e6e8ee">1 · STEERING WHEEL — HORN BUTTON</text>
+      <rect x="370" y="134" width="60" height="4" rx="2" fill="#8a6a22"/>
+
+      <g id="hint">
+        <text x="400" y="316" text-anchor="middle" font-size="24" font-weight="700" fill="#aeb4c2">TAP TO HONK 👆</text>
+        <text x="400" y="344" text-anchor="middle" font-size="17" fill="#6b7280">then scroll down and follow the current</text>
+        <circle cx="400" cy="460" r="100" fill="none" stroke="#565a66" stroke-width="3" stroke-dasharray="6 10"/>
+      </g>
+
+      <!-- shaft (down through everything) -->
+      <rect x="385" y="560" width="30" height="1188" fill="#4c4e58"/>
+      <rect x="393" y="560" width="6" height="1188" fill="#5d606c"/>
+
+      <!-- wheel rim cross-sections + spokes -->
+      <line x1="295" y1="590" x2="140" y2="590" stroke="#303038" stroke-width="16"/>
+      <line x1="505" y1="590" x2="660" y2="590" stroke="#303038" stroke-width="16"/>
+      <circle cx="110" cy="590" r="30" fill="#26262c" stroke="#3d3d46" stroke-width="4"/>
+      <circle cx="690" cy="590" r="30" fill="#26262c" stroke="#3d3d46" stroke-width="4"/>
+
+      <!-- hub -->
+      <rect x="295" y="540" width="210" height="100" rx="14" fill="#2b2b31" stroke="#3d3d46" stroke-width="3"/>
+      <rect x="296" y="540" width="12" height="18" fill="#0c0c10"/>
+      <rect x="492" y="540" width="12" height="18" fill="#0c0c10"/>
+
+      <!-- large retaining nut — the wheel and the column are two separate pieces; this nut
+           (threaded onto the end of the column shaft) is what clamps the wheel hub in place. -->
+      <polygon points="364,650 436,650 452,667 436,684 364,684 348,667"
+        fill="#3a3b44" stroke="#57585f" stroke-width="2"/>
+      <line x1="364" y1="650" x2="348" y2="667" stroke="#26262c" stroke-width="2"/>
+      <line x1="348" y1="667" x2="364" y2="684" stroke="#26262c" stroke-width="2"/>
+
+      <!-- grounded base plate + insulators + brass ring -->
+      <rect x="305" y="542" width="190" height="14" fill="#565863"/>
+      <rect x="314" y="534" width="62" height="8" fill="#0c0c10"/>
+      <rect x="424" y="534" width="62" height="8" fill="#0c0c10"/>
+      <rect x="318" y="518" width="54" height="16" rx="3" fill="url(#brassH)" stroke="#7a5f1d" stroke-width="2"/>
+      <rect x="428" y="518" width="54" height="16" rx="3" fill="url(#brassH)" stroke="#7a5f1d" stroke-width="2"/>
+
+      <!-- spring (also the ground path) -->
+      <polyline id="springMain" points="400,486 378,493 422,500 378,507 422,514 378,521 422,528 378,535 400,542"
+        fill="none" stroke="#9aa0ad" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+
+      <!-- moving assembly: plastic cover + brass cap + clips -->
+      <g id="pressGrp">
+        <rect x="298" y="468" width="8" height="92" fill="#1d1e24"/>
+        <rect x="494" y="468" width="8" height="92" fill="#1d1e24"/>
+        <rect x="330" y="468" width="140" height="18" rx="5" fill="url(#brassH)" stroke="#7a5f1d" stroke-width="2"/>
+        <path d="M 310 468 Q 310 396 400 392 Q 490 396 490 468 Z" fill="#1d1e24" stroke="#3a3b44" stroke-width="3"/>
+        <text x="400" y="442" text-anchor="middle" font-size="20" font-weight="800" letter-spacing="5" fill="#565a66">HORN</text>
+      </g>
+
+      <!-- contact points -->
+      <circle class="ctrlDot" cx="345" cy="519" r="6"/>
+      <circle class="ctrlDot" cx="455" cy="519" r="6"/>
+
+      <!-- section 1 callouts -->
+      <g font-size="20" fill="#aeb4c2">
+        <text x="775" y="396" text-anchor="end">Plastic cover</text>
+        <text x="775" y="420" text-anchor="end" font-size="17" fill="#8b91a0">clips keep the spring loaded</text>
+        <line x1="640" y1="402" x2="478" y2="420" stroke="#4a4f5c" stroke-width="2"/>
+        <text x="25" y="470">Brass cap (moves with cover)</text>
+        <line x1="282" y1="464" x2="332" y2="474" stroke="#4a4f5c" stroke-width="2"/>
+        <text x="775" y="504" text-anchor="end">Return spring — the ground path</text>
+        <line x1="470" y1="499" x2="424" y2="512" stroke="#4a4f5c" stroke-width="2"/>
+        <text x="775" y="548" text-anchor="end">Brass contact ring</text>
+        <line x1="608" y1="542" x2="486" y2="528" stroke="#4a4f5c" stroke-width="2"/>
+        <text x="775" y="675" text-anchor="end">Steering shaft — grounded to the frame</text>
+        <line x1="448" y1="705" x2="410" y2="720" stroke="#4a4f5c" stroke-width="2"/>
+        <text x="25" y="662">Retaining nut</text>
+        <text x="25" y="686" font-size="17" fill="#8b91a0">clamps wheel to shaft</text>
+        <line x1="205" y1="674" x2="347" y2="667" stroke="#4a4f5c" stroke-width="2"/>
+        <g id="gapLbl">
+          <text x="25" y="512" fill="#8b91a0">open gap — no current</text>
+          <line x1="222" y1="506" x2="320" y2="515" stroke="#4a4f5c" stroke-width="2"/>
+        </g>
+        <text id="contactLbl" x="25" y="512" fill="#3fd2ff" font-weight="700">CONTACT — switch closed!</text>
+      </g>
+
+      <!-- ================= SECTION 2 : STEERING COLUMN ================= -->
+      <!-- column housing -->
+      <rect x="308" y="700" width="184" height="1000" fill="#131419"/>
+      <rect x="292" y="700" width="16" height="1000" fill="#2a2b33"/>
+      <rect x="492" y="700" width="16" height="1000" fill="#2a2b33"/>
+      <rect x="284" y="694" width="232" height="12" rx="5" fill="#34353e"/>
+      <rect x="284" y="1694" width="232" height="12" rx="5" fill="#34353e"/>
+      <!-- shaft continues over interior -->
+      <rect x="385" y="700" width="30" height="1048" fill="#4c4e58"/>
+      <rect x="393" y="700" width="6" height="1048" fill="#5d606c"/>
+
+      <!-- section 2 heading — above the slip-ring assembly it introduces -->
+      <text x="40" y="740" font-size="23" font-weight="800" letter-spacing="2.5" fill="#e6e8ee">2 · STEERING COLUMN</text>
+      <rect x="40" y="752" width="60" height="4" rx="2" fill="#8a6a22"/>
+      <text x="40" y="780" font-size="17" fill="#6b7280">the rotating contact</text>
+
+      <!-- steering-wheel top-view icon (turn demo) -->
+      <g id="wheelIcon">
+        <circle cx="120" cy="1150" r="44" fill="#0d0d11" stroke="#34353e" stroke-width="9"/>
+        <line x1="120" y1="1150" x2="120" y2="1190" stroke="#34353e" stroke-width="7"/>
+        <line x1="120" y1="1150" x2="85" y2="1130" stroke="#34353e" stroke-width="7"/>
+        <line x1="120" y1="1150" x2="155" y2="1130" stroke="#34353e" stroke-width="7"/>
+        <circle cx="120" cy="1150" r="10" fill="#34353e"/>
+      </g>
+      <path d="M 172 1122 A 62 62 0 0 1 180 1162" fill="none" stroke="#4a4f5c" stroke-width="3"/>
+      <path d="M 172 1166 L 182 1160 L 184 1172 Z" fill="#4a4f5c"/>
+      <text x="120" y="1224" text-anchor="middle" font-size="17" fill="#8b91a0">tap to turn the wheel</text>
+
+      <!-- brass slip-ring PLATE — a big disc on the shaft, seen edge-on, high in the column.
+           Nearly the column's own diameter; insulated from the grounded shaft by a collar. -->
+      <rect x="310" y="768" width="180" height="28" rx="4" fill="url(#brassV)" stroke="#7a5f1d" stroke-width="3"/>
+      <g clip-path="url(#plateClip)">
+        <g id="hatchGrp" stroke="#5c4712" stroke-width="4" opacity=".5">
+          <line x1="286" y1="796" x2="300" y2="768"/><line x1="300" y1="796" x2="314" y2="768"/>
+          <line x1="314" y1="796" x2="328" y2="768"/><line x1="328" y1="796" x2="342" y2="768"/>
+          <line x1="342" y1="796" x2="356" y2="768"/><line x1="356" y1="796" x2="370" y2="768"/>
+          <line x1="370" y1="796" x2="384" y2="768"/><line x1="384" y1="796" x2="398" y2="768"/>
+          <line x1="398" y1="796" x2="412" y2="768"/><line x1="412" y1="796" x2="426" y2="768"/>
+          <line x1="426" y1="796" x2="440" y2="768"/><line x1="440" y1="796" x2="454" y2="768"/>
+          <line x1="454" y1="796" x2="468" y2="768"/><line x1="468" y1="796" x2="482" y2="768"/>
+          <line x1="482" y1="796" x2="496" y2="768"/><line x1="496" y1="796" x2="510" y2="768"/>
+          <line x1="510" y1="796" x2="524" y2="768"/>
+        </g>
+      </g>
+      <!-- insulating bushing where the one-piece plate rides the shaft: the plate carries the
+           horn-button circuit, so it must NOT touch the grounded shaft. Inset, so the plate's
+           top and bottom edges stay continuous and it still reads as a single plate. -->
+      <rect x="383" y="771" width="34" height="22" fill="#14151a"/>
+
+      <!-- spring-loaded brass roller — mounted below, pressing UP into the plate's underside -->
+      <rect x="330" y="874" width="40" height="12" rx="3" fill="#3a3b44"/>
+      <polyline points="350,874 336,868 364,860 336,852 364,844 350,838" fill="none" stroke="#8a8f9c" stroke-width="2.5"/>
+      <line x1="350" y1="842" x2="350" y2="822" stroke="#565863" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="350" cy="816" r="20" fill="url(#brassV)" stroke="#7a5f1d" stroke-width="3"/>
+      <g id="rollerSpokes" stroke="#7a5f1d" stroke-width="3">
+        <line x1="350" y1="800" x2="350" y2="832"/>
+        <line x1="334" y1="816" x2="366" y2="816"/>
+        <line x1="339" y1="805" x2="361" y2="827"/>
+        <line x1="339" y1="827" x2="361" y2="805"/>
+      </g>
+      <circle cx="350" cy="816" r="4" fill="#4a3a10"/>
+
+      <!-- section 2 callouts -->
+      <g font-size="20" fill="#aeb4c2">
+        <text x="775" y="724" text-anchor="end">Brass plate — the slip ring</text>
+        <text x="775" y="750" text-anchor="end" font-size="17" fill="#8b91a0">turns with the wheel</text>
+        <text x="775" y="774" text-anchor="end" font-size="17" fill="#8b91a0">insulated from the shaft</text>
+        <line x1="570" y1="762" x2="496" y2="780" stroke="#4a4f5c" stroke-width="2"/>
+        <text x="25" y="812">Spring-loaded brass roller</text>
+        <text x="25" y="836" font-size="17" fill="#8b91a0">presses up — keeps contact</text>
+        <line x1="252" y1="828" x2="330" y2="818" stroke="#4a4f5c" stroke-width="2"/>
+        <text x="202" y="1536" text-anchor="end" font-size="17" fill="#8b91a0">black wire</text>
+        <text x="202" y="1560" text-anchor="end" fill="#8b91a0">to the horn relay ↓</text>
+        <text x="775" y="1540" text-anchor="end" font-size="17" fill="#8b91a0">when honking, current returns</text>
+        <text x="775" y="1564" text-anchor="end" font-size="17" fill="#8b91a0">down the grounded shaft</text>
+        <line x1="520" y1="1552" x2="418" y2="1560" stroke="#4a4f5c" stroke-width="2"/>
+      </g>
+
+      <!-- steering box + ground -->
+      <path d="M 340 1748 L 460 1748 L 480 1815 L 320 1815 Z" fill="#2a2b33" stroke="#3d3d46" stroke-width="3"/>
+      <line x1="400" y1="1815" x2="400" y2="1832" stroke="#2c6e44" stroke-width="4"/>
+      <use href="#gsym" x="400" y="1844" id="gsShaft" class="gsym"/>
+      <text x="400" y="1884" text-anchor="middle" font-size="19" font-weight="700" fill="#aeb4c2">STEERING BOX</text>
+      <text x="400" y="1906" text-anchor="middle" font-size="16" fill="#6b7280">bolts the column to the frame = ground</text>
+
+      <!-- ================= SECTION 3 : RELAY & POWER ================= -->
+      <!-- relay box -->
+      <text x="600" y="2064" text-anchor="middle" font-size="22" font-weight="800" letter-spacing="3" fill="#aeb4c2">HORN RELAY</text>
+      <rect x="460" y="2080" width="280" height="240" rx="12" fill="#20212acc" stroke="#3d3e48" stroke-width="3"/>
+      <!-- control vs. load side, shaded directly on the relay body so the correlation is spatial,
+           not a caption above it -->
+      <g clip-path="url(#relayClip)">
+        <rect x="460" y="2080" width="86" height="240" fill="#3fd2ff" opacity=".08"/>
+        <rect x="546" y="2080" width="194" height="240" fill="#ff8a3d" opacity=".07"/>
+      </g>
+      <line x1="546" y1="2080" x2="546" y2="2320" stroke="#4a4f5c" stroke-width="1.5" stroke-dasharray="3 4" opacity=".7"/>
+      <text x="503" y="2092" text-anchor="middle" font-size="12" font-weight="800" letter-spacing="1" fill="#8fe4ff">COIL SIDE</text>
+      <text x="643" y="2092" text-anchor="middle" font-size="12" font-weight="800" letter-spacing="1" fill="#ffc08f">LOAD SIDE</text>
+      <rect id="relayEmph" x="450" y="2070" width="300" height="260" rx="14" fill="none" stroke="#54e07a" stroke-width="3"/>
+      <text id="routerTag" x="640" y="2242" text-anchor="middle" font-size="15" font-weight="800" fill="#54e07a">✔ POWER ROUTER OK</text>
+
+      <!-- base wires -->
+      <path class="wire" stroke="#6e5c20" d="M 225 2394 V 2360 H 420 M 420 2360 H 560 V 2320 M 420 2360 V 2248 a 8 8 0 0 1 0 -16 V 2120 H 510 V 2140"/>
+      <!-- horn-button circuit: black wire. Fixed run relay 85 → roller; rotating run plate → brass ring. -->
+      <path class="wire" stroke="#2e2e36" d="M 510 2230 V 2240 H 220 V 880 H 330 M 377 766 V 590 L 340 572 V 536"/>
+      <path class="wire" stroke="#25563a" d="M 95 2388 V 2372 H 50 V 2520"/>
+      <path class="wire" stroke="#6e401f" d="M 660 2320 V 2870 H 400 V 2940 M 400 2940 H 210 V 3172 M 400 2940 H 600 V 3172"/>
+      <path class="wire" stroke="#25563a" d="M 250 3172 V 3160 H 330 V 3556 M 560 3172 V 3160 H 480 V 3556"/>
+
+      <!-- relay internals -->
+      <g id="coilWind">
+        <rect x="492" y="2140" width="36" height="90" rx="4" fill="#1b1c22" stroke="#4a4f5c" stroke-width="2"/>
+        <path d="M 494 2150 Q 510 2158 526 2150" fill="none" stroke-width="3"/>
+        <path d="M 494 2166 Q 510 2174 526 2166" fill="none" stroke-width="3"/>
+        <path d="M 494 2182 Q 510 2190 526 2182" fill="none" stroke-width="3"/>
+        <path d="M 494 2198 Q 510 2206 526 2198" fill="none" stroke-width="3"/>
+        <path d="M 494 2214 Q 510 2222 526 2214" fill="none" stroke-width="3"/>
+      </g>
+      <line x1="532" y1="2185" x2="586" y2="2180" stroke="#4a4f5c" stroke-width="2" stroke-dasharray="4 5"/>
+      <line x1="560" y1="2313" x2="560" y2="2196" stroke="#6b7280" stroke-width="5"/>
+      <circle cx="560" cy="2192" r="6" fill="url(#brassV)" stroke="#7a5f1d" stroke-width="1.5"/>
+      <line x1="660" y1="2313" x2="660" y2="2160" stroke="#6b7280" stroke-width="5"/>
+      <g id="blade">
+        <line x1="660" y1="2160" x2="566" y2="2190" stroke="#c9ccd4" stroke-width="6" stroke-linecap="round"/>
+        <circle cx="568" cy="2189" r="5" fill="url(#brassV)"/>
+      </g>
+      <circle cx="660" cy="2160" r="7" fill="#6b7280"/>
+      <circle id="spark" cx="564" cy="2190" r="8" fill="#ffe9a8"/>
+      <text id="clickTxt" x="655" y="2286" text-anchor="middle" font-size="21" font-weight="800" fill="#ffd24a">CLICK!</text>
+
+      <!-- terminals -->
+      <g fill="#14151a" stroke="#6b7280" stroke-width="2.5">
+        <circle cx="460" cy="2120" r="7"/><circle cx="460" cy="2240" r="7"/>
+        <circle cx="560" cy="2320" r="7"/><circle cx="660" cy="2320" r="7"/>
+      </g>
+      <g font-size="14" fill="#8b91a0">
+        <text x="478" y="2110">86</text><text x="478" y="2264">85</text>
+        <text x="545" y="2306" text-anchor="end">30</text><text x="676" y="2306">87</text>
+      </g>
+      <g font-size="16" fill="#8b91a0">
+        <text x="446" y="2112" text-anchor="end">coil feed</text>
+        <text x="576" y="2352">battery</text>
+        <text x="676" y="2352">to horns</text>
+        <text x="544" y="2148" text-anchor="end" font-size="15" fill="#6b7280">coil</text>
+        <text x="648" y="2214" font-size="15" fill="#6b7280" text-anchor="end">armature</text>
+      </g>
+
+      <!-- battery + fuse -->
+      <rect x="70" y="2400" width="180" height="130" rx="10" fill="#191a20" stroke="#34353e" stroke-width="3"/>
+      <rect x="217" y="2388" width="16" height="12" fill="#6b7280"/>
+      <rect x="87" y="2388" width="16" height="12" fill="#6b7280"/>
+      <text x="225" y="2380" text-anchor="middle" font-size="20" font-weight="800" fill="#ffd24a">+</text>
+      <text x="95" y="2380" text-anchor="middle" font-size="22" font-weight="800" fill="#8b91a0">−</text>
+      <text x="160" y="2462" text-anchor="middle" font-size="22" font-weight="800" letter-spacing="2" fill="#aeb4c2">BATTERY</text>
+      <text x="160" y="2492" text-anchor="middle" font-size="17" fill="#6b7280">12 / 24 V</text>
+      <use href="#gsym" x="50" y="2532" id="gsBatt" class="gsym"/>
+      <text x="90" y="2556" font-size="15" fill="#6b7280">− grounded to frame</text>
+
+      <rect x="300" y="2348" width="60" height="24" rx="8" fill="#26262c" stroke="#4a4f5c" stroke-width="2"/>
+      <path d="M 306 2360 Q 318 2348 330 2360 Q 342 2372 354 2360" fill="none" stroke="#ffd24a" stroke-width="3"/>
+      <text x="330" y="2336" text-anchor="middle" font-size="16" fill="#8b91a0">FUSE</text>
+      <text x="330" y="2392" text-anchor="middle" font-size="14" fill="#7a6420">hot at all times</text>
+      <circle cx="420" cy="2360" r="5" fill="#b89a3a"/>
+
+      <!-- ================= SECTION 4 : HORNS ================= -->
+      <rect x="370" y="2824" width="60" height="4" rx="2" fill="#8a6a22"/>
+
+      <text x="644" y="2600" text-anchor="end" font-size="17" fill="#8b91a0">relay output — full power</text>
+      <line x1="650" y1="2594" x2="658" y2="2590" stroke="#4a4f5c" stroke-width="2"/>
+      <circle cx="400" cy="2940" r="6" fill="#8a5a2e"/>
+      <text x="378" y="2932" text-anchor="end" font-size="15" fill="#6b7280">splice</text>
+      <text x="400" y="3080" text-anchor="middle" font-size="18" fill="#8b91a0">each horn: power wire in · ground wire out</text>
+
+      <!-- HIGH NOTE horn -->
+      <path d="M 164 3272 L 104 3248 A 44 44 0 0 0 104 3332 L 164 3308 Z" fill="#33291a" stroke="#6b5a2e" stroke-width="4"/>
+      <ellipse cx="104" cy="3290" rx="8" ry="42" fill="#0c0c10" stroke="#6b5a2e" stroke-width="3"/>
+      <rect x="192" y="3172" width="76" height="32" rx="6" fill="#26262c" stroke="#3d3e48" stroke-width="2.5"/>
+      <rect x="216" y="3204" width="28" height="20" fill="#26262c"/>
+      <circle cx="210" cy="3172" r="6" fill="#14151a" stroke="#8a5a2e" stroke-width="2.5"/>
+      <circle cx="250" cy="3172" r="6" fill="#14151a" stroke="#2c6e44" stroke-width="2.5"/>
+      <rect x="222" y="3352" width="16" height="210" fill="#3a3b44" stroke="#2a2b33" stroke-width="2"/>
+      <g class="hornBody" id="hornHi">
+        <circle cx="230" cy="3290" r="68" fill="#211d15" stroke="#6b5a2e" stroke-width="5"/>
+        <circle cx="230" cy="3290" r="48" fill="none" stroke="#4a3f22" stroke-width="4"/>
+        <circle cx="230" cy="3290" r="30" fill="none" stroke="#4a3f22" stroke-width="4"/>
+        <circle cx="230" cy="3290" r="14" fill="none" stroke="#4a3f22" stroke-width="4"/>
+        <circle cx="230" cy="3290" r="5" fill="#6b5a2e"/>
+      </g>
+      <path class="wv wv-hi wv1" d="M 84 3266 Q 60 3290 84 3314"/>
+      <path class="wv wv-hi wv2" d="M 70 3252 Q 38 3290 70 3328"/>
+      <path class="wv wv-hi wv3" d="M 56 3240 Q 16 3290 56 3340"/>
+
+      <!-- LOW NOTE horn -->
+      <path d="M 636 3272 L 696 3248 A 44 44 0 0 1 696 3332 L 636 3308 Z" fill="#33291a" stroke="#6b5a2e" stroke-width="4"/>
+      <ellipse cx="696" cy="3290" rx="8" ry="42" fill="#0c0c10" stroke="#6b5a2e" stroke-width="3"/>
+      <rect x="532" y="3172" width="76" height="32" rx="6" fill="#26262c" stroke="#3d3e48" stroke-width="2.5"/>
+      <rect x="566" y="3204" width="28" height="20" fill="#26262c"/>
+      <circle cx="600" cy="3172" r="6" fill="#14151a" stroke="#8a5a2e" stroke-width="2.5"/>
+      <circle cx="560" cy="3172" r="6" fill="#14151a" stroke="#2c6e44" stroke-width="2.5"/>
+      <rect x="572" y="3352" width="16" height="210" fill="#3a3b44" stroke="#2a2b33" stroke-width="2"/>
+      <g class="hornBody" id="hornLo">
+        <circle cx="580" cy="3290" r="68" fill="#211d15" stroke="#6b5a2e" stroke-width="5"/>
+        <circle cx="580" cy="3290" r="48" fill="none" stroke="#4a3f22" stroke-width="4"/>
+        <circle cx="580" cy="3290" r="30" fill="none" stroke="#4a3f22" stroke-width="4"/>
+        <circle cx="580" cy="3290" r="14" fill="none" stroke="#4a3f22" stroke-width="4"/>
+        <circle cx="580" cy="3290" r="5" fill="#6b5a2e"/>
+      </g>
+      <path class="wv wv-lo wv1" d="M 716 3266 Q 740 3290 716 3314"/>
+      <path class="wv wv-lo wv2" d="M 730 3252 Q 762 3290 730 3328"/>
+      <path class="wv wv-lo wv3" d="M 744 3240 Q 784 3290 744 3340"/>
+
+      <!-- labels + bracket/ground notes -->
+      <rect x="140" y="3382" width="180" height="30" rx="15" fill="#14151a" stroke="#2a2b33" stroke-width="2"/>
+      <text x="230" y="3403" text-anchor="middle" font-size="17" font-weight="800" fill="#d7dae2">HIGH NOTE · 437 Hz</text>
+      <rect x="490" y="3382" width="180" height="30" rx="15" fill="#14151a" stroke="#2a2b33" stroke-width="2"/>
+      <text x="580" y="3403" text-anchor="middle" font-size="17" font-weight="800" fill="#d7dae2">LOW NOTE · 350 Hz</text>
+
+      <text x="25" y="3444" font-size="17" fill="#8b91a0">mounting bracket</text>
+      <text x="25" y="3468" font-size="17" fill="#8b91a0">= chassis ground</text>
+      <line x1="178" y1="3452" x2="220" y2="3452" stroke="#4a4f5c" stroke-width="2"/>
+      <rect x="300" y="3478" width="200" height="32" rx="16" fill="#000"/>
+      <text x="400" y="3500" text-anchor="middle" font-size="17" fill="#8b91a0">redundant ground wires</text>
+
+      <!-- frame rail -->
+      <rect x="40" y="3560" width="720" height="44" rx="6" fill="#1d1f26" stroke="#3a3d46" stroke-width="3"/>
+      <g stroke="#3a3d46" stroke-width="3">
+        <line x1="90" y1="3604" x2="78" y2="3620"/><line x1="170" y1="3604" x2="158" y2="3620"/>
+        <line x1="250" y1="3604" x2="238" y2="3620"/><line x1="330" y1="3604" x2="318" y2="3620"/>
+        <line x1="410" y1="3604" x2="398" y2="3620"/><line x1="490" y1="3604" x2="478" y2="3620"/>
+        <line x1="570" y1="3604" x2="558" y2="3620"/><line x1="650" y1="3604" x2="638" y2="3620"/>
+        <line x1="730" y1="3604" x2="718" y2="3620"/>
+      </g>
+      <circle class="ringTerm" cx="330" cy="3560" r="7" fill="#26262c" stroke="#2c6e44" stroke-width="3"/>
+      <circle class="ringTerm" cx="480" cy="3560" r="7" fill="#26262c" stroke="#2c6e44" stroke-width="3"/>
+      <circle cx="230" cy="3576" r="5" fill="#6b7280"/>
+      <circle cx="580" cy="3576" r="5" fill="#6b7280"/>
+      <text x="400" y="3652" text-anchor="middle" font-size="22" font-weight="800" letter-spacing="4" fill="#8b91a0">BUS FRAME — COMMON GROUND</text>
+      <text x="400" y="3692" text-anchor="middle" font-size="17" fill="#4f7c5f">← current returns through the frame to the battery (−)</text>
+
+      <!-- ============ animated current overlays ============ -->
+      <path class="flow fy" data-z="coil-feed" d="M 225 2394 V 2360 H 420 V 2248 a 8 8 0 0 1 0 -16 V 2120 H 510 V 2140"/>
+      <path class="flow fy" data-z="pwr-feed" d="M 420 2360 H 560 V 2316"/>
+      <path class="flow fc" data-z="ctrl-trig" d="M 510 2230 V 2240 H 220 V 880 H 350 V 782 H 377 V 590 L 340 572 V 534"/>
+      <path class="flow fg" data-z="ctrl-gnd" d="M 400 516 V 764 M 400 800 V 1815"/>
+      <path class="flow fg" data-z="batt-gnd" d="M 50 2520 V 2372 H 95 V 2390"/>
+      <path class="flow fo" data-z="pwr-out" d="M 560 2316 V 2196 L 660 2160 V 2870 H 400 V 2940"/>
+      <path class="flow fo" data-z="pwr-hi" d="M 400 2940 H 210 V 3168"/>
+      <path class="flow fo" data-z="pwr-lo" d="M 400 2940 H 600 V 3168"/>
+      <path class="flow fg" data-z="gnd-hi" d="M 250 3172 V 3160 H 330 V 3556"/>
+      <path class="flow fg" data-z="gnd-lo" d="M 560 3172 V 3160 H 480 V 3556"/>
+      <path class="flow fg" data-z="gnd-hi-brk" d="M 230 3356 V 3556"/>
+      <path class="flow fg" data-z="gnd-lo-brk" d="M 580 3356 V 3556"/>
+      <path class="flow fg" data-z="frame-return" d="M 716 3582 H 96"/>
+      <polygon id="gndArrow" points="84,3582 100,3573 100,3591" fill="#54e07a"/>
+      <!-- fault-only partial flows -->
+      <path class="flow fc" data-z="short-trig" d="M 510 2230 V 2240 H 220 V 988"/>
+      <path class="flow fo" data-z="short-pwr" d="M 560 2316 V 2196 L 660 2160 V 2606"/>
+
+      <!-- ============ fault markers ============ -->
+      <g id="faultMarks" font-size="14">
+        <g id="mkOpenSlip" class="mk">
+          <line class="mkptr" x1="316" y1="908" x2="342" y2="836"/>
+          <rect x="30" y="900" width="286" height="32" rx="8"/>
+          <text x="44" y="921">✂ SLIP-RING OPEN — no contact</text>
+        </g>
+        <g id="mkShortTrig" class="mk">
+          <line class="mkptr" x1="200" y1="972" x2="220" y2="988"/>
+          <rect x="20" y="940" width="312" height="32" rx="8"/>
+          <text x="34" y="961">⚡ TRIGGER WIRE SHORTED TO GROUND</text>
+        </g>
+        <g id="mkShortPwr" class="mk">
+          <line class="mkptr" x1="668" y1="2570" x2="661" y2="2602"/>
+          <rect x="430" y="2534" width="322" height="32" rx="8"/>
+          <text x="444" y="2555">⚡ POWER WIRE SHORTED TO FRAME</text>
+        </g>
+        <g id="mkFuseX" class="mk">
+          <line x1="306" y1="2350" x2="354" y2="2372"/>
+          <line x1="354" y1="2350" x2="306" y2="2372"/>
+          <rect x="368" y="2346" width="96" height="28" rx="7"/>
+          <text x="380" y="2366">FUSE BLOWN</text>
+        </g>
+        <g id="mkOpenGnd" class="mk">
+          <line class="mkptr" x1="330" y1="3300" x2="330" y2="3340"/>
+          <line class="mkptr" x1="470" y1="3300" x2="480" y2="3340"/>
+          <rect x="252" y="3268" width="296" height="32" rx="8"/>
+          <text x="266" y="3289">✂ BOTH GROUND RETURNS OPEN</text>
+        </g>
+        <g id="mkDeadHi" class="mk">
+          <rect x="180" y="3273" width="100" height="34" rx="8"/>
+          <text x="230" y="3295" text-anchor="middle">✕ HORN DEAD</text>
+        </g>
+        <g id="mkDeadLo" class="mk">
+          <rect x="530" y="3273" width="100" height="34" rx="8"/>
+          <text x="580" y="3295" text-anchor="middle">✕ HORN DEAD</text>
+        </g>
+      </g>
+
+      <!-- ============ probe test points (rings only — readings show in the sticky bar) ============ -->
+      <g id="probePts">
+        <g class="tp hit" data-tp="batt" transform="translate(260,2378)">
+          <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+        <g class="tp hit" data-tp="fuse" transform="translate(420,2360)">
+          <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+        <g class="tp hit" data-tp="t86" transform="translate(460,2120)">
+          <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+        <g class="tp hit" data-tp="t85" transform="translate(460,2240)">
+          <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+        <g class="tp hit" data-tp="t87" transform="translate(660,2320)">
+          <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+        <g class="tp hit" data-tp="hiPwr" transform="translate(210,3172)">
+          <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+        <g class="tp hit" data-tp="hiGnd" transform="translate(250,3172)">
+          <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+        <g class="tp hit" data-tp="loPwr" transform="translate(600,3172)">
+          <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+        <g class="tp hit" data-tp="loGnd" transform="translate(560,3172)">
+          <circle class="tp-ring" r="15"/><line class="tp-x" x1="-7" y1="0" x2="7" y2="0"/><line class="tp-x" x1="0" y1="-7" x2="0" y2="7"/><circle r="30" fill="transparent"/></g>
+      </g>
+
+      <!-- ============ top label layer ============
+           These labels sit where wires run. Drawn last so the text is always fully legible
+           and the wire simply passes behind the letters (rather than a plate breaking it). -->
+      <g id="topLabels">
+        <text x="406" y="2270" text-anchor="end" font-size="16" fill="#8b91a0">up to horn button</text>
+        <text x="400" y="2810" text-anchor="middle" font-size="23" font-weight="800" letter-spacing="2.5" fill="#e6e8ee">4 · TWIN HORNS — HIGH &amp; LOW NOTE</text>
+      </g>
+
+      <!-- tap targets -->
+      <rect id="hitHorn" class="hit" x="270" y="300" width="260" height="280" fill="transparent"/>
+      <circle id="hitWheel" class="hit" cx="120" cy="1150" r="64" fill="transparent"/>
+    </svg>
+
+    <div class="card">
+      <h2>HOW IT WORKS</h2>
+      <ol>
+        <li>You press the <b>plastic cover</b> — it pushes the <b>brass cap</b> down against the spring.</li>
+        <li>The cap lands on the <b>brass ring</b>: the horn switch is now closed.</li>
+        <li>A <span class="kc c">small current</span> flows from the <span class="kc y">battery</span> through the relay's coil, up the column wire, across the <b>brass roller wheel</b> onto the spinning <b>brass plate</b>, up to the ring — then back to <span class="kc g">ground</span> through the spring, hub, and steering shaft. Because the roller rides on the plate, this works at any steering angle.</li>
+        <li>The energized coil snaps the relay's armature shut — <b>click</b>.</li>
+        <li><span class="kc o">Full battery power</span> now flows through the relay's 30 → 87 contacts and down the horn power wire.</li>
+        <li>A splice feeds <b>both horns</b> — high note and low note together.</li>
+        <li>Each horn returns its current to <span class="kc g">ground</span> two ways: through its <b>mounting bracket</b> on the frame, and through its <b>redundant ground wire</b>. The frame carries it all back to the battery's negative post.</li>
+      </ol>
+      <p class="fine">Diagram is schematic — the geometry is simplified, but the circuit order matches the real setup: button → slip-ring contact → relay → twin horns, with the horns switched on the power side and permanently grounded.</p>
+      <p class="fine">Before you press anything, part of this circuit is already electrically hot — full battery voltage sitting and waiting at an open switch, with zero current moving and no work being done. That's <b style="color:#e6e8ee">potential</b>, not <b style="color:#e6e8ee">current</b> — a meter would read 12 V there, even though nothing is "happening." Toggle <b>⚡ POTENTIAL</b> above to see exactly how far that resting voltage reaches before the button (or a fault) stops it.</p>
+    </div>
+
+    <div class="card">
+      <h2>FAULTS &amp; DIAGNOSIS</h2>
+      <p class="lead">A relay circuit has two sides. The <b style="color:#8fe4ff">control side</b> — the coil, plus the button and slip-ring that trigger it — is a tiny current that only tells the relay what to do. The <b style="color:#ffc08f">load side</b> — the relay's contacts out to the horns — carries the real power. The relay is the <b>power router</b> sitting on the boundary, which makes the <b>click</b> your single most useful clue.</p>
+      <p class="lead"><b>A click means the whole control side works</b> — it energized the coil and threw the contacts — so it <i>rules out everything upstream</i> and sends you <b style="color:#ffc08f">downstream</b> to the load side. <b>No click</b> means you never got that far: the fault is <b style="color:#8fe4ff">upstream</b>, on the control side. Pick a scenario above and press the horn to watch where the current stops.</p>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Scenario</th><th>Side</th><th>What you observe</th><th>What it tells you · likely fix</th></tr></thead>
+          <tbody>
+            <tr><td><b>Bad horn</b></td><td class="sd load">load</td><td>Relay clicks, no sound; power reaches the horns.</td><td>Control side proven good. Both horns dead → <b>replace the horn(s)</b>. The usual bus outcome.</td></tr>
+            <tr><td><b>Bad ground</b></td><td class="sd load">load</td><td>Relay clicks, silent — power is present at the horn.</td><td>No ground = no current. Both grounds lost → <b>clean/re-bond grounds</b>. Shows why the redundant ground exists.</td></tr>
+            <tr><td><b>One horn dead</b></td><td class="sd load">load</td><td>Relay clicks; only one note, thin/off.</td><td>Shared feed is fine → fault is the one dead branch → <b>replace that horn</b>.</td></tr>
+            <tr><td><b>Control open</b></td><td class="sd control">control</td><td>Press → nothing. No click at all.</td><td>Load side never energized. Open trigger path → <b>slip-ring / coil wire / coil</b>.</td></tr>
+            <tr><td><b>Dead short</b></td><td class="sd load">load</td><td>Pop, then the whole fused circuit is dead.</td><td>Only a hard short blows a fuse (a bad horn never does) → <b>find the chafe to frame</b>.</td></tr>
+            <tr><td><b>Stuck on</b></td><td class="sd control">control</td><td>Horn blares without pressing; won't stop.</td><td>Trigger wire grounded before the button keeps the coil latched → <b>find the chafe</b> (or pull the relay).</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="mklegend">Markers: <span class="mchip">✂ open</span> a break in a wire &nbsp; <span class="mchip">⚡ short</span> a wire touching ground &nbsp; <span class="mchip">✕ dead</span> a failed part.</p>
+    </div>
+  </main>
+</div>
+
+<script>
+(function () {
+  var app = document.getElementById('app');
+  var hornBtn = document.getElementById('hornBtn');
+  var soundBtn = document.getElementById('soundBtn');
+  var spinBtn = document.getElementById('spinBtn');
+  var faultSel = document.getElementById('faultSel');
+
+  var soundOn = true, spinning = false, honking = false;
+  var relayTimer = null, seqTimer = null;
+
+  /* ---- zone → flow elements ---- */
+  var flows = {};
+  Array.prototype.forEach.call(document.querySelectorAll('.flow[data-z]'), function (el) {
+    var z = el.getAttribute('data-z');
+    (flows[z] = flows[z] || []).push(el);
+  });
+  var gsShaft = document.getElementById('gsShaft');
+  var gsBatt = document.getElementById('gsBatt');
+  var gndArrow = document.getElementById('gndArrow');
+  var ringTerms = document.querySelectorAll('.ringTerm');
+
+  function litZones(list) {
+    var active = {};
+    (list || []).forEach(function (z) { active[z] = 1; });
+    for (var z in flows) {
+      var on = !!active[z];
+      flows[z].forEach(function (el) { el.classList.toggle('lit', on); });
+    }
+    gsShaft.classList.toggle('hot', !!active['ctrl-gnd']);
+    gsBatt.classList.toggle('hot', !!active['batt-gnd']);
+    var fr = !!active['frame-return'];
+    gndArrow.classList.toggle('shown', fr);
+    Array.prototype.forEach.call(ringTerms, function (t) { t.classList.toggle('hot', fr); });
+  }
+  function showMarks(ids) {
+    Array.prototype.forEach.call(document.querySelectorAll('.mk.shown'), function (m) { m.classList.remove('shown'); });
+    (ids || []).forEach(function (id) { var m = document.getElementById(id); if (m) m.classList.add('shown'); });
+  }
+
+  /* ---- zone groups ---- */
+  var CTRL = ['coil-feed', 'ctrl-trig', 'ctrl-gnd', 'batt-gnd'];
+  var DELIVER = ['pwr-feed', 'pwr-out', 'pwr-hi', 'pwr-lo'];
+  var GHI = ['gnd-hi', 'gnd-hi-brk'], GLO = ['gnd-lo', 'gnd-lo-brk'], FR = ['frame-return'];
+  var FULLPWR = DELIVER.concat(GHI, GLO, FR);
+
+  /* ---- scenarios ---- */
+  var FAULTS = {
+    'none': { id: 'none', name: '✅ Healthy — both horns sound',
+      control: CTRL, power: FULLPWR, relayClicks: true, sound: ['hi', 'lo'], marks: [], highlightRelay: false,
+      sym: 'Press → relay clicks → both notes sound.', rule: 'Nothing — the whole circuit checks out.',
+      zone: '—', side: 'ok', fix: 'No fault. This is the baseline to compare the others against.' },
+
+    'bad-horn': { id: 'bad-horn', name: '🔇 Relay clicks, no horn — bad horn',
+      control: CTRL, power: DELIVER, relayClicks: true, sound: [], marks: ['mkDeadHi', 'mkDeadLo'], highlightRelay: true,
+      sym: 'Relay CLICKS, but total silence.',
+      rule: 'The whole control side — the click proves the button, slip-ring, coil and coil ground all work.',
+      zone: 'LOAD side · downstream of the relay', side: 'load',
+      fix: 'Power reaches the horns and the relay did its job, so the horns are dead. Confirm power + ground right at the horn, then replace the horn(s) — the usual outcome on a bus.' },
+
+    'bad-ground': { id: 'bad-ground', name: '🔇 Relay clicks, no horn — bad ground',
+      control: CTRL, power: DELIVER, relayClicks: true, sound: [], marks: ['mkOpenGnd'], highlightRelay: true,
+      sym: 'Relay clicks, silent — yet power reaches the horns.',
+      rule: 'Control side AND power delivery — voltage is present right at the horn.',
+      zone: 'LOAD side · the ground return', side: 'load',
+      fix: 'No ground = no current = no sound. Here the bracket ground AND the redundant ground wire are both open. Clean and re-bond them. This is exactly why the redundant ground exists — one alone would have kept it honking.' },
+
+    'one-horn': { id: 'one-horn', name: '🔈 Only one note — one horn dead',
+      control: CTRL, power: DELIVER.concat(GHI, FR), relayClicks: true, sound: ['hi'], marks: ['mkDeadLo'], highlightRelay: false,
+      sym: 'Relay clicks; only ONE note sounds (thin / off).',
+      rule: 'Control side and the shared power feed — one horn still works.',
+      zone: 'LOAD side · the dead horn branch only', side: 'load',
+      fix: 'Replace the dead horn, or check that horn’s own power and ground branch.' },
+
+    'ctrl-open': { id: 'ctrl-open', name: '🚫 No click at all — control open',
+      control: ['coil-feed'], power: [], relayClicks: false, sound: [], marks: ['mkOpenSlip'], highlightRelay: false,
+      sym: 'Press → nothing. No click, no horn.',
+      rule: 'The load side — it never energized, so it is untested.',
+      zone: 'CONTROL side · upstream of the relay', side: 'control',
+      fix: 'Open in the trigger path — a worn slip-ring / roller, a broken coil wire, or a dead coil. Power reaches the coil but can’t complete to ground, so it never pulls in.' },
+
+    'short-power': { id: 'short-power', name: '⚡ Dead short → blown fuse',
+      control: CTRL, power: [], relayClicks: true, sound: [], marks: [], highlightRelay: false,
+      sym: 'Press → a pop, then the whole fused circuit goes dead.',
+      rule: 'A bad horn never blows a fuse — this points straight at a hard short.',
+      zone: 'LOAD side · power wire shorted to the frame', side: 'load',
+      fix: 'The power wire chafed to ground and drew a dead short; the fuse sacrificed itself to protect the harness. Find the chafe — a fresh fuse blows again until it’s fixed.' },
+
+    'stuck-on': { id: 'stuck-on', name: '📣 Stuck on — won’t stop', autoOn: true,
+      control: ['coil-feed', 'short-trig', 'batt-gnd'], power: FULLPWR, relayClicks: true, sound: ['hi', 'lo'], marks: ['mkShortTrig'], highlightRelay: false,
+      sym: 'Horn blares WITHOUT pressing — and pressing won’t stop it.',
+      rule: 'The horns and load side are fine — they’re doing exactly what they’re told.',
+      zone: 'CONTROL side · trigger wire shorted to ground', side: 'control',
+      fix: 'The coil’s trigger wire rubbed through to the frame before the button, so the coil is grounded full-time and the relay stays latched. Find and repair the chafe — or pull the horn relay to stop it now.' }
+  };
+  var ORDER = ['none', 'bad-horn', 'bad-ground', 'one-horn', 'ctrl-open', 'short-power', 'stuck-on'];
+  var F = FAULTS['none'];
+
+  /* ---- populate the scenario selector ---- */
+  ORDER.forEach(function (id) {
+    var o = document.createElement('option');
+    o.value = id; o.textContent = FAULTS[id].name;
+    faultSel.appendChild(o);
+  });
+
+  /* ---- sound: electric horn, one voice pair per note ---- */
+  var ctx = null, voices = [];
+  function ensureCtx() {
+    if (!ctx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return false;
+      ctx = new AC();
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+    return true;
+  }
+  function startSound(freqs) {
+    if (!ensureCtx()) return;
+    stopSound();
+    var now = ctx.currentTime;
+    freqs.forEach(function (f) {
+      [0, 7].forEach(function (det) {
+        var o = ctx.createOscillator();
+        o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = det;
+        var lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass'; lp.frequency.value = 1500; lp.Q.value = 2;
+        var g = ctx.createGain();
+        g.gain.setValueAtTime(0, now);
+        g.gain.linearRampToValueAtTime(0.055, now + 0.025);
+        o.connect(lp); lp.connect(g); g.connect(ctx.destination);
+        o.start(now);
+        voices.push({ o: o, g: g });
+      });
+    });
+  }
+  function stopSound() {
+    if (!ctx) return;
+    var now = ctx.currentTime;
+    voices.forEach(function (v) {
+      try {
+        v.g.gain.cancelScheduledValues(now);
+        v.g.gain.setValueAtTime(v.g.gain.value, now);
+        v.g.gain.linearRampToValueAtTime(0, now + 0.07);
+        v.o.stop(now + 0.1);
+      } catch (e) {}
+    });
+    voices = [];
+  }
+  function applySound() {
+    app.classList.toggle('snd-hi', F.sound.indexOf('hi') >= 0);
+    app.classList.toggle('snd-lo', F.sound.indexOf('lo') >= 0);
+    var freqs = [];
+    if (F.sound.indexOf('hi') >= 0) freqs.push(437);
+    if (F.sound.indexOf('lo') >= 0) freqs.push(350);
+    if (soundOn && freqs.length) startSound(freqs); else stopSound();
+  }
+
+  /* ---- button label ---- */
+  function updateButton() {
+    if (F.autoOn) { hornBtn.textContent = '📣 STUCK ON — WON’T STOP'; return; }
+    if (!honking) { hornBtn.textContent = '🖐 PRESS HORN'; return; }
+    if (app.classList.contains('fuse-blown')) { hornBtn.textContent = '⚡ FUSE BLEW — TAP TO RESET'; return; }
+    if (!F.relayClicks) { hornBtn.textContent = '🚫 NO CLICK — TAP TO STOP'; return; }
+    if (F.sound.length === 0) { hornBtn.textContent = '🔈 CLICK, NO HORN — TAP TO STOP'; return; }
+    hornBtn.textContent = '📢 HONKING — TAP TO STOP';
+  }
+
+  /* ---- activation ---- */
+  function energize() {
+    honking = true;
+    updatePotential();                       // waiting voltage hands off to real current flow
+    app.classList.add('used', 'on');
+    app.classList.remove('fuse-blown', 'hlrelay');
+    app.classList.toggle('coil-hot', F.relayClicks);
+    hornBtn.setAttribute('aria-pressed', 'true');
+    if (guided && gStep === -1) {           // guided: the press-and-observe stage is done
+      gStep = 0;
+      coachHint('');
+      barMsg('Step 1 — ' + G.steps[0].say);
+      renderCoach();
+    }
+    litZones(F.control);
+    clearTimeout(relayTimer); clearTimeout(seqTimer);
+    if (!F.relayClicks) {
+      showMarks(F.marks);        // upstream fault, evident immediately
+      updateButton();
+      return;
+    }
+    showMarks([]);
+    updateButton();
+    relayTimer = setTimeout(function () {
+      app.classList.add('live');           // armature snaps — CLICK
+      if (F.id === 'short-power') {
+        litZones(CTRL.concat(['pwr-feed', 'short-pwr']));
+        showMarks(['mkShortPwr']);
+        seqTimer = setTimeout(blowFuse, 430);
+      } else {
+        litZones(F.control.concat(F.power));
+        app.classList.toggle('hlrelay', !!F.highlightRelay);
+        showMarks(F.marks);
+        applySound();
+      }
+      updateButton();
+    }, 170);
+  }
+  function blowFuse() {
+    app.classList.remove('live', 'coil-hot', 'hlrelay');
+    litZones([]); stopSound();
+    app.classList.add('fuse-blown');
+    showMarks(['mkFuseX']);
+    updateButton();
+  }
+  function deenergize() {
+    honking = false;
+    clearTimeout(relayTimer); clearTimeout(seqTimer);
+    app.classList.remove('on', 'live', 'coil-hot', 'hlrelay', 'fuse-blown', 'snd-hi', 'snd-lo');
+    hornBtn.setAttribute('aria-pressed', 'false');
+    litZones([]); showMarks([]); stopSound();
+    updateButton();
+    updatePotential();                       // back at rest — waiting voltage returns, if toggled on
+  }
+  function applyStuck() {
+    honking = true;
+    updatePotential();                       // this fault has no resting phase — already latched
+    app.classList.add('used', 'live', 'coil-hot');
+    app.classList.remove('on');            // relay latched without the button
+    litZones(F.control.concat(F.power));
+    showMarks(F.marks);
+    applySound();
+    hornBtn.setAttribute('aria-pressed', 'true');
+    updateButton();
+  }
+
+  function toggleHorn() {
+    if (F.autoOn) return;                   // can't switch a stuck horn off
+    if (honking) deenergize(); else energize();
+  }
+
+  /* ---- HUD (diagnosis readout) ---- */
+  function set(id, txt) { document.getElementById(id).textContent = txt; }
+  function updateHUD() {
+    set('dSym', F.sym); set('dRule', F.rule); set('dFix', F.fix);
+    var z = document.getElementById('dZone');
+    z.textContent = F.zone; z.className = 'dv zone ' + F.side;
+  }
+
+  /* ---- scenario select ---- */
+  function selectFault(id) {
+    deenergize();
+    F = FAULTS[id] || FAULTS['none'];
+    app.setAttribute('data-fault', F.id);
+    updateHUD();
+    if (F.autoOn) applyStuck(); else updateButton();
+    updatePotential();                       // re-evaluate against the new fault (e.g. ctrl-open truncation)
+  }
+  faultSel.addEventListener('change', function () { selectFault(faultSel.value); });
+
+  hornBtn.addEventListener('click', toggleHorn);
+  document.getElementById('hitHorn').addEventListener('click', toggleHorn);
+
+  /* ---- sound toggle ---- */
+  soundBtn.addEventListener('click', function () {
+    soundOn = !soundOn;
+    soundBtn.setAttribute('aria-pressed', String(soundOn));
+    soundBtn.textContent = soundOn ? '🔊 SOUND' : '🔇 MUTED';
+    if (!soundOn) stopSound();
+    else if (honking && app.classList.contains('live')) applySound();
+  });
+
+  /* ---- steering demo toggle ---- */
+  function toggleSpin() {
+    spinning = !spinning;
+    app.classList.toggle('spin', spinning);
+    spinBtn.setAttribute('aria-pressed', String(spinning));
+    spinBtn.textContent = spinning ? '🛑 STOP' : '↻ WHEEL';
+  }
+  spinBtn.addEventListener('click', toggleSpin);
+  document.getElementById('hitWheel').addEventListener('click', toggleSpin);
+
+  /* ==================== probe mode — a virtual test light ==================== */
+  var $ = function (id) { return document.getElementById(id); };
+  var probeBtn = $('probeBtn');
+  var PT_NAMES = {
+    batt: 'Battery +', fuse: 'Fuse output', t86: 'Relay 86 · coil feed',
+    t85: 'Relay 85 · trigger', t87: 'Relay 87 · output',
+    hiPwr: 'High horn · power', hiGnd: 'High horn · ground',
+    loPwr: 'Low horn · power', loGnd: 'Low horn · ground'
+  };
+
+  /* What a meter would read at each point, given the live scenario + button state. */
+  function readProbe(id) {
+    var blown = app.classList.contains('fuse-blown');
+    var live = app.classList.contains('live');
+    var on = honking;
+    var R = function (v, good, n) { return { v: v, good: good, n: n }; };
+    switch (id) {
+      case 'batt':
+        return R('12 V', true, 'Battery feed is alive.');
+      case 'fuse':
+        return blown ? R('0 V', false, 'Dead on the load side of the fuse — the fuse is blown. Fuses only blow for a reason: find the short before re-fusing.')
+                     : R('12 V', true, 'Hot at all times — battery feed and fuse are good.');
+      case 't86':
+        return blown ? R('0 V', false, 'No feed — the blown fuse killed this whole leg.')
+                     : R('12 V', true, 'The relay coil has its feed.');
+      case 't85':
+        if (blown) return R('0 V', false, 'Dead — nothing is fed while the fuse is gone.');
+        if (F.id === 'stuck-on') return R('~0 V', false, 'Grounded with the button UP — a chafed trigger wire is holding the coil on. That is the fault.');
+        if (!on) return R('12 V', true, 'Button up: the coil holds this wire at 12 V, waiting for the button to ground it.');
+        if (F.id === 'ctrl-open') return R('12 V', false, 'Still 12 V with the button held — the trigger never reaches ground. The open is upstream: slip-ring, trigger wire, or the button.');
+        return R('~0 V', true, 'Pulled to ground through the button — the entire control side is working.');
+      case 't87':
+        if (blown) return R('0 V', false, 'Dead — no feed behind the relay (the fuse is blown).');
+        if (live) return R('12 V', true, 'The relay contacts are switching power — the load side is live from here.');
+        if (on && F.id === 'ctrl-open') return R('0 V', false, 'No output — the relay never energized (that is why there was no click). The fault is upstream, on the control side.');
+        return R('0 V', true, 'No output with the horn off — normal.');
+      case 'hiPwr': case 'loPwr':
+        if (blown) return R('0 V', false, 'Dead — nothing is coming down the power wire.');
+        if (live) {
+          if (F.id === 'bad-horn' || (F.id === 'one-horn' && id === 'loPwr'))
+            return R('12 V', true, 'Power reaches this horn — yet it stays silent. If its ground also checks out, the horn itself is dead.');
+          return R('12 V', true, 'Power reaches this horn.');
+        }
+        if (on && F.id === 'ctrl-open') return R('0 V', false, 'No power here — but there was no click either, so the problem is back upstream.');
+        return R('0 V', true, 'No power with the horn off — normal.');
+      case 'hiGnd': case 'loGnd':
+        return F.id === 'bad-ground'
+          ? R('OPEN', false, 'No path to the frame — bracket AND redundant ground wire are open. No ground, no current, no sound.')
+          : R('GND ✓', true, 'Solid path to the frame.');
+    }
+  }
+
+  function onProbe(id) {
+    var r = readProbe(id);
+    Array.prototype.forEach.call(document.querySelectorAll('.tp.sel'), function (t) { t.classList.remove('sel'); });
+    var g = document.querySelector('.tp[data-tp="' + id + '"]');
+    if (g) g.classList.add('sel');
+    $('pbName').textContent = PT_NAMES[id];
+    var v = $('pbVal');
+    v.textContent = r.v;
+    v.className = 'pb-val ' + (r.good ? 'ok' : 'bad');
+    $('pbNote').textContent = r.n;
+    guidedProbe(id, r);
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('#probePts .tp'), function (g) {
+    g.addEventListener('click', function () { onProbe(g.getAttribute('data-tp')); });
+  });
+  probeBtn.addEventListener('click', function () {
+    var on = !app.classList.contains('probe');
+    if (!on && guided) { coachHint('Probe mode stays on during a guided diagnosis.'); return; }
+    app.classList.toggle('probe', on);
+    probeBtn.setAttribute('aria-pressed', String(on));
+  });
+
+  /* ==================== resting potential — voltage waiting, nothing moving ====================
+     Everything up to an OPEN switch sits at full battery voltage even with the circuit at rest:
+     battery -> fuse -> relay 86 (through the coil, no drop, since no current is flowing yet) and
+     on up the trigger wire to the button ring; and separately battery -> fuse -> relay 30. Nothing
+     downstream of either open switch (the button gap, the relay armature) carries any potential
+     until it closes. This is deliberately independent of the fault-current logic in litZones(). */
+  var potOn = false, potBtn = $('potBtn');
+  var ctrlTrigEl = flows['ctrl-trig'][0];
+  var CTRL_TRIG_FULL = ctrlTrigEl.getAttribute('d');
+  var CTRL_TRIG_TO_ROLLER = 'M 510 2230 V 2240 H 220 V 880 H 350 V 782';   // dead-ends at the open roller/plate contact
+
+  function updatePotential() {
+    var show = potOn && !honking;
+    flows['coil-feed'][0].classList.toggle('pot', show);
+    flows['pwr-feed'][0].classList.toggle('pot', show);
+    var openHere = show && F.id === 'ctrl-open';
+    ctrlTrigEl.setAttribute('d', openHere ? CTRL_TRIG_TO_ROLLER : CTRL_TRIG_FULL);
+    ctrlTrigEl.classList.toggle('pot', show);
+    $('potNote').textContent = !potOn
+      ? 'Voltage already sits in part of this circuit before you press anything — toggle on to see exactly how far it reaches.'
+      : honking
+        ? (F.autoOn
+            ? 'This fault has no resting phase — the trigger is already shorted, so current started flowing the instant you selected it.'
+            : 'Now flowing — that waiting voltage became real current the instant the circuit closed.')
+        : openHere
+          ? 'Hot only as far as the roller — the open slip-ring contact means voltage never reaches the button ring.'
+          : 'Hot and waiting: battery → fuse → relay coil → trigger wire, all the way to the open button, plus battery → fuse → the relay’s other input. No current is flowing — nothing is grounded yet — so nothing is doing work. Press the horn and watch it become real current flow.';
+  }
+  potBtn.addEventListener('click', function () {
+    var on = !potOn;
+    if (on && guided) { coachHint('Resting-voltage view is off during a guided diagnosis — it would give the mystery away.'); return; }
+    potOn = on;
+    app.classList.toggle('pot', potOn);
+    potBtn.setAttribute('aria-pressed', String(potOn));
+    updatePotential();
+  });
+
+  /* ==================== guided diagnosis — mystery fault coach ==================== */
+  var guided = false, G = null, gFid = null, gStep = -1, gDone = false, gLog = [], qBuilt = false;
+  var GUIDE_IDS = ['bad-horn', 'bad-ground', 'one-horn', 'ctrl-open', 'short-power', 'stuck-on'];
+  var GUIDES = {
+    'bad-horn': {
+      sym: 'Press the horn — the relay CLICKS, but total silence.',
+      open: 'That click proves the entire control side: button, slip-ring, coil and its ground. So we work the LOAD side, from the relay outward.',
+      steps: [
+        { need: 't87', on: true, say: 'Keep the horn ON and probe relay output 87.' },
+        { need: 'hiPwr', on: true, say: 'Follow the power downstream: probe the HIGH horn’s power terminal.' },
+        { need: 'hiGnd', say: 'Now check that horn’s ground path.' }
+      ],
+      q: 'Power ✓ at the horn, ground ✓ — and still silence. What’s the fix?',
+      opts: ['Replace the horns', 'Clean & re-bond the grounds', 'Replace the relay'], a: 0,
+      done: 'Power and ground both check out at a silent horn — the horns themselves are dead. Replace them. (The classic bus outcome.)'
+    },
+    'bad-ground': {
+      sym: 'Press the horn — the relay CLICKS, but total silence.',
+      open: 'A click clears the whole control side. Load side it is — same drill as any silent-horn case.',
+      steps: [
+        { need: 't87', on: true, say: 'Keep the horn ON and probe relay output 87.' },
+        { need: 'hiPwr', on: true, say: 'Probe the HIGH horn’s power terminal.' },
+        { need: 'hiGnd', say: 'Power is present — now check the horn’s ground path.' }
+      ],
+      q: 'Power reaches the horn, but the ground reads OPEN. What’s the fix?',
+      opts: ['Replace the horns', 'Clean & re-bond the ground connections', 'Replace the fuse'], a: 1,
+      done: 'No ground = no current = no sound, even with perfect power. Clean and re-bond the bracket and the redundant ground wire. (Both grounds had to fail — that’s exactly why the redundancy exists.)'
+    },
+    'one-horn': {
+      sym: 'Press the horn — it clicks, and only ONE thin note sounds.',
+      open: 'The working horn is free information: relay, fuse and the shared feed are all proven. Only the dead branch is suspect.',
+      steps: [
+        { need: 'loPwr', on: true, say: 'Keep the horn ON and probe the silent (LOW) horn’s power terminal.' },
+        { need: 'loGnd', say: 'Now its ground path.' }
+      ],
+      q: 'The dead horn has power and ground. The fix?',
+      opts: ['Replace the low-note horn', 'Repair the splice', 'Replace the relay'], a: 0,
+      done: 'Feed ✓, ground ✓, silent — that one horn is dead. Replace it and the two-note voice comes back.'
+    },
+    'ctrl-open': {
+      sym: 'Press the horn — nothing. No click, no sound.',
+      open: 'No click means the coil never energized: the fault is UPSTREAM, on the control side. The load side is untested — and innocent until proven otherwise.',
+      steps: [
+        { need: 't86', on: true, say: 'Hold the horn ON and probe relay terminal 86 (coil feed).' },
+        { need: 't85', on: true, say: 'Feed is good — now probe terminal 85, the trigger side of the coil.' }
+      ],
+      q: '86 is hot, but 85 stays at 12 V even with the button held. The fix?',
+      opts: ['Repair the trigger path — slip-ring / trigger wire / button', 'Replace the fuse', 'Replace the horns'], a: 0,
+      done: 'A held button should pull 85 to ground — it never does, so the trigger path is open. Inspect the slip-ring roller, the column trigger wire, and the button contacts.'
+    },
+    'short-power': {
+      sym: 'Press the horn — a click, a pop… then everything is dead.',
+      open: 'Something drew a violent surge. First rule: a fuse never blows for no reason.',
+      steps: [
+        { need: 'batt', say: 'Probe the battery + post.' },
+        { need: 'fuse', say: 'Battery is fine. Probe the output side of the FUSE.' }
+      ],
+      q: 'The fuse is blown. What’s the right fix?',
+      opts: ['Find and repair the chafed power wire, then fit a new fuse', 'Just fit a new fuse', 'Replace the relay'], a: 0,
+      done: 'The power wire is shorted to the frame — that dead short is what popped the fuse. A new fuse alone will just blow again; find the chafe, repair it, then re-fuse.'
+    },
+    'stuck-on': {
+      sym: 'The horn is BLARING and nobody is touching the button.',
+      open: 'The horns are just obeying orders — the question is who is giving them. Check the trigger.',
+      steps: [
+        { need: 't85', say: 'With the button untouched, probe relay terminal 85 (trigger).' }
+      ],
+      q: '85 reads grounded with the button UP. What’s the fix?',
+      opts: ['Find the chafed trigger wire (pull the relay to silence it now)', 'Replace the horns', 'Replace the button return spring'], a: 0,
+      done: 'The trigger wire is chafed to ground before the button, holding the coil energized full-time. Pull the relay to shut it up, then find and repair the chafe.'
+    }
+  };
+
+  function coachHint(t) { $('cHint').textContent = t; }
+  function barMsg(note) {
+    $('pbName').textContent = 'GUIDED';
+    var v = $('pbVal'); v.textContent = '🎯'; v.className = 'pb-val';
+    $('pbNote').textContent = note;
+  }
+  function renderCoach() {
+    if (!guided) return;
+    $('cSym').textContent = '🔍 ' + G.sym;
+    $('cOpen').textContent = G.open;
+    $('cLog').innerHTML = gLog.join('<br>');
+    var stepTxt = '';
+    if (!gDone) {
+      if (gStep === -1) stepTxt = '▶ First: press the horn button up top, and watch & listen.';
+      else if (gStep < G.steps.length) stepTxt = '🔦 Step ' + (gStep + 1) + ' of ' + G.steps.length + ' — ' + G.steps[gStep].say;
+      else stepTxt = '🧠 Readings collected — answer below.';
+    }
+    $('cStep').textContent = stepTxt;
+    var qOn = !gDone && gStep >= G.steps.length;
+    $('cQ').classList.toggle('hide', !qOn);
+    if (qOn && !qBuilt) buildOpts();
+    $('cDone').classList.toggle('hide', !gDone);
+    if (gDone) $('cDone').innerHTML = '✅ ' + G.done;
+  }
+  function buildOpts() {
+    qBuilt = true;
+    $('cQt').textContent = G.q;
+    var box = $('cOpts'); box.innerHTML = '';
+    G.opts.forEach(function (t, i) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.textContent = t;
+      b.addEventListener('click', function () {
+        if (gDone) return;
+        if (i === G.a) {
+          b.classList.add('good');
+          gDone = true;
+          app.classList.remove('mystery');
+          app.classList.add('revealed');
+          faultSel.value = F.id;
+          coachHint('');
+          barMsg('Solved! The fault markers and full diagnosis are now revealed on the diagram.');
+          renderCoach();
+        } else {
+          b.classList.add('bad');
+          coachHint('Not quite — look back at the readings you collected.');
+        }
+      });
+      box.appendChild(b);
+    });
+  }
+  /* A probe taken while guided: advance if it is the step's point, nudge if not. */
+  function guidedProbe(id, r) {
+    if (!guided || gDone || gStep < 0 || gStep >= G.steps.length) return;
+    var st = G.steps[gStep];
+    if (id !== st.need) {
+      var msg = 'Fine to explore — but this step wants: ' + PT_NAMES[st.need] + '.';
+      coachHint(msg);
+      $('pbNote').textContent += '  ▸ ' + msg;
+      return;
+    }
+    if (st.on && !honking && !app.classList.contains('fuse-blown')) {
+      var m2 = 'Turn the horn ON first (top button), then probe again.';
+      coachHint(m2);
+      $('pbNote').textContent += '  ▸ ' + m2;
+      return;
+    }
+    gLog.push('✓ ' + PT_NAMES[id] + ' → ' + r.v);
+    gStep++;
+    coachHint('');
+    $('pbNote').textContent += (gStep < G.steps.length
+      ? '  ▸ NEXT: ' + G.steps[gStep].say
+      : '  ▸ Readings collected — answer the question in the coach panel (top of page).');
+    renderCoach();
+  }
+  function startGuided(fid) {
+    guided = true; gDone = false; gLog = []; qBuilt = false; gFid = fid; G = GUIDES[fid];
+    app.classList.add('guided', 'mystery', 'probe');
+    app.classList.remove('revealed');
+    probeBtn.setAttribute('aria-pressed', 'true');
+    if (potOn) { potOn = false; app.classList.remove('pot'); potBtn.setAttribute('aria-pressed', 'false'); }   // would give the mystery away
+    selectFault(fid);
+    gStep = F.autoOn ? 0 : -1;
+    coachHint('');
+    barMsg(gStep === 0
+      ? 'Step 1 — ' + G.steps[0].say
+      : 'First: press the horn button up top and observe — then follow the steps here.');
+    renderCoach();
+  }
+  function exitGuided() {
+    guided = false; G = null; gFid = null;
+    app.classList.remove('guided', 'mystery', 'revealed');
+    faultSel.value = 'none';
+    selectFault('none');
+    $('pbName').textContent = 'PROBE';
+    var v = $('pbVal'); v.textContent = '—'; v.className = 'pb-val';
+    $('pbNote').textContent = 'Tap a glowing test point on the diagram to take a reading.';
+  }
+  function randomGuide() {
+    var pool = GUIDE_IDS.filter(function (x) { return x !== gFid; });
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+  $('guideBtn').addEventListener('click', function () { startGuided(randomGuide()); });
+  $('gNew').addEventListener('click', function () { startGuided(randomGuide()); });
+  $('gExit').addEventListener('click', exitGuided);
+  window.__hcGuide = startGuided;   // deterministic entry point for automated tests
+
+  /* ---- init ---- */
+  updateHUD();
+})();
+</script>

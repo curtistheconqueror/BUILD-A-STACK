@@ -34,6 +34,37 @@ npm test     # 62 assertions against the pay engine — no dependencies
 
 The tests extract the engine straight out of `pay-clock.html`, so what's verified is exactly what ships.
 
+## Horn Circuit
+
+`horn-circuit.html` is a standalone, interactive schematic of a bus horn circuit — same self-contained spirit (open it directly, works offline, HTML/SVG + Web Audio). It's built for phone and auto-fits up to iPad; you scroll top-to-bottom to follow the wiring rather than cramming it onto one screen.
+
+Press the **horn button** at the top and current lights up through the whole system, color-coded: battery feed, the small horn-button circuit, the ground return, and full horn power after the relay. Toggle it on and off to watch the current move through each stage.
+
+It traces the real setup in four stops:
+
+- **Steering wheel** — the horn button: plastic cover over a brass cap, held up by a return spring; press it and the cap meets the brass contact ring to close the switch.
+- **Steering column** — the rotating contact: a big **brass slip-ring plate**, near the column's own diameter, sits high on the shaft (insulated from it, since the shaft is ground) and turns with the wheel. A spring-loaded **brass roller** mounted below presses *up* into its underside, so the horn-button circuit bridges the rotating and fixed halves at any steering angle. A black wire carries it from the roller's mount down to the relay.
+- **Relay & power** — a small coil current pulls the armature shut and switches full battery power (via a fuse) through to the horns.
+- **Twin horns** — high note and low note, each with two wires, switched on the power side and permanently grounded to the frame plus a redundant ground wire; the frame carries the return back to the battery.
+
+A **turn-wheel** toggle spins the roller and plate so you can see the slip-ring contact hold while steering, and a **sound** toggle plays a two-note electric horn.
+
+### Fault scenarios & diagnosis
+
+A **scenario** selector turns the same diagram into a diagnostic bench. Beyond *healthy*, it injects the faults that actually strand a bus — a bad horn, a bad ground, one dead horn, an open in the trigger path, a dead short that blows the fuse, and a stuck-on horn — and animates exactly where the current stops, with a marker at the fault (open · short · dead).
+
+It's framed around the two sides of a relay circuit: the **control side** (the coil, and the button/slip-ring that trigger it) versus the **load side** (the contacts out to the horns). The relay is the *power router* on the boundary, so the **click** is the key clue — a click proves the whole control side works and sends you *downstream* to the load side; no click means the fault is *upstream*. The headline case, *relay clicks but no horn*, spotlights the relay as the only thing working and routes power right up to the dead horns. A live readout gives the symptom, what it rules out, the fault zone, and the likely fix, with a full symptom→cause table below the diagram.
+
+### Probe the circuit
+
+A **🔦 probe** toggle turns the diagram into a bench with a virtual test light: nine tappable test points (battery, fuse, all four relay terminals, and each horn's power and ground) read out 12 V / 0 V / ground-good / open for whatever scenario and button state is live — including the classic trigger-wire tell: 12 V at terminal 85 with the button up, pulled to ~0 V when a healthy button grounds it. Readings land in a sticky bar with a one-line "what this proves."
+
+**🎯 Guided diagnosis** deals a mystery fault (markers hidden), states only the symptom, and coaches the probe sequence step by step — click first, then bisect the remaining half — logging each reading until you're asked to call the fix. Answer right and the diagram reveals the fault; a dice button deals the next mystery.
+
+### Resting potential
+
+An **⚡ potential** toggle shows the voltage that's already sitting in part of the circuit before you ever press the button — a slow ambient pulse, distinct from the marching-dash current-flow animation, since nothing is actually moving yet. Everything up to an *open* switch is electrically hot at rest: battery → fuse → the relay coil → the trigger wire, all the way up through the slip ring to the button's contact ring, plus battery → fuse → the relay's other input — while everything past that switch (the relay's output side, the horns) carries no potential at all until it closes. The glow is fault-aware — in the control-open scenario it stops exactly at the broken slip-ring contact instead of reaching the button — and hands off to the real current-flow animation the instant you press. Locked out during guided diagnosis, since it would give the mystery away.
+
 ## Roadmap
 
 - **Phase A — Learn (glossary)**

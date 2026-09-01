@@ -1,8 +1,9 @@
 name: Deploy to GitHub Pages
 
-# Publishes two pages:
-#   /        Build-a-Stack
-#   /clock/  Pay Clock, installable to a phone home screen
+# Publishes three pages:
+#   /                    Build-a-Stack
+#   /clock/              Pay Clock, installable to a phone home screen
+#   /horn-circuit.html   Interactive bus horn circuit diagram
 on:
   push:
     branches: [main]
@@ -35,7 +36,9 @@ jobs:
         run: |
           mkdir -p _site
           cp index.html _site/
+          cp horn-circuit.html _site/
           node pwa/build.mjs _site/clock
+          test -f _site/horn-circuit.html
           test -f _site/clock/index.html
           test -f _site/clock/manifest.webmanifest
           test -f _site/clock/sw.js
