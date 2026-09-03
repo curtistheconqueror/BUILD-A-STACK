@@ -309,6 +309,10 @@
   .permoneyLbl{color:var(--muted);font-size:11.4px;letter-spacing:2.4px;text-transform:uppercase;margin-bottom:10px}
   .timer{font-size:31px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:2px;margin:14px 0 4px}
   .timerlbl{color:var(--muted);font-size:11.4px;letter-spacing:2.4px;text-transform:uppercase}
+  /* Tight to the money above it and loose below, so proximity pairs it upward — the same
+     asymmetry that keeps the other three stacked figures from swapping labels. */
+  .moneylbl{color:var(--muted);font-size:11.4px;letter-spacing:2.4px;text-transform:uppercase;
+    margin:2px 0 8px}
 
   .seg{display:inline-flex;gap:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:18px 0 4px;background:rgba(10,16,32,.5)}
   .seg button{cursor:pointer;background:transparent;color:var(--muted);border:0;padding:9px 20px;font-size:13.2px;font-weight:800;letter-spacing:1.6px;transition:.2s;font-family:inherit}
@@ -1202,6 +1206,11 @@
       <button data-p="gross" class="on">GROSS</button><button data-p="net">NET</button>
     </div>
     <div class="money" id="money">$0.00</div>
+    <!-- The one number on this card whose identity was never stated. The three below it all
+         say what they are; this one was left to be inferred from the status line, and it is
+         the figure people look at most. Hidden when clocked out, where the line underneath
+         already says "ready at ... / hr" and there is no shift to label. -->
+    <div class="moneylbl hide" id="moneyLbl">this shift</div>
     <div class="netline hide" id="netline"></div>
     <div class="liveline" id="liveline"></div>
     <!-- Shown only when the running clock looks like a punch nobody ended. Never acts on
@@ -1220,7 +1229,10 @@
     <div class="monmoney hide" id="monmoney">$0.00</div>
     <div class="monmoneyLbl hide" id="monmoneyLbl"></div>
     <div class="timer" id="timer">00:00:00</div>
-    <div class="timerlbl">on the clock</div>
+    <!-- Not "on the clock": the status line at the top of this card already says that, and
+         it answers a different question. That one says WHETHER you are working; this one
+         labels a number. Same words a thousand pixels apart, meaning two things. -->
+    <div class="timerlbl">elapsed</div>
 
     <div class="seg" id="seg">
       <button data-u="sec">SEC</button><button data-u="min">MIN</button><button data-u="hr">HR</button>
@@ -5893,6 +5905,7 @@ function render(){
 
   var perUnit = state.unit === 'hr' ? rateNow : state.unit === 'min' ? rateNow / 60 : rateNow / 3600;
   var unitName = state.unit === 'hr' ? 'hour' : state.unit === 'min' ? 'minute' : 'second';
+  show('moneyLbl', !!active);
   document.getElementById('liveline').innerHTML = active
     ? 'earning <b>' + money(perUnit, state.unit === 'sec' ? 4 : state.unit === 'min' ? 4 : 2) + '</b> / ' + unitName
       + ' &nbsp;·&nbsp; live <b>' + money(shift.gross, 4) + '</b>'
@@ -6550,7 +6563,11 @@ function renderPayMonthCounter(ledger, now){
   if (!cur) return;
   var mm = el('monmoney'), want = money(cur.gross);
   if (mm.textContent !== want) mm.textContent = want;
-  var lbl = MONTHS_FULL[cur.month] + ' ' + cur.year + ' pay month'
+  /* Named for what it is doing rather than for what it is. Every other month in the By
+     pay month list is finished; this one is still being earned, and the figure moves while
+     you watch it. The period count stays because it is the reason a month can be twice a
+     pay period — without it the bigger number reads as an error. */
+  var lbl = 'live ' + MONTHS_FULL[cur.month] + ' earnings'
     + (cur.periods.length > 1 ? ' · ' + cur.periods.length + ' periods' : '');
   if (el('monmoneyLbl').textContent !== lbl) el('monmoneyLbl').textContent = lbl;
 }
