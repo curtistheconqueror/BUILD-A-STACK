@@ -1557,6 +1557,65 @@ group('Robustness');
 }
 
 
+/* ---------------- work on a day you are not rostered ---------------- */
+{
+  const D=(d,h,mi=0)=>+new Date(2026,8,d,h,mi);
+  /* Sun–Thu roster, 8-and-40, the shape of a fixed-roster transit job. */
+  const base={...E.DEFAULTS,rate:40,otMultiplier:1.5,otMode:'eight40',weeklyThreshold:40,
+    shiftThreshold:8,periodAnchor:'2026-09-06',periodLengthDays:14,payDateOffsetDays:13,
+    weekStartDay:0,workDays:[true,true,true,true,true,false,false],
+    schedStart:'14:00',schedEnd:'22:30',lunchMins:0,holidays:[],banks:[],daysOff:[],vacations:[]};
+  const on={...base,offDayOt:true};
+  const sat=[{id:'sat',start:D(12,9),end:D(12,14)}];              // Sat, 5 h, under every threshold
+  const sum=(cfg,ss)=>E.sumRange(E.buildLedger(ss,cfg).parts,D(6,0),D(20,0));
+
+  ok('off by default, so a short Saturday is ordinary time',
+     sum(base,sat).otHours===0, String(sum(base,sat).otHours));
+  const s2=sum(on,sat);
+  ok('switched on, every minute of it is overtime', s2.otHours===5 && s2.regHours===0,
+     'reg '+s2.regHours+' ot '+s2.otHours);
+  ok('and it is paid at the overtime rate', Math.abs(s2.gross-5*60)<0.005, String(s2.gross));
+
+  /* The configured rule cannot see this day at all — five hours is under every threshold
+     there is — so without the rule the ledger quietly pays a day off as ordinary time. */
+  ok('which the threshold rule could never have found', sum(base,sat).gross===200);
+
+  /* A rostered day is untouched: the ordinary rule still decides. */
+  const mon=[{id:'mon',start:D(7,14),end:D(7,19)}];               // Mon, 5 h, rostered
+  ok('a rostered short day is unaffected', sum(on,mon).otHours===0, String(sum(on,mon).otHours));
+
+  /* A shift is judged on the day it IS, not on every calendar day it touches. A Thursday
+     run finishing after midnight is a Thursday shift, not part Friday. */
+  const thu=[{id:'thu',start:D(10,22),end:D(11,1)}];              // Thu 22:00 → Fri 01:00
+  ok('a Thursday run past midnight stays a Thursday shift',
+     sum(on,thu).otHours===0, 'ot '+sum(on,thu).otHours);
+  const fri=[{id:'fri',start:D(11,22),end:D(12,1)}];              // Fri 22:00 → Sat 01:00
+  ok('and a Friday one is off-roster throughout', sum(on,fri).otHours===3,
+     'ot '+sum(on,fri).otHours);
+
+  /* Off-roster hours still fill the bucket, so they count toward the week like any work. */
+  const week=[{id:'a',start:D(6,14),end:D(6,22)},{id:'b',start:D(7,14),end:D(7,22)},
+              {id:'c',start:D(8,14),end:D(8,22)},{id:'d',start:D(9,14),end:D(9,22)},
+              {id:'e',start:D(10,14),end:D(10,22)},                       // 40 h Sun–Thu
+              {id:'f',start:D(12,9),end:D(12,14)}];                       // + 5 h Saturday
+  const w=sum(on,week);
+  ok('the week is still 45 hours', w.hours===45, String(w.hours));
+  ok('with the Saturday all overtime', w.otHours===5 && w.regHours===40,
+     'reg '+w.regHours+' ot '+w.otHours);
+
+  /* Paid leave booked on a day off is not work and must not become overtime. */
+  const withSick={...on,banks:[{id:'sick',name:'Sick day',count:5,hours:8,ot:false,
+    makeUp:true,slots:[]}],daysOff:[{id:'d1',bank:'sick',slot:null,date:'2026-09-12'}]};
+  const sk=E.sumRange(E.buildLedger([],withSick).parts,D(6,0),D(20,0));
+  ok('a sick day booked on a Saturday is not overtime', sk.otHours===0,
+     'ot '+sk.otHours+' of '+sk.hours);
+
+  /* A roster of seven days has no unscheduled day, so the setting is inert. */
+  const every={...on,workDays:[true,true,true,true,true,true,true]};
+  ok('a seven-day roster is unaffected by the rule',
+     sum(every,sat).otHours===0, String(sum(every,sat).otHours));
+}
+
 /* ---------------- the paper time sheet ---------------- */
 {
   const D = (d, h, mi=0) => +new Date(2026, 7, d, h, mi);

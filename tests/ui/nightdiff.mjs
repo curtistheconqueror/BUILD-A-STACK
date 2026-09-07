@@ -47,9 +47,16 @@ async function boot(ctx, st, atMs){
   await p.waitForTimeout(400);
   return p;
 }
+/* Read by name, not by position. The footer used to be indexed [1]=hours, [2]=OT,
+   [3]=gross, which silently pointed at the wrong figures the moment the log gained
+   Before and After columns. */
 const foot = p => p.evaluate(()=>{
   const t=document.querySelector('#logBody tfoot tr');
-  return t?[...t.querySelectorAll('td')].map(td=>td.textContent.trim()):null; });
+  if(!t) return null;
+  const c=k=>{const e=t.querySelector('.'+k); return e?e.textContent.trim():null;};
+  return { 1:c('f-hours'), 2:c('f-ot'), 3:c('f-gross'),
+           hours:c('f-hours'), ot:c('f-ot'), gross:c('f-gross'),
+           before:c('f-before'), after:c('f-after') }; });
 const ctx = await b.newContext({viewport:{width:1100,height:2600},timezoneId:'America/Chicago',locale:'en-US'});
 const NOW = T(25,12);
 

@@ -102,13 +102,16 @@ console.log('\n━━ It agrees with the log ━━');
 await p.close();
 p = await boot(ctx, seed(), T(10,0,50));
 const logTotal = await p.evaluate(()=>{
+  /* Asked for by name, not by position — a new column used to move every total along. */
   const tr=document.querySelector('#logBody tfoot tr');
-  return tr?[...tr.querySelectorAll('td')].map(td=>td.textContent.trim()):null; });
+  if (!tr) return null;
+  const cell=c=>{const e=tr.querySelector('.'+c); return e?e.textContent.trim():null;};
+  return { hours: cell('f-hours'), ot: cell('f-ot'), gross: cell('f-gross') }; });
 console.log('       log footer ' + JSON.stringify(logTotal));
 t = await tile(p);
-ok('the tile and the log say the same hours', logTotal[1]===t.det.split(' ')[0],
-   logTotal[1]+' vs '+t.det.split(' ')[0]);
-ok('and the same money', logTotal[3]===t.money, logTotal[3]+' vs '+t.money);
+ok('the tile and the log say the same hours', logTotal.hours===t.det.split(' ')[0],
+   logTotal.hours+' vs '+t.det.split(' ')[0]);
+ok('and the same money', logTotal.gross===t.money, logTotal.gross+' vs '+t.money);
 
 console.log('\n━━ On a phone ━━');
 await p.close();

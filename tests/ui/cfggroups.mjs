@@ -43,7 +43,7 @@ async function boot(){
 }
 const CONTROLS=`cRate cMult cMode cWeekStart cWeekThr cPeriodThr cDailyThr cShiftThr cAnchor cLen
 cPayOff cClock24 cSound cLunch cLunchExtra rNew rDate rApply cYtd cSchedStart2 cSchedEnd2 cNightOn
-cNightRate cNightFrom cNightTo cShiftDay cSkewOn cSkewMins cMakeUp cMakeUpWin cHolHours cHolAdj
+cNightRate cNightFrom cNightTo cShiftDay cSkewOn cSkewMins cMakeUp cMakeUpWin cOffDayOt cHolHours cHolAdj
 cHolOffDay cHolAdd cHolPreset cBankAdd cBankReset cVacAdd presets tFont tBgStyle swatches themeReset
 backup restore wipe`.split(/\s+/).filter(Boolean);
 

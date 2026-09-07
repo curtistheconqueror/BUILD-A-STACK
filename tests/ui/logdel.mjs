@@ -189,11 +189,19 @@ ok('the same pick-then-tap flow works on a wide screen',
    (await p.textContent('#logBody')).includes('Delete?'));
 await p.locator('#logBody button[data-del-yes]').click(); await p.waitForTimeout(300);
 ok('and it deletes', (await st(p)).sessions.length===1, String((await st(p)).sessions.length));
-const cols = await p.evaluate(()=>({
-  head:[...document.querySelectorAll('#logBody thead th')].filter(c=>getComputedStyle(c).display!=='none').length,
-  foot:[...document.querySelectorAll('#logBody tfoot td')].filter(c=>getComputedStyle(c).display!=='none').length
-}));
-ok('header and footer stay column-aligned', cols.head===7 && cols.foot===5, JSON.stringify(cols));
+/* Counted in columns, not in cells: the footer merges its first three under one label, so
+   a cell count was never the invariant and broke the moment a column was added. What has
+   to hold is that every row spans the same width as the header. */
+const cols = await p.evaluate(()=>{
+  const span=r=>[...r.children].filter(c=>getComputedStyle(c).display!=='none')
+    .reduce((n,c)=>n+(c.colSpan||1),0);
+  return { head: span(document.querySelector('#logBody thead tr')),
+           foot: [...document.querySelectorAll('#logBody tfoot tr')].map(span),
+           body: [...document.querySelectorAll('#logBody tbody tr')].map(span) };
+});
+ok('every footer row spans the full width of the header',
+   cols.foot.every(n=>n===cols.head), JSON.stringify(cols));
+ok('and so does every body row', cols.body.every(n=>n===cols.head), JSON.stringify(cols));
 await p.locator('#log').screenshot({path:join(TMP, 'log-desktop.png')});
 
 console.log(`\n${fails===0?'✅':'❌'}  ${fails===0?'all passed':fails+' failed'}`);

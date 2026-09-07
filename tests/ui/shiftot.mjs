@@ -229,6 +229,52 @@ ok('with 0.17 h in overtime', num.includes('0.17 h in OT'), num);
 ok('and the clock card flags overtime',
    (await p.getAttribute('#hero','class')).includes('ot'), await p.getAttribute('#hero','class'));
 
+console.log('\n━━ The log divides overtime into before and after, like a closed period ━━');
+/* An OT slip asks for the time either side of the rostered shift, not one lumped figure.
+   The split comes from timeCardRows — the same source the closed-period card reads — so
+   the two cards cannot quote different numbers for one shift. */
+{
+  /* Built as UTC against a Chicago context (CDT = UTC-5 in September) rather than as local
+     time, so the fixture does not depend on the timezone the runner happens to have. */
+  const D=(d,h,mi=0)=>Date.UTC(2026,8,d,h+5,mi);
+  const ctxC=await b.newContext({viewport:{width:1100,height:2600},
+    timezoneId:'America/Chicago',locale:'en-US'});
+  const seed={configured:true,cfg:{rate:37.78,otMode:'eight40',weeklyThreshold:40,shiftThreshold:8,
+    otMultiplier:1.5,periodAnchor:'2026-09-06',periodLengthDays:14,payDateOffsetDays:13,
+    weekStartDay:0,workDays:[true,true,true,true,true,false,false],
+    schedStart:'14:00',schedEnd:'22:30',lunchMins:30,offDayOt:true,holidays:[],banks:[],daysOff:[]},
+    sessions:[{id:'sun',start:D(6,13,18),end:D(7,1,6)},        // 13:18 → 01:06, rostered
+              {id:'sat',start:D(12,9),end:D(12,14)}],          // 5 h on a day off
+    activeStart:null,sound:false};
+  const p2=await boot(ctxC, seed, D(13,12));
+  const head=await p2.evaluate(()=>[...document.querySelectorAll('#logBody thead th')]
+    .map(t=>t.textContent.trim()).join('|'));
+  ok('the log has Before and After columns', /Before\|After/.test(head), head);
+
+  const row=id=>p2.evaluate(x=>{
+    const tr=document.querySelector('#logBody tr[data-row="'+x+'"]');
+    return tr ? [...tr.querySelectorAll('td')].map(td=>td.textContent.trim().replace(/\s+/g,' ')) : null;},id);
+  const sun=await row('sun');
+  ok('a rostered shift shows 0.70 before', sun[4]==='0.70', JSON.stringify(sun));
+  ok('and 2.60 after', sun[5]==='2.60', JSON.stringify(sun));
+  ok('which is exactly its overtime', sun[6]==='3.30', JSON.stringify(sun));
+
+  /* A day off has no "before" and "after" — you were not scheduled at all, so the whole
+     paid day is the claim, and two zeros would read as nothing being owed. */
+  const sat=await row('sat');
+  ok('a day off is shown as one whole-day figure', /5\.00/.test(sat[4]) && /whole day/i.test(sat[4]),
+     JSON.stringify(sat));
+  ok('and every minute of it is overtime', sat[5]==='5.00', JSON.stringify(sat));
+
+  const f=await foot(p2);
+  ok('the footer totals the two sides', /0\.70/.test(f) && /2\.60/.test(f), f);
+  ok('and states unscheduled days on their own line',
+     /Unscheduled days, whole/.test(f) && /5\.00/.test(f), f);
+  ok('no sideways scroll with the extra columns',
+     await p2.evaluate(()=>document.documentElement.scrollWidth<=document.documentElement.clientWidth));
+  await p2.close();
+}
+
 console.log(`\n${fails===0?'✅':'❌'}  ${fails===0?'all passed':fails+' failed'}`);
 await b.close(); srv.close();
 process.exit(fails===0?0:1);

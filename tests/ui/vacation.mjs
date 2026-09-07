@@ -51,8 +51,14 @@ async function boot(ctx, st, atMs){
   return p;
 }
 const foot = p => p.evaluate(()=>{
+  /* Read by name, not by position. This was indexed [1]=hours, [2]=OT, [3]=gross, which
+     silently pointed at the wrong figures once the log gained Before and After columns. */
   const t=document.querySelector('#logBody tfoot tr');
-  return t?[...t.querySelectorAll('td')].map(td=>td.textContent.trim()):null; });
+  if(!t) return null;
+  const c=k=>{const e=t.querySelector('.'+k); return e?e.textContent.trim():null;};
+  return { 1:c('f-hours'), 2:c('f-ot'), 3:c('f-gross'),
+           hours:c('f-hours'), ot:c('f-ot'), gross:c('f-gross'),
+           before:c('f-before'), after:c('f-after') }; });
 const VAC = [{id:'v1',name:'Vacation',from:'2026-09-20',to:'2026-10-03',hours:8,ot:false}];
 const SEP=(d,h=12)=>Date.UTC(2026,8,d,h+4);
 

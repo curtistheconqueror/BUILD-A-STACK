@@ -133,13 +133,45 @@ console.log('\n━━ The schedule saves ━━');
 await p.close();
 p = await boot(ctx, base, D(21,12));
 await p.evaluate(()=>{ document.querySelectorAll('#cfg details').forEach(d=>d.open=true); });
-ok('start prefilled from settings', (await p.inputValue('#cSchedStart'))==='14:00', await p.inputValue('#cSchedStart'));
-ok('end prefilled from settings', (await p.inputValue('#cSchedEnd'))==='22:30', await p.inputValue('#cSchedEnd'));
-await p.fill('#cSchedStart','07:00'); await p.locator('#cSchedStart').blur(); await p.waitForTimeout(350);
-ok('changing it is stored', (await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].cfg.schedStart))==='07:00');
-ok('and the note follows', (await p.textContent('#xSched')).includes('7:00 AM'), await p.textContent('#xSched'));
+ok('the schedule is stated, not offered as an editable field',
+   /2:00/.test(await p.textContent('#xSchedVal')), await p.textContent('#xSchedVal'));
+ok('and there is no live schedule input left in this card to clobber',
+   (await p.locator('#extra #cSchedStart').count())===0);
+ok('it shows both ends', /10:30/.test(await p.textContent('#xSchedVal')), await p.textContent('#xSchedVal'));
+/* The schedule is still edited — in Settings, which this card now points at. */
+await p.fill('#cSchedStart2','07:00'); await p.locator('#cSchedStart2').blur(); await p.waitForTimeout(400);
+ok('changing it in Settings is stored', (await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].cfg.schedStart))==='07:00');
+ok('and this card follows', /7:00/.test(await p.textContent('#xSchedVal')), await p.textContent('#xSchedVal'));
+ok('as does the note', (await p.textContent('#xSched')).includes('7:00 AM'), await p.textContent('#xSched'));
 await p.reload(); await p.waitForTimeout(500); await openAll(p);
 ok('it survives a reload', (await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].cfg.schedStart))==='07:00');
+
+console.log('\n━━ The calculator this card is named for ━━');
+/* The reload above closed Settings; the schedule field lives there now. */
+await p.evaluate(()=>{ document.querySelectorAll('#cfg details').forEach(d=>d.open=true); });
+await p.waitForTimeout(300);
+/* The two boxes here used to be the live schedule. Somebody typed a punch into them to
+   work out a slip and rewrote their roster instead, after which every figure read 0.00. */
+await p.fill('#cSchedStart2','14:00'); await p.fill('#cSchedEnd2','22:30');
+await p.locator('#cSchedEnd2').blur(); await p.waitForTimeout(400);
+await p.fill('#xIn','13:18'); await p.fill('#xOut','01:06'); await p.waitForTimeout(400);
+{
+  const out=(await p.textContent('#xCalcOut')).replace(/\s+/g,' ');
+  ok('a 13:18–01:06 run splits 0.70 before and 2.60 after',
+     /0\.70/.test(out) && /2\.60/.test(out), out.slice(0,150));
+  ok('and totals 3.30 to claim', /3\.30/.test(out), out.slice(0,90));
+  ok('typing in it does NOT touch the schedule',
+     (await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].cfg.schedStart))==='14:00',
+     await p.evaluate(()=>JSON.parse(localStorage.getItem('payclock.v1')).jobs[0].cfg.schedStart));
+  ok('nor the log', (await p.evaluate(()=>state.sessions.length))===(await p.evaluate(()=>state.sessions.length)));
+}
+await p.click('#xCalcDay'); await p.waitForTimeout(350);
+{
+  const out=(await p.textContent('#xCalcOut')).replace(/\s+/g,' ');
+  ok('marked as a day off, the whole paid day is the claim',
+     /whole day/i.test(out), out.slice(0,110));
+  ok('with before and after struck out', /—/.test(out), out.slice(0,110));
+}
 
 console.log('\n━━ Reads in 24-hour too ━━');
 await p.close();

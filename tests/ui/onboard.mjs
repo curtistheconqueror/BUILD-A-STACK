@@ -283,11 +283,14 @@ await p.selectOption('#cBankAdd','vrd');  await p.waitForTimeout(250);
 console.log('\n━━ The scheduled shift is one value in two places ━━');
 await p.fill('#cSchedStart2','06:30'); await p.locator('#cSchedStart2').blur(); await p.waitForTimeout(450);
 ok('Settings saves it', (await st(p)).jobs[0].cfg.schedStart==='06:30', (await st(p)).jobs[0].cfg.schedStart);
-ok('and the decimal section shows the same', (await p.inputValue('#cSchedStart'))==='06:30',
-   await p.inputValue('#cSchedStart'));
-await p.fill('#cSchedStart','07:15'); await p.locator('#cSchedStart').blur(); await p.waitForTimeout(450);
-ok('changing it there updates Settings', (await p.inputValue('#cSchedStart2'))==='07:15',
-   await p.inputValue('#cSchedStart2'));
+/* The decimal card states the schedule rather than offering it for editing — it used to
+   carry a second live field, which somebody typed a punch into and rewrote their roster. */
+ok('and the decimal section states the same', /6:30/.test(await p.textContent('#xSchedVal')),
+   await p.textContent('#xSchedVal'));
+ok('with no second editable copy to clobber', (await p.locator('#extra input#cSchedStart').count())===0);
+await p.fill('#cSchedStart2','07:15'); await p.locator('#cSchedStart2').blur(); await p.waitForTimeout(450);
+ok('changing it in Settings updates the card', /7:15/.test(await p.textContent('#xSchedVal')),
+   await p.textContent('#xSchedVal'));
 ok('and only one value is stored', (await st(p)).jobs[0].cfg.schedStart==='07:15');
 
 console.log('\n━━ It all survives a reload ━━');

@@ -556,6 +556,21 @@
   .helpnotebody dl{margin:0 0 9px}
   .helpnotebody dt{font-weight:700;font-size:13px;color:var(--ink);margin-top:8px}
   .helpnotebody dd{margin:2px 0 0;font-size:13px;line-height:1.5;color:var(--muted)}
+  /* the stated schedule in the decimal card — text, not an editable field */
+  .xsched{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:4px;
+    padding:11px 13px;border:1px solid var(--border);border-radius:11px;
+    background:var(--card2,transparent)}
+  .xsched .k{color:var(--muted);font-size:11.6px;letter-spacing:.06em;text-transform:uppercase}
+  .xsched .v{font-weight:800;font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums}
+  .xsched button{margin-left:auto}
+  #xCalcDay.on{border-color:var(--warn);color:var(--warn)}
+  /* the early/late split in the shift log */
+  .bacol{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .bacol.b{color:var(--acc3,var(--acc))}
+  .bacol.a{color:var(--warn)}
+  .bacol.whole{color:var(--warn)}
+  .bacol .wlbl{font-size:9.5px;letter-spacing:.6px;opacity:.7;text-transform:uppercase}
+  tfoot .wholerow td{color:var(--muted);font-size:12.2px}
   /* the paper time sheet */
   #shSig{width:100%;max-width:420px;height:120px;border:1px dashed var(--border);border-radius:10px;
     background:var(--card2,transparent);touch-action:none;display:block}
@@ -1631,12 +1646,30 @@
     <div class="note" style="margin-bottom:12px">What an overtime slip asks for: the time either side of
     your scheduled shift, in decimal hours. Read from the shifts already in your log.</div>
 
-    <div class="cfgrid">
-      <div class="f"><label for="cSchedStart">Scheduled start</label><input type="time" id="cSchedStart"></div>
-      <div class="f"><label for="cSchedEnd">Scheduled end</label><input type="time" id="cSchedEnd"></div>
+    <!-- These used to be the live schedule fields, sitting in a section that reads like a
+         calculator. Somebody typed their punch times in to work out a slip and silently
+         rewrote their roster to 13:18–01:06, after which every figure here read 0.00 and
+         nothing said why. The schedule is now stated, not offered for editing; changing it
+         is a deliberate trip to Settings. -->
+    <div class="xsched" id="xSchedBox">
+      <span class="k">Your scheduled shift</span>
+      <span class="v" id="xSchedVal">—</span>
+      <button class="mini" id="xSchedEdit">Change in Settings</button>
     </div>
     <div class="note" id="xSched" style="margin-top:9px"></div>
-    <div id="xBody" style="margin-top:13px"></div>
+
+    <!-- The calculator this section is named for. Type any two times and see the split. -->
+    <div class="f" style="margin-top:16px"><label>Work out a slip</label>
+      <div class="note">Any two times — they do not have to be a shift you logged.</div>
+    </div>
+    <div class="wifrow">
+      <div class="f"><label for="xIn">Clocked in</label><input type="time" id="xIn"></div>
+      <div class="f"><label for="xOut">Clocked out</label><input type="time" id="xOut"></div>
+      <button class="mini" id="xCalcDay">Day off</button>
+    </div>
+    <div id="xCalcOut"></div>
+
+    <div id="xBody" style="margin-top:16px"></div>
 
     <!-- The printed conversion chart, for checking a figure by eye or filling a slip by hand.
          Built from the same chartHours() the totals above use, so the two cannot drift apart. -->
@@ -2036,6 +2069,15 @@
         <button data-w="6">Sat</button>
       </div>
       <div class="note" id="cWorkNote" style="margin-top:8px"></div>
+      <div class="f" style="margin-top:14px"><label for="cOffDayOt">Working a day you are not scheduled for</label>
+        <select id="cOffDayOt">
+          <option value="0">Counts like any other day</option>
+          <option value="1">Overtime from the first minute</option>
+        </select>
+        <div class="note">Most agreements with a fixed roster pay premium for a day off you
+        gave up, however short it is. Your overtime rule cannot see it on its own — five hours
+        on a day off is under every threshold there is, so it would otherwise be paid as
+        ordinary time.</div></div>
       <div class="cfgrid">
         <div class="f"><label>Unpaid lunch per shift</label>
           <select id="cLunch">
@@ -2537,6 +2579,9 @@ var DEFAULTS = {
   holidayNeedsAdjacent: true,
   /* Whether a holiday landing on a day you are not rostered for still pays. */
   holidayOffDayPays: true,
+  /* Work on a day you are not rostered for is overtime from the first minute. Off by
+     default: a job with no fixed roster has no such thing as an unscheduled day. */
+  offDayOt: false,
   holidays: HOLIDAY_DEFAULTS(),
   /* Days you have to spend rather than days that arrive. Each bank is an allowance of
      whole days a year, and using one files it against a date. Floaters count toward
@@ -2806,6 +2851,13 @@ function buildLedger(sessions, cfg, nowMs){
          adj.mult  multiplier on the whole rate (holiday pay)
          adj.noOt  paid straight and kept out of the overtime bucket (sick / PTO) */
     var adj = s.adj || {};
+    /* Judged on the day the shift IS, not on each calendar day it touches. A Thursday
+       run finishing at 01:00 is a Thursday shift; splitting it at midnight would pay its
+       last hour as an unscheduled day and the rest as ordinary, which is nobody's rule.
+       This is the same shiftDayMs the time card uses, so the two cannot disagree about
+       which days were rostered. */
+    var offDay = !!cfg.offDayOt && !s.paidLeave
+              && !isWorkDay(cfg, new Date(shiftDayMs(s, cfg)).getDay());
     for (var j = 0; j < chunks.length; j++){
       var c = chunks[j], hours = (c.end - c.start) / HOUR_MS;
       /* Premiums ride on the base rate, so overtime is worked out on rate plus premium —
@@ -2818,6 +2870,24 @@ function buildLedger(sessions, cfg, nowMs){
       var before = bucket[key] || 0;
       var reg, ot;
       if (adj.noOt){ reg = hours; ot = 0; }            // never accrues toward the threshold
+      /* A day you were not scheduled for. Most agreements with a fixed roster pay overtime
+         from the first minute of it — you gave up a day off, and the hours are premium
+         whether there are two of them or ten. The configured rule never sees that day at
+         all: five hours on a Saturday is under every threshold there is, so the ledger used
+         to call it ordinary time and quietly underpay it.
+
+         It is a setting because plenty of jobs have no fixed roster, and there the idea is
+         meaningless — every day is a scheduled day. Off by default for that reason; on is
+         a choice somebody makes because their contract says so.
+
+         The hours still fill the bucket, so they count toward the week like any other work.
+         What changes is only what they are worth. Paid leave is exempt: a sick day booked
+         on a Saturday is not work, and adj.straight means somebody has already said these
+         hours are ordinary. */
+      else if (offDay && !adj.straight){
+        reg = 0; ot = hours;
+        bucket[key] = before + hours;
+      }
       /* "8 and 80" — FLSA 7(j), open only to hospitals and residential care facilities and
          only by agreement made before the work is performed. Two rules run at once: an hour
          is overtime if it is past the eighth of the DAY, or past the eightieth of the 14-day
@@ -6060,6 +6130,7 @@ function render(){
     renderSheet(now);
     renderWhatIf();
     renderExtra(period, active, now);
+    renderXCalc();
     renderColSums(ledger, period, now, active, netOn);
     renderJobBar();
     renderJobWarn(now);
@@ -6765,6 +6836,22 @@ function renderTimeCard(ledger, now){
   el('tcList').innerHTML = html;
 }
 
+/* One shift's early/late cells. A day you were not rostered for has no "before" and
+   "after" — you were not scheduled at all, so the whole day is the claim, and it is shown
+   as one figure spanning both columns rather than as two zeros that look like nothing was
+   owed. */
+function baCells(r, synth, tot){
+  if (synth || !r) return '<td class="num bacol">—</td><td class="num bacol">—</td>';
+  if (!r.rostered){
+    tot.whole += r.extra;
+    return '<td class="num bacol whole" colspan="2">' + r.extra.toFixed(2)
+         + ' <span class="wlbl">whole day</span></td>';
+  }
+  tot.before += r.before; tot.after += r.after;
+  return '<td class="num bacol b">' + (r.before >= 0.005 ? r.before.toFixed(2) : '—') + '</td>'
+       + '<td class="num bacol a">' + (r.after  >= 0.005 ? r.after.toFixed(2)  : '—') + '</td>';
+}
+
 function renderLog(ledger, period, active, now){
   var rows = jobSessions().filter(function(s){ return s.end > period.startMs && s.start < period.endMs; });
   // Show the shift in progress too, so the log's total always agrees with the period tile.
@@ -6820,10 +6907,23 @@ function renderLog(ledger, period, active, now){
       : '<div class="empty">No shifts logged this period yet.</div>';
     return;
   }
+  /* The early/late split, from timeCardRows — the same source the closed-period card and
+     the decimal section read. Computed here rather than re-derived so the three can never
+     quote different figures for one shift. Keyed by session id; synthetic rows (a holiday,
+     a booked day) have no punches and so no split. */
+  var splitBy = {};
+  timeCardRows(jobSessions(), state.cfg, period.startMs, period.endMs)
+    .forEach(function(r){ splitBy[r.id] = r; });
+  if (active && active < period.endMs){
+    var lr = timeCardRows([liveSession('__active', now)], state.cfg, period.startMs, period.endMs)[0];
+    if (lr) splitBy['__active'] = lr;
+  }
   var html = '<div class="logscroll"><table><thead><tr><th>Day</th><th>In</th><th>Out</th>'
-           + '<th class="num">Hours</th><th class="num otcol">OT</th><th class="num">Gross</th>'
+           + '<th class="num">Hours</th><th class="num bacol">Before</th>'
+           + '<th class="num bacol">After</th>'
+           + '<th class="num otcol">OT</th><th class="num">Gross</th>'
            + '<th class="act"></th></tr></thead><tbody>';
-  var tot = { hours: 0, otHours: 0, gross: 0 };
+  var tot = { hours: 0, otHours: 0, gross: 0, before: 0, after: 0, whole: 0 };
   rows.forEach(function(s){
     // Clamped to the period on screen, so this footer and the period tile agree.
     var t = sumSessionRange(ledger.parts, s.id, period.startMs, period.endMs);
@@ -6859,6 +6959,7 @@ function renderLog(ledger, period, active, now){
       + '<td class="num c-hours">'
       + (s.abs ? '<span class="absh">−' + s.absHours.toFixed(2) + '</span>'
        : s.gap ? '<span class="absh">−' + s.gapHours.toFixed(2) + '</span>' : t.hours.toFixed(2)) + '</td>'
+      + baCells(splitBy[s.id], synth, tot)
       + '<td class="num g otcol' + (t.otHours > 0.0001 ? '' : ' noot') + '">'
       + (t.otHours > 0.0001 ? t.otHours.toFixed(2) : '—') + '</td>'
       + '<td class="num c-gross">' + money(t.gross) + '</td>'
@@ -6878,11 +6979,23 @@ function renderLog(ledger, period, active, now){
               + '<button class="mini" data-del-no="1">no</button>'
             : '') + '</td></tr>';
   });
+  /* Footer cells carry the same names as the columns they total, so anything reading them
+     asks for the figure it wants rather than counting along the row — adding a column used
+     to silently move every total one place to the right. */
   html += '</tbody><tfoot><tr><td colspan="3"><b>Period total</b></td>'
-       + '<td class="num"><b>' + tot.hours.toFixed(2) + '</b></td>'
-       + '<td class="num g otcol' + (tot.otHours > 0.0001 ? '' : ' noot') + '"><b>'
+       + '<td class="num f-hours"><b>' + tot.hours.toFixed(2) + '</b></td>'
+       + '<td class="num bacol b f-before"><b>' + (tot.before >= 0.005 ? tot.before.toFixed(2) : '—') + '</b></td>'
+       + '<td class="num bacol a f-after"><b>' + (tot.after  >= 0.005 ? tot.after.toFixed(2)  : '—') + '</b></td>'
+       + '<td class="num g otcol f-ot' + (tot.otHours > 0.0001 ? '' : ' noot') + '"><b>'
        + (tot.otHours > 0.0001 ? tot.otHours.toFixed(2) : '—') + '</b></td>'
-       + '<td class="num"><b>' + money(tot.gross) + '</b></td><td class="act"></td></tr></tfoot></table></div>';
+       + '<td class="num f-gross"><b>' + money(tot.gross) + '</b></td><td class="act"></td></tr>'
+       /* Days off do not divide into before and after, so their claim is stated on its own
+          line rather than folded into a column it does not belong in. */
+       + (tot.whole >= 0.005
+           ? '<tr class="wholerow"><td colspan="4">Unscheduled days, whole</td>'
+             + '<td class="num bacol whole" colspan="2"><b>' + tot.whole.toFixed(2) + '</b></td>'
+             + '<td colspan="2"></td></tr>' : '')
+       + '</tfoot></table></div>';
   box.innerHTML = html;
 
   /* Named the way a stub names it — hours, rate, money — so the app and the paper can be
@@ -7380,12 +7493,84 @@ function renderCalc(){
    slip can be filled in without doing the arithmetic by hand. Decimal hours throughout —
    half an hour is 0.50 — and the raw minutes alongside, since a slip is usually checked
    against a punch card in minutes. */
+/* ---- the slip calculator ----
+   Type any two times and see what the slip asks for. It stands alone: nothing typed here
+   touches the log, the schedule or the pay, so it can be used to check a figure a
+   supervisor has queried without disturbing anything. */
+var xCalcOff = false;
+function renderXCalc(){
+  var box = el('xCalcOut'), cfg = state.cfg;
+  var im = hhmmToMin(el('xIn').value), om = hhmmToMin(el('xOut').value);
+  var ss = hhmmToMin(cfg.schedStart), se = hhmmToMin(cfg.schedEnd);
+  el('xCalcDay').classList.toggle('on', xCalcOff);
+  if (im == null || om == null || ss == null || se == null){
+    box.innerHTML = '<div class="note" style="margin-top:9px">Put both times in and the split '
+      + 'appears here.</div>';
+    return;
+  }
+  var day = +midnight(Date.now());
+  var start = day + im * 60000, end = day + om * 60000;
+  if (om <= im) end += DAY_MS;                       // clocked out after midnight
+  var span = (end - start) / HOUR_MS;
+  var x = extraTime(start, end, ss, se);
+  var bH = chartHours(x.before), aH = chartHours(x.after);
+  var paid = 0;
+  paidSpans({ start: start, end: end }, cfg).forEach(function(sp){ paid += (sp.end - sp.start) / HOUR_MS; });
+  paid = chartHours(paid);
+  /* A day you were not scheduled for has no early and late — the whole paid day is the
+     claim. Same rule the time card applies, offered here as a switch because a calculator
+     is asked about days that have not happened yet. */
+  var claim = xCalcOff ? paid : cents(bH + aH);
+  box.innerHTML = '<div class="wifout">'
+    + '<div class="wifbig">' + claim.toFixed(2) + ' h</div>'
+    + '<div class="wifsub">' + (xCalcOff ? 'the whole day — not a scheduled day'
+                                         : 'outside your scheduled shift') + '</div>'
+    + '<div class="wifgrid">'
+    + '<div class="wifcell"><div class="k">Before</div><div class="v b">'
+      + (xCalcOff ? '—' : bH.toFixed(2)) + '</div></div>'
+    + '<div class="wifcell"><div class="k">After</div><div class="v a">'
+      + (xCalcOff ? '—' : aH.toFixed(2)) + '</div></div>'
+    + '<div class="wifcell"><div class="k">To claim</div><div class="v x">'
+      + claim.toFixed(2) + '</div></div>'
+    + '</div>'
+    + '<div class="wifnote">' + ftimeCfg(el('xIn').value, cfg) + ' – ' + ftimeCfg(el('xOut').value, cfg)
+      + (om <= im ? ' next day' : '') + ' &nbsp;·&nbsp; <b>' + chartHours(span).toFixed(2)
+      + ' h</b> on the clock, <b>' + paid.toFixed(2) + ' h</b> paid'
+      + ((cfg.lunchMins || 0) ? ' after the ' + cfg.lunchMins + '-minute lunch' : '')
+      + ' &nbsp;·&nbsp; worth <b>' + money(claim * cfg.rate * (cfg.otMultiplier || 1.5))
+      + '</b> at the overtime rate.</div></div>';
+}
+['xIn','xOut'].forEach(function(id){
+  var e = document.getElementById(id);
+  e.addEventListener('input', renderXCalc);
+  e.addEventListener('change', renderXCalc);
+});
+document.getElementById('xCalcDay').onclick = function(){
+  xCalcOff = !xCalcOff;
+  renderXCalc();
+};
+/* Opens Settings at the group that owns the schedule and scrolls to it, rather than
+   leaving somebody to hunt for a field this card used to carry. */
+document.getElementById('xSchedEdit').onclick = function(){
+  var outer = document.querySelector('#cfg > details');
+  if (outer) outer.open = true;
+  var g = document.getElementById('gSched');
+  if (!g) return;
+  g.open = true;
+  applyCfgGroups();
+  try { g.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  catch (e){ g.scrollIntoView(); }
+  var f = document.getElementById('cSchedStart2');
+  if (f) setTimeout(function(){ try { f.focus({ preventScroll: true }); } catch(e){} }, 350);
+};
+
 function renderExtra(period, active, now){
   var cfg = state.cfg;
   var ss = hhmmToMin(cfg.schedStart), se = hhmmToMin(cfg.schedEnd);
   var box = el('xBody');
   if (ss == null || se == null){
     el('xSched').textContent = 'Set the shift you are scheduled for and the rest follows.';
+    el('xSchedVal').textContent = 'not set';
     box.innerHTML = ''; el('sum_extra').textContent = '';
     return;
   }
@@ -7393,6 +7578,8 @@ function renderExtra(period, active, now){
   /* If the shop clock is set, say so right here. This is the section the slip gets copied
      from, so it is where knowing whose clock the punches are on actually matters. */
   var skm = Math.round(+cfg.skewMins || 0), skOn = cfg.skewOn && skm !== 0;
+  el('xSchedVal').textContent = ftime(day0 + ss * 60000) + ' – '
+    + ftime(day0 + se * 60000 + (se <= ss ? DAY_MS : 0)) + (se <= ss ? ' next day' : '');
   el('xSched').textContent = 'Counting anything before ' + ftime(day0 + ss * 60000)
     + ' and after ' + ftime(day0 + se * 60000 + (se <= ss ? DAY_MS : 0))
     + (se <= ss ? ' the next morning.' : '.')
@@ -8751,6 +8938,10 @@ document.getElementById('cMakeUp').onchange = function(e){
   state.cfg.makeUpOn = e.target.value === '1';
   save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
 };
+document.getElementById('cOffDayOt').onchange = function(e){
+  state.cfg.offDayOt = e.target.value === '1';
+  save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
+};
 document.getElementById('cSkewOn').onchange = function(e){
   state.cfg.skewOn = e.target.value === '1';
   save(); syncControls(); lastMoney = ''; lastHeavySig = ''; _ledCache = {}; render();
@@ -9938,10 +10129,10 @@ function offerUndo(was, key){
   offerUndo.t = setTimeout(function(){ show('cfgUndo', false); }, 20000);
 }
 document.getElementById('cSound').onchange = function(e){ state.sound = e.target.value === '1'; save(); };
-/* The scheduled shift appears twice — in Settings, where a new user goes looking, and in
-   the Decimal Time Conversion section, where you are when you notice it is wrong. Two
-   fields, one value; syncControls keeps whichever you are not typing in up to date. */
-['cSchedStart', 'cSchedEnd', 'cSchedStart2', 'cSchedEnd2'].forEach(function(id){
+/* The scheduled shift is edited in one place now. It used to be mirrored into the Decimal
+   Time Conversion card as well, which put a live settings field in a section that reads as
+   a calculator — see the note beside that card. */
+['cSchedStart2', 'cSchedEnd2'].forEach(function(id){
   document.getElementById(id).onchange = function(e){
     var key = id.indexOf('Start') > -1 ? 'schedStart' : 'schedEnd';
     if (hhmmToMin(e.target.value) == null){ syncControls(); return; }
@@ -9979,9 +10170,6 @@ function syncControls(){
   CFG_FIELDS.forEach(function(f){ document.getElementById(f[0]).value = state.cfg[f[1]]; });
   document.getElementById('cSound').value = state.sound ? '1' : '0';
   document.getElementById('cClock24').value = state.cfg.clock24 ? '1' : '0';
-  var sA = document.getElementById('cSchedStart'), sB = document.getElementById('cSchedEnd');
-  if (document.activeElement !== sA) sA.value = state.cfg.schedStart || '09:00';
-  if (document.activeElement !== sB) sB.value = state.cfg.schedEnd || '17:00';
   document.getElementById('cYtd').value = netCfg().ytdShow === false ? '0' : '1';
   document.getElementById('cLunch').value = String(state.cfg.lunchMins || 0);
   var xEl = document.getElementById('cLunchExtra');
@@ -10057,6 +10245,7 @@ function syncControls(){
     }
   }
   el('cMakeUp').value = state.cfg.makeUpOn ? '1' : '0';
+  el('cOffDayOt').value = state.cfg.offDayOt ? '1' : '0';
   el('cMakeUpWin').value = state.cfg.makeUpWindow === 'week' ? 'week' : 'period';
   /* Says where you actually stand rather than describing the rule again — the number is the
      point of the setting. */
