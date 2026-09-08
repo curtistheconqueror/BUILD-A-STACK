@@ -251,6 +251,77 @@ ok('no sideways scroll', m.pageW<=m.winW+1, `${m.pageW} vs ${m.winW}`);
 ok('day buttons are tappable', m.dayBtn>=28, `${m.dayBtn}px`);
 ok('holiday rows are readable', m.holRow>=30, `${m.holRow}px`);
 
+console.log('\n━━ The clock card says when today is a paid holiday ━━');
+/* The credit was added by the ledger and announced nowhere. Working a paid holiday looked
+   identical to working an ordinary day: eight hours appeared in the period total and the
+   card somebody actually watches said nothing about where they came from. */
+{
+  const U=(d,h,mi=0)=>Date.UTC(2026,8,d,h+5,mi);            // Chicago CDT
+  const ctxC=await b.newContext({viewport:{width:430,height:1100},
+    timezoneId:'America/Chicago',locale:'en-US'});
+  const cfg={rate:37.78,otMode:'eight40',weeklyThreshold:40,shiftThreshold:8,otMultiplier:1.5,
+    periodAnchor:'2026-09-06',periodLengthDays:14,payDateOffsetDays:13,weekStartDay:0,
+    workDays:[true,true,true,true,true,false,false],schedStart:'14:00',schedEnd:'22:30',
+    lunchMins:30,banks:[],daysOff:[]};
+  const sun={id:'sun',start:U(6,13,18),end:U(7,1,6)};        // Sun before Labor Day
+  const tue={id:'tue',start:U(8,14),end:U(8,22,30)};         // Tue after it
+  const mk=(sess,active)=>({configured:true,cfg,sessions:sess,activeStart:active,sound:false});
+
+  /* Earned, and clocked in on the day. */
+  let h1=await boot(ctxC, mk([sun,tue], U(7,14)), U(7,19,19));
+  ok('the bar shows on a paid holiday', await h1.isVisible('#holBar'));
+  {
+    const t=(await h1.textContent('#holBar')).replace(/\s+/g,' ');
+    ok('it names the holiday', /Labor Day/.test(t), t.slice(0,70));
+    ok('and states the hours and the money', /8\.00 h/.test(t) && /\$302\.24/.test(t), t.slice(0,110));
+    ok('and says the figures above do not include it',
+       /worked hours only/.test(t), t.slice(0,190));
+  }
+  await h1.close();
+
+  /* Not earned YET is the case worth shouting about: on the morning of the holiday it is
+     still something you can act on. */
+  let h2=await boot(ctxC, mk([sun], U(7,14)), U(7,19,19));
+  ok('an unearned holiday is flagged differently',
+     /pending/.test(await h2.getAttribute('#holBar','class')),
+     await h2.getAttribute('#holBar','class'));
+  {
+    const t=(await h2.textContent('#holBar')).replace(/\s+/g,' ');
+    ok('and names the day still to work', /Tue Sep 8/.test(t), t.slice(0,140));
+  }
+  await h2.close();
+
+  /* Not clocked in: the wording must not claim hours are being added to a clock that is
+     not running. */
+  let h3=await boot(ctxC, mk([sun,tue], null), U(7,10));
+  {
+    const t=(await h3.textContent('#holBar')).replace(/\s+/g,' ');
+    ok('with no clock running it does not talk about clocking',
+       !/you are clocking/.test(t), t.slice(0,150));
+  }
+  await h3.close();
+
+  /* An ordinary day says nothing at all. */
+  let h4=await boot(ctxC, mk([sun,tue], null), U(8,19));
+  ok('an ordinary day shows no bar', !(await h4.isVisible('#holBar')));
+  await h4.close();
+
+  /* A night shift begun on the holiday is still judged against the holiday, not against
+     the date the clock happens to show now. */
+  let h5=await boot(ctxC, mk([sun,tue], U(7,22)), U(8,1,30));
+  ok('a shift begun on the holiday still shows it after midnight',
+     await h5.isVisible('#holBar'));
+  await h5.close();
+
+  /* The version marker: a build stamp that lies is worse than none. */
+  let h6=await boot(ctxC, mk([sun,tue], null), U(8,19));
+  const shown=(await h6.textContent('#appVer')).replace(/[^v0-9]/g,'');
+  const swv=(readFileSync(R+'sw.js','utf8').match(/wisewage-(v\d+)/)||[])[1];
+  ok('the footer states the build', /^v\d+$/.test(shown), shown);
+  ok('and it matches the service worker', shown===swv, shown+' vs '+swv);
+  await h6.close();
+}
+
 console.log(`\n${fails===0?'✅':'❌'}  ${fails===0?'all passed':fails+' failed'}`);
 await b.close(); srv.close();
 process.exit(fails===0?0:1);

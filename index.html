@@ -564,6 +564,18 @@
   .xsched .v{font-weight:800;font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums}
   .xsched button{margin-left:auto}
   #xCalcDay.on{border-color:var(--warn);color:var(--warn)}
+  /* today is a paid holiday */
+  .holbar{margin:12px auto 0;max-width:520px;padding:11px 14px;border-radius:12px;
+    border:1px solid var(--cal-hol);background:rgba(120,200,255,.10);
+    color:var(--ink);font-size:13.4px;line-height:1.5;text-align:left}
+  .holbar.pending{border-color:var(--warn);background:rgba(255,180,84,.10)}
+  .holbar.lost{border-color:var(--bad);background:rgba(255,93,108,.10)}
+  .holbar b{font-weight:800}
+  .holbar .hk{display:block;font-size:10.6px;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--cal-hol);margin-bottom:3px;font-weight:800}
+  .holbar.pending .hk{color:var(--warn)}
+  .holbar.lost .hk{color:var(--bad)}
+  .foot .ver{opacity:.55}
   /* the early/late split in the shift log */
   .bacol{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
   .bacol.b{color:var(--acc3,var(--acc))}
@@ -1228,6 +1240,12 @@
     <div class="moneylbl hide" id="moneyLbl">this shift</div>
     <div class="netline hide" id="netline"></div>
     <div class="liveline" id="liveline"></div>
+    <!-- A paid holiday adds hours nothing on this card was accounting for. The credit was
+         landing in the period total silently, so working one looked identical to working an
+         ordinary day and the extra eight hours had to be taken on trust. States it plainly,
+         including when it is NOT yet earned — which is the case worth knowing about, since
+         it is still fixable that morning. -->
+    <div class="holbar hide" id="holBar"></div>
     <!-- Shown only when the running clock looks like a punch nobody ended. Never acts on
          its own: a genuine sixteen-hour day exists, and "keep it running" is one tap. -->
     <div class="forgot hide" id="forgotBar">
@@ -2402,7 +2420,8 @@
     </details>
   </section>
 
-  <div class="foot">Single file · no server · works offline · data lives in this browser only.</div>
+  <div class="foot">Single file · no server · works offline · data lives in this browser only.
+    <span class="ver" id="appVer"></span></div>
 </div>
 
 <!-- Deliberately outside every section. Both restore buttons open this one input, and one of
@@ -4938,6 +4957,10 @@ var HELP = {
    renaming it would strand every existing install. Backup files carry the new id going
    forward and the old one is still accepted on the way in — see APP_IDS. */
 var APP_NAME = 'WiseWage';
+/* Shown in the footer so "am I actually running the new build?" is answerable without
+   guessing from whether a feature looks different. Must match CACHE in sw.js; a test
+   asserts it, because a version marker that lies is worse than none. */
+var APP_BUILD = 'v76';
 var APP_ID   = 'wisewage';
 var APP_IDS  = { wisewage: 1, 'pay-clock': 1 };
 
@@ -5955,6 +5978,8 @@ function render(){
   }
   show('netline', netOn);
   renderForgot(active, now);
+  renderHolBar(now);
+  renderHolBar(now);
   if (txt !== lastMoney){
     mEl.textContent = txt; lastMoney = txt;
     mEl.classList.remove('bump'); void mEl.offsetWidth; mEl.classList.add('bump');
@@ -10498,6 +10523,63 @@ function renderStipendList(){
 var forgotDismissed = 0;    // "stop asking about this punch" — the Keep button
 var forgotAsked = 0;        // "the question has been put once" — a clock-out tap
 
+/* What today's holiday is worth, and whether you have it.
+
+   The credit is added by the ledger without anybody being told, so a paid holiday you
+   worked looked exactly like an ordinary day — eight hours appeared in the period total
+   and nothing on the card you actually watch said where they came from.
+
+   The "not yet earned" case is the one that matters most: most agreements want the
+   scheduled day either side worked, and on the morning of the holiday that is still
+   something you can act on. Saying nothing until payday is too late to be help. */
+function renderHolBar(now){
+  var bar = el('holBar');
+  if (!bar) return;
+  var cfg = state.cfg;
+  /* The day the shift belongs to when one is running, so a night that began yesterday is
+     still judged against yesterday's holiday rather than today's date. */
+  var dayMs = state.activeStart
+    ? shiftDayMs({ start: state.activeStart, end: now }, cfg)
+    : +midnight(now);
+  var list = holidayOutlook(jobSessions(), cfg, now).filter(function(h){
+    return +midnight(h.ms) === +midnight(dayMs);
+  });
+  if (!list.length){ show('holBar', false); return; }
+  var h = list[0];
+  var hours = cfg.holidayHours == null ? 8 : cfg.holidayHours;
+  bar.className = 'holbar' + (h.paid ? '' : h.status === 'pending' ? ' pending' : ' lost');
+  var worked = h.worked;
+  if (h.paid){
+    /* Three different sentences, because "on top of the hours you are clocking" is wrong
+       when no clock is running, and "you do not have to clock in" is wrong to somebody who
+       already worked the day. */
+    var running = !!state.activeStart;
+    bar.innerHTML = '<span class="hk">Paid holiday · ' + esc(h.name) + '</span>'
+      + '<b>' + hours.toFixed(2) + ' h</b> holiday pay — <b>' + money(h.pay) + '</b> — '
+      + (running ? 'is added on top of the hours you are clocking. The figures above count '
+                 + 'your worked hours only; the holiday is in the period and month totals.'
+        : worked ? 'is added on top of the hours you worked today. It is in the period and '
+                 + 'month totals, not in the shift figures.'
+                 : 'is yours whether you come in or not. It is already in the period and '
+                 + 'month totals.');
+  } else if (h.status === 'pending'){
+    bar.innerHTML = '<span class="hk">Holiday not earned yet · ' + esc(h.name) + '</span>'
+      + '<b>' + hours.toFixed(2) + ' h</b> (' + money(h.pay) + ') is waiting on '
+      + h.need.map(function(d){ return '<b>' + fdate(d) + '</b>'; }).join(' and ')
+      + '. Your agreement wants the scheduled day either side worked.';
+  } else if (h.status === 'untracked'){
+    show('holBar', false); return;
+  } else {
+    bar.innerHTML = '<span class="hk">Holiday not earned · ' + esc(h.name) + '</span>'
+      + hours.toFixed(2) + ' h (' + money(h.pay) + ') was not earned'
+      + (h.need && h.need.length
+          ? ' — ' + h.need.map(function(d){ return fdate(d); }).join(' and ')
+            + ' went unworked.' : '.')
+      + ' Nothing is being added for it.';
+  }
+  show('holBar', true);
+}
+
 function renderForgot(activeStart, now){
   var f = activeStart && forgotDismissed !== activeStart
         ? forgottenShift(activeStart, now, state.cfg, jobSessions()) : null;
@@ -10889,6 +10971,12 @@ applyChart();
 })();
 show('noStore', !STORAGE_OK);
 syncControls();
+/* Stamped once at boot: "am I on the new build?" should be answerable by looking, not by
+   guessing from whether a feature appears different. */
+(function(){
+  var v = document.getElementById('appVer');
+  if (v) v.textContent = ' · ' + APP_BUILD;
+})();
 applyStage();
 render();
 setInterval(render, 120);
